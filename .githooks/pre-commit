@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#
+# pre-commit — mandatory secret scan before every commit (see CLAUDE.md "The Board").
+# Enable once per clone:  git config core.hooksPath .githooks
+#
+set -euo pipefail
+exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/secret-scan.sh"

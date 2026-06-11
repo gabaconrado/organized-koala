@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./ok.sh:*)",
+      "Bash(cargo:*)",
+      "Bash(rustup:*)",
+      "Bash(sqlx:*)",
+      "Bash(docker:*)",
+      "Bash(docker compose:*)",
+      "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)",
+      "Bash(git show:*)", "Bash(git add:*)", "Bash(git commit:*)",
+      "Bash(git worktree:*)", "Bash(git fetch:*)", "Bash(git checkout:*)",
+      "Bash(git branch:*)", "Bash(git switch:*)", "Bash(git merge-base:*)",
+      "Bash(git rebase:*)",
+      "Bash(rg:*)", "Bash(grep:*)", "Bash(find:*)", "Bash(ls:*)", "Bash(cat:*)",
+      "Bash(curl:*)",
+      "Edit(.claude/**)", "Write(.claude/**)",
+      "Edit(docs/**)", "Write(docs/**)",
+      "Edit(board/**)", "Write(board/**)"
+    ],
+    "deny": [
+      "Bash(git push:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/lint.sh",
+            "timeout": 180,
+            "statusMessage": "Linting written file"
+          }
+        ]
+      }
+    ]
+  }
+}

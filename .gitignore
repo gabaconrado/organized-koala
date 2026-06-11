@@ -1,2 +1,12 @@
 # Rust artifacts
 /target
+
+# Per-feature worktrees (one per active Board item)
+/.claude/worktrees/
+
+# Local environment
+.env
+*.local
+
+# rumdl lint cache (created by .claude/lint.sh)
+.rumdl_cache/

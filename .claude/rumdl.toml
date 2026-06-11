@@ -1,0 +1,6 @@
+# rumdl configuration — used by .claude/lint.sh (the PostToolUse auto-lint hook) via
+# `rumdl check --config .claude/rumdl.toml`. Keep this lean: the only deliberate override is
+# the 100-column line length, matching the workspace's documentation width.
+
+[MD013]
+line-length = 100  # wrap Markdown at 100 columns

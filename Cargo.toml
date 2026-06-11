@@ -1,3 +1,10 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+
+# Lint levels live here, not on the clippy command line, so `cargo clippy` (and any IDE /
+# rust-analyzer invocation) enforces the same gate. Denying the `warnings` group escalates
+# every warn-level rustc + clippy lint to an error — the old `-- -D warnings` flag. Member
+# crates opt in with `[lints] workspace = true`.
+[workspace.lints.rust]
+warnings = "deny"
