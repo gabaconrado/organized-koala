@@ -17,7 +17,18 @@ readonly PATTERNS=(
   'xox[bpars]-[0-9A-Za-z-]{10,}'          # slack tokens
   'gh[pousr]_[0-9A-Za-z]{30,}'            # github tokens
   'Bearer [A-Za-z0-9._~+/-]{20,}'         # bearer tokens
-  '(password|passwd|secret|api[_-]?key)[[:space:]]*[=:][[:space:]]*[^[:space:]"'"'"']+'
+  # Assigned secret VALUES, not bare Rust declarations. A field/type decl such as
+  #   `pub password: Password,`  or  `password: Password::new(...)`
+  # is `<key>: <Type>` — the RHS is an identifier or a `Type::method(...)` form, which is
+  # source code, not a leaked credential. We therefore match only two genuine value shapes
+  # (the key, then `=` or `:`, then):
+  #   (A) a quoted string-literal RHS  (a "..." or '...' literal)
+  #   (B) an unquoted RHS of >=8 secret-like chars containing no `(` and no `::`
+  # (B)'s length floor and char class exclude short type names, and forbidding `(`/`::` excludes
+  # the `Type::method(...)` construction form. This still catches real `key=value` / `key: value`
+  # leaks (env files, configs, source) while passing legitimate typed-field declarations.
+  '(password|passwd|secret|api[_-]?key)[[:space:]]*[=:][[:space:]]*("[^"]+"|'"'"'[^'"'"']+'"'"')'
+  '(password|passwd|secret|api[_-]?key)[[:space:]]*[=:][[:space:]]*[A-Za-z0-9._+/=-]{8,}([[:space:]]|$)'
   'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'  # JWT-shaped
 )
 
