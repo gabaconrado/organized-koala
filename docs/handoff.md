@@ -7,8 +7,9 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ## Handoff — 2026-06-11 (0002 — contract crate + workspace restructure)
 
-Branch: `feature/0002-contract-crate` (head `d79fc9c`, linear atop `main` `1a2540c`,
-fast-forward — frozen for the human to merge). Slice 1 of 3 of the foundational slice 0001.
+Branch: `feature/0002-contract-crate` (head `638eef1`, last code `56833a6`, linear atop `main`
+`ed9510e`, fast-forward — frozen for the human to merge). Slice 1 of 3 of the foundational
+slice 0001.
 
 What shipped:
 
@@ -19,8 +20,8 @@ What shipped:
   `CreateTaskRequest`, `ErrorBody { code?, message }` + the 7 stable error codes with a lossless
   `Unknown` catch-all; a `Password` newtype (transparent serialize, `[REDACTED]` Debug).
 - 37 serde/wire-format integration tests + 12 doctests green; build/lint/fmt clean. Reviewer
-  approved at `d79fc9c`; verifier confirmed the pure-DTO seam (live-stack E2E deferred to
-  0003/0004 per ADR-0003).
+  approved at code head `56833a6` (re-attested after the rebase); verifier confirmed the
+  pure-DTO seam (live-stack E2E deferred to 0003/0004 per ADR-0003).
 - Planning artifacts (ADR-0005 + the 0002/0003/0004 plan) were committed to `main` as
   `1a2540c` before the worktree was finalized.
 
@@ -58,7 +59,8 @@ Process learnings captured this cycle (these will bite 0003/0004 if ignored):
   committing to `main` and rebasing. Now a corollary of the three-home model (an ADR is home #1,
   and a worktree cut from a commit that lacks it cannot see it). Codified in `plan` + `drive`,
   the `architect` agent, and CLAUDE.md.
-- **secret-scan matches credential VALUES, not bare identifiers** (`37b78c4`): a bare Rust field
+- **secret-scan matches credential VALUES, not bare identifiers** (now `d34570c` on `main`; the
+  branch's original `37b78c4` was dropped when the fix was relocated): a bare Rust field
   declaration (keyword + bare type + comma, no separator/literal) no longer false-positives;
   assigned literals still trip. One known non-blocking gap recorded for future platform-dev (the
   JSON-object quoted-key/quoted-value form is not caught). Documented in `bash-standards`
