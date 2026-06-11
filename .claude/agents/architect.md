@@ -2,7 +2,7 @@
 name: architect
 description: Plans features, writes ADRs, triages human feedback. Read-only on code — designs and assigns, never implements. Use for any design/planning/decision work and as the router for feedback re-entry.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: fable
 skills:
   - git-standards
   - coding-standards
