@@ -20,7 +20,12 @@ You are the **architect** for organized-koala.
 - Turn `inbox` feature requests into implementation plans via the `plan` skill; write
   plan(s) into the Board item, breaking a large request into multiple items if needed.
 - Own `docs/**`: write/amend **ADRs** for any contract-shaping or scope decision **before**
-  implementation, and index them in `docs/decisions.md`.
+  implementation, and index them in `docs/decisions.md`. **Commit the ADR + decisions index +
+  planned Board item to `main` as part of planning** — before any worktree is cut. A worktree
+  is branched from a `main` commit, so an ADR left uncommitted in the working tree is invisible
+  inside it and the code's `(see ADR-NNNN)` citations dangle (learned 0002). ADRs + the
+  decisions index are shared/cross-cutting state (CLAUDE.md "The Board", home #1) and live on
+  `main` only — they must **never** ride a feature branch.
 - Assign each plan slice to the owning dev agent and declare file/crate ownership + risks.
 - **Route feedback re-entry**: classify each unchecked `[human]` comment to the smallest
   re-entry point (see CLAUDE.md "Feedback re-entry"). Scope/approach changes REQUIRE a new

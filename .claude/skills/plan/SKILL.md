@@ -52,6 +52,20 @@ For a risky design, run the `grill` skill first. Then set `status: planned`, and
 plan (and any required ADR) is accepted, `status: ready`. A large request may become
 **several** Board items — create one file per plan.
 
+**Then commit the planning artifacts to `main`** — the ADR(s), the `docs/decisions.md` index
+entry, and the planned/ready Board item(s) — as a single `docs:` commit on `main`. This MUST
+happen before the cycle cuts a worktree (`drive` step 2): a worktree is branched from a `main`
+commit, so an ADR that exists only in the working tree is **invisible** inside the worktree and
+any `(see ADR-NNNN)` citation in code dangles and blocks the dev agent (learned 0002). The plan
+and its ADR are not "ready" until they are committed to `main`.
+
+The item is **born on `main`** here (`inbox`→`planned`→`ready`). It then becomes
+**branch-owned on claim**: when `drive` step 2 cuts the worktree from this commit, the branch's
+copy of the item becomes authoritative and advances there (status/Log/verdicts/`## Summary`),
+while `main`'s copy stays frozen at the claim snapshot until the human's merge (CLAUDE.md "The
+Board", home #2). The ADR + decisions index remain shared/cross-cutting state and stay on
+`main` (home #1) — they never ride the feature branch.
+
 ### 6. Genuine fork ⇒ block
 
 Only if a fork truly cannot be resolved without a human decision: set `status: blocked` with

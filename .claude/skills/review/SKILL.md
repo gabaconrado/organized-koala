@@ -39,14 +39,19 @@ Any failure ⇒ `changes-requested`.
   `anyhow` (bin), short scoped comments, reference-style markdown, `"${VAR}"` bash.
 - **Blast radius & simplicity:** is this the smallest correct change?
 
-### 3. Post the verdict
+### 3. Report the verdict
 
-Append findings to the item's `## Log / comments`, then a final line:
+You are **read-only on everything — code AND Board.** Hand findings + a final verdict line back
+to the orchestrator; the orchestrator commits the verdict onto the item **on the branch** (the
+item is feature-local and travels with the code). Do **not** edit or commit the Board yourself,
+and leave no scratch (`*.tmp`) files behind:
 
 ```text
 REVIEW-STATUS: approved        <commit-sha>
 REVIEW-STATUS: changes-requested   <commit-sha>
 ```
 
-Approval requires `<commit-sha>` == current branch head; re-review when the head advances.
+`<commit-sha>` names the reviewed **code** sha and must equal the current branch head. A
+Board-only commit (status flip / a verdict the orchestrator records) does **not** invalidate an
+approval — only a new code/test commit does; re-review when a code commit advances the head.
 Fix-now findings go back to the owning dev agent (the reviewer does not edit code).

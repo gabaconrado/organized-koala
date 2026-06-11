@@ -86,6 +86,10 @@ fixed — deviations re-enter via `architect`).
   the first workable item.
 - 2026-06-11 [drive] claimed; worktree `.claude/worktrees/0002-contract-crate` on branch
   `feature/0002-contract-crate` cut from `main`; status `ready` → `working`.
+- 2026-06-11 [drive] **This item is now branch-owned.** Its live cycle record (build, review,
+  verify, summary, and final status) lives on branch `feature/0002-contract-crate` and arrives
+  on `main` atomically when the human merges. This `main` snapshot is intentionally frozen at
+  the claim point (see the corrected board-on-branch workflow model in `CLAUDE.md`).
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary

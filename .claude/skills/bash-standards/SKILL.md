@@ -27,6 +27,23 @@ readonly NAME="${1:-default}"
 echo "hello ${NAME}"
 ```
 
+## Gotchas
+
+- **`secret-scan.sh` matches credential VALUES, not bare identifiers** (learned 0002).
+  Described structurally so this doc does not trip its own scanner: the credential-keyword
+  group is the four words for a password, an abbreviated password, a generic secret, and an API
+  key (case-insensitive). A line matches **only** when one of those keywords is immediately
+  followed by an assignment or key separator (an equals sign or a colon) and then **either** a
+  quoted string literal **or** an unquoted token of eight-plus characters. So a bare Rust field
+  declaration — the keyword followed by a bare type identifier and a comma, with no separator
+  and no literal — does **not** false-positive, while an assigned literal does. Known
+  non-blocking gaps for future platform-dev hardening: the value-pattern does **not** catch a
+  JSON-object form where a quoted key is followed by a quoted value, because a quote (not a
+  separator) directly follows the keyword. The dedicated token signatures (private keys,
+  AWS/Slack/GitHub tokens, Bearer, JWT-shaped) are independent of this group and always fire.
+  Server work (0003) handles real credentials/JWTs — author code so secrets never reach a
+  `Debug`/`Display`/log, not merely so the scan passes.
+
 ## Extending this skill
 
 Living document — `eng-manager` appends durable bash learnings here.

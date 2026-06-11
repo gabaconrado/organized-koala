@@ -36,6 +36,10 @@ edit.
 
 - Prose is concise; ADRs follow the §4.2 template (Context / Decision / Consequences).
 - The Board and docs are potentially public — never include secrets or sensitive payloads.
+- **Do not start a wrapped prose line with `+`, `*`, or `-`** (learned 0002). The linter reads a
+  line-leading `+`/`*`/`-` as a list marker (`rumdl`/markdownlint MD004), so a continuation line
+  of a Board Log bullet that wraps onto a leading `+` (e.g. a commit-count "37 + 12") trips the
+  unordered-list-style rule. Reflow so the operator/symbol is not the first character of a line.
 
 ## Extending this skill
 
