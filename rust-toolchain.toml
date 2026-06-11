@@ -1,0 +1,12 @@
+# Pin the toolchain so every contributor and CI builds against an identical,
+# reproducible Rust. A fixed version (not "stable"/"nightly") guarantees the
+# `.sqlx/` cache, clippy lint levels, and edition-2024 behaviour stay in lockstep.
+[toolchain]
+channel = "1.96.0"
+profile = "minimal"
+components = [
+    "rust-analyzer", # LSP server
+    "rustfmt",       # ./ok.sh fmt
+    "clippy",        # ./ok.sh lint
+    "rust-src",      # std sources for rust-analyzer completion/go-to-def
+]
