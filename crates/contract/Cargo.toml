@@ -1,5 +1,5 @@
 [package]
-name = "organized-koala"
+name = "contract"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -14,3 +14,7 @@ readme.workspace = true
 workspace = true
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
