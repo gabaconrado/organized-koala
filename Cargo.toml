@@ -2,9 +2,45 @@
 resolver = "3"
 members = ["crates/*"]
 
-# Lint levels live here, not on the clippy command line, so `cargo clippy` (and any IDE /
-# rust-analyzer invocation) enforces the same gate. Denying the `warnings` group escalates
-# every warn-level rustc + clippy lint to an error — the old `-- -D warnings` flag. Member
-# crates opt in with `[lints] workspace = true`.
+# Shared package metadata. Member crates inherit these with `<field>.workspace = true`
+# (see the `new-crate` skill) so version, edition, authorship, and licensing stay in one
+# place. Inherited path fields (`readme`) resolve relative to each member crate, so every
+# crate points at its own `crates/<name>/README.md`.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Gabriel Conrado <gabaconrado@gmail.com>"]
+repository = "https://github.com/gabaconrado/organized-koala"
+description = "Minimal personal-productivity tools (TODO, Pomodoro, Notes, Profiles): a Rust HTTP server (organized-koalad) driven by a Rust TUI (organized-koala)."
+license = "MIT"
+keywords = ["productivity", "todo", "pomodoro", "notes", "tui"]
+categories = ["command-line-utilities"]
+readme = "README.md"
+
+# Lint levels live here, not on the clippy command line, so `cargo clippy`, `cargo build`,
+# and any IDE / rust-analyzer invocation all enforce the same gate. Member crates opt in
+# with `[lints] workspace = true`. Denying the `warnings` group escalates every warn-level
+# rustc + clippy lint to an error (the old `-- -D warnings` flag); the explicit denies below
+# add the project's hard rules on top of that.
 [workspace.lints.rust]
+missing_debug_implementations = "deny"
+missing_docs = "deny"
+trivial_casts = "deny"
+trivial_numeric_casts = "deny"
+unused_extern_crates = "deny"
+unused_import_braces = "deny"
+unused_qualifications = "deny"
+unused_results = "deny"
 warnings = "deny"
+
+[workspace.lints.clippy]
+as_conversions = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+let_underscore_future = "deny"
+panic = "deny"
+self_named_module_files = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+unwrap_used = "deny"

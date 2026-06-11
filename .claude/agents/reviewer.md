@@ -22,6 +22,8 @@ You are the **reviewer** for organized-koala. You did **not** write this code; r
   `./ok.sh fmt --check`.
 - Hunt for: **contract drift** (a DTO redefined outside `contract`), hard-constraint
   violations (client-side state, cross-profile access, domain bloat, external auth),
+  **sensitive-data leaks** (a secret reachable from a `Debug`/`Display` impl, a log/trace
+  line, or an auto-instrumented span/endpoint field; a secret not wrapped in `secrecy`),
   unjustified `#[allow]`, error-contract deviations, and blast-radius/simplicity issues.
 - Post findings into the Board item's `## Log / comments`, then a verdict line:
   `REVIEW-STATUS: approved` or `REVIEW-STATUS: changes-requested`, **plus the reviewed commit sha**.

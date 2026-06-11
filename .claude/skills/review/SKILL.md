@@ -30,6 +30,10 @@ Any failure ⇒ `changes-requested`.
 - **Hard-constraint violations:** client-side/local state in the TUI; non-profile-scoped
   query; domain bloat (subtasks/tags/categories/per-profile timer); external auth. Any ⇒ blocker.
 - **Error contract:** errors return HTTP status + `{ code?, message }`.
+- **Sensitive-data leaks:** secrets (passwords, tokens, JWT/session keys, DB credentials)
+  must be wrapped in `secrecy` and must never be reachable from a `Debug`/`Display` impl, a
+  log/trace line, or an auto-instrumented span/endpoint field — e.g. a `#[tracing::instrument]`
+  capturing a secret argument, or a handler logging request bodies/headers. Any leak ⇒ blocker.
 - **Lints:** any `#[allow]` without a documented justification.
 - **Standards:** deep modules, tests in own files + public-API-only, `thiserror` (lib) /
   `anyhow` (bin), short scoped comments, reference-style markdown, `"${VAR}"` bash.

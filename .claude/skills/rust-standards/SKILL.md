@@ -23,15 +23,54 @@ audience: dev
 
 ### Tests
 
-- Tests live in **their own files** (e.g. `tests/` or a sibling `*_test.rs` module file),
-  **not** inline `#[cfg(test)] mod tests` blocks in source — this lets agents parallelize and
-  keeps source focused. (The placeholder `lib.rs` inline test is removed during restructure.)
+Idiomatic Rust layout (see [Rust by Example — Testing](https://doc.rust-lang.org/rust-by-example/testing.html)):
+
+- **Unit tests** live right next to the module they test, in a sibling file named `tests.rs`,
+  declared from the module with `#[cfg(test)] mod tests;`. The declaration is the *only*
+  test-related line in the source file — the test code itself stays out of source. This lets
+  agents parallelize and keeps source focused. (Module-directory / `mod.rs` layout only —
+  self-named files like `foo.rs` are denied by `clippy::self_named_module_files`. So a module
+  `foo` is defined by `foo/mod.rs` and its tests sit alongside it in `foo/tests.rs`, keeping
+  the test file close to the module it covers.)
+- **Integration tests** live in the crate's top-level `tests/` directory, exercising the
+  crate's **public API**; mock only external services. "Hard to test" ⇒ bubble up to
+  architecture review (do not bend source).
+- In **test code**, `unwrap`/`expect`/`panic` are acceptable. If the clippy `*_used` /
+  `panic` denies fire there, a crate-root `#![cfg_attr(test, allow(clippy::unwrap_used,
+  clippy::expect_used, clippy::panic))]` is the sanctioned, documented exception.
+
+### Documentation
+
+- Every crate carries a `crates/<crate>/README.md` imported at the crate root with
+  `#![doc = include_str!("../README.md")]`, so the README **is** the crate's rustdoc landing
+  page (and satisfies crate-level `missing_docs`).
+- All public items are documented (`rust.missing_docs = "deny"`) and every public type
+  derives/implements `Debug` (`rust.missing_debug_implementations = "deny"`). The main public
+  items carry a **doc test** demonstrating usage.
+- Scaffold new crates with the `new-crate` skill so this layout is correct from the start.
 
 ### Lints
 
-- Hard rules are enforced by clippy (`./ok.sh lint` runs `-D warnings`).
+- The lint gate lives in **`[workspace.lints]`** in the root `Cargo.toml` (rust + clippy, all
+  at `deny`); every crate opts in with `[lints] workspace = true`, so `cargo clippy`,
+  `cargo build`, and rust-analyzer enforce the same gate — not just `./ok.sh lint`.
+- Notable denies to **write around, not silence**: `clippy::unwrap_used`,
+  `clippy::expect_used`, `clippy::panic`, `clippy::indexing_slicing`,
+  `clippy::as_conversions`, `clippy::todo`/`unimplemented`/`unreachable`,
+  `rust::missing_docs`, `rust::missing_debug_implementations`, `rust::unused_results`.
 - **Never add `#[allow(...)]` without a documented, genuinely-good reason** in a comment on
   the attribute. An unjustified `#[allow]` is a review-blocking finding.
+
+### Sensitive data
+
+- Wrap every secret — passwords, tokens, JWT/session keys, DB credentials — in
+  `secrecy::SecretString` / `Secret<T>`. This zeroizes the value on drop (via `zeroize`) and
+  its `Debug`/`Display` render as `[REDACTED]`, so the secret can never leak through a derived
+  `Debug`, a log/trace line, or a span field. Expose the inner value only at the point of use
+  with `expose_secret()`.
+- **Never** `#[derive(Debug)]` a struct, error variant, or DTO that holds a bare secret —
+  hold it as a `Secret<_>` (or hand-write a redacting `Debug`). A bare secret reachable from a
+  `Debug` impl, a log, or auto-instrumentation is a review-blocking leak.
 
 ### General
 
