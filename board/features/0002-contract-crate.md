@@ -1,7 +1,7 @@
 ---
 id: 0002
 title: Contract crate + workspace restructure (slice 1 of 0001)
-status: review       # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge   # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: []
@@ -96,9 +96,67 @@ fixed — deviations re-enter via `architect`).
   field was relocated to `main` (shared infra, commit `d34570c`) and the branch rebased onto it,
   so the duplicate branch commit dropped. Commits: `7ca3e25` contract crate, `56833a6` tests.
   status `working` → `review`.
+- 2026-06-11 [reviewer] cold re-review at rebased head. Gate green from worktree root: build
+  clean; test 37 integration + 12 doctests, all pass; lint clean (deny-warnings, only sanctioned
+  test-cfg allow); fmt clean. ADR-0005 conformance exact (all 8 DTOs, snake_case, UUID/RFC3339
+  strings, lowercase `open`/`done`, nullable-emitted `closed_at`, `ErrorBody{code?,message}`
+  code-omitted-when-None, bare task array); full 7-code error set + lossless `Unknown` forward-
+  compat (tested); `Password` redacting Debug + transparent serialize, no leak; pure-DTO (deps
+  `serde` + dev `serde_json`), no I/O/scope creep; `[workspace.lints]` intact. Confirmed
+  `832a0c9` is board-only (no code follows `56833a6`). No fix-now findings.
+  REVIEW-STATUS: approved 56833a6
+- 2026-06-11 [verifier] VERIFIED at head `832a0c9` (last code `56833a6`). Pure-DTO seam, no
+  stack to boot — live-stack E2E correctly deferred to 0003/0004 per ADR-0003. No hidden runtime
+  surface (deps `serde` + dev `serde_json`; greps for net/fs/io/sqlx/tokio/axum/process found
+  none). `./ok.sh test` green: 9 auth + 12 error + 3 profile + 13 task = 37 integration + 12
+  doctests, non-vacuous (asserts real JSON bytes, `code`-omission, lowercase enums, `Password`
+  redaction, `Unknown` round-trip). `./ok.sh build` clean rebuild of the `contract` rlib. Output
+  matches ADR-0005 via the committed round-trip suite. Worktree clean, no scratch files.
+- 2026-06-11 [eng-manager] cycle tail. Process learnings captured on `main` (the corrected
+  three-home state model: shared/cross-cutting on `main` and never on a branch; feature-local
+  board item travels with its code on the branch; derived dashboard regenerated on `main`;
+  reviewer/verifier read-only and report verdicts the orchestrator commits on-branch). Handoff
+  entry written; dashboards regenerated; `contract-owner` already owns `crates/contract` (no new
+  agent). Summary filled; status `review` → `awaiting-merge`. Definition of done holds.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
 
+Restructured the workspace to the target crate layout and stood up `crates/contract` as the
+single source of truth for the foundational wire shapes ([ADR-0005][adr-0005]). This is slice
+1 of 3 of the foundational vertical slice ([0001][feat-0001]); it ships **no** I/O, HTTP, or
+DB code — a pure-DTO seam that 0003 (server) and 0004 (TUI) build against.
+
+**What shipped:**
+
+- Removed the `crates/organized-koala` placeholder; updated the root workspace members and
+  lockfile. New crate scaffolded via the `new-crate` skill (`[lints] workspace = true`,
+  README-as-rustdoc).
+- The ADR-0005 DTOs: `RegisterRequest`, `LoginRequest`, `SessionResponse`, `Profile`, `Task`,
+  `TaskStatus` (`open`/`done`), `CreateTaskRequest`, and `ErrorBody { code?, message }` with the
+  stable error-code identifiers (`validation_failed`, `invalid_credentials`, `unauthenticated`,
+  `not_found`, `username_taken`, `email_taken`, `internal`) plus a lossless `Unknown` catch-all
+  for forward compatibility.
+- A `Password` newtype: transparent serialize, `[REDACTED]` `Debug` so a secret cannot leak
+  through derived formatting.
+- Wire format locked to ADR-0005: snake_case fields, UUID-string ids, RFC 3339 UTC timestamps,
+  lowercase enums, `closed_at` nullable-and-emitted (not omitted), `code` omitted when `None`,
+  bare task arrays.
+
+**Validation:** 37 serde/wire-format integration tests + 12 doctests, all green; `./ok.sh`
+build/lint/fmt clean (deny-warnings, `missing-docs` enforced). Reviewer approved at code head
+`56833a6`; verifier confirmed the pure-DTO seam with no hidden runtime surface — live-stack E2E
+correctly deferred to 0003/0004 per [ADR-0003][adr-0003].
+
+**For the human merging:** the branch `feature/0002-contract-crate` (head `832a0c9`, last code
+`56833a6`) is linear atop `main` and is a fast-forward. `main` already carries everything this
+branch's code depends on — ADR-0005 (`1a2540c`), the `.githooks/secret-scan.sh` fix relocated
+as shared infra (`d34570c`), and the corrected board-on-branch workflow docs (`ed9510e`). The
+branch itself is **code-only** plus its own board record; merging it fast-forwards `main` and
+brings this item to its final state. (The secret-scan now requires an assigned credential value
+so the ADR-mandated `password` field no longer false-positives — see CLAUDE.md / bash-standards
+for the current scan shape.)
+
+[adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
 [feat-0001]: ./0001-foundational-slice.md
