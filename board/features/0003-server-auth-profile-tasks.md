@@ -1,7 +1,7 @@
 ---
 id: 0003
 title: Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001)
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: [0002]
@@ -368,8 +368,23 @@ the branch is clean to merge. After merging, **0004 (TUI) is unblocked** as the 
 - [ ] 2026-06-12 [human] **nitpick:** I see some custom `Debug` implementations for types that
   are already using `SecretString` internally and don't need the custom. Not really a problem
   but it is unnecessary
-- [ ] 2026-06-12 [human] **question:** Are we reaching the database in every request to check
+- [x] 2026-06-12 [human] **question:** Are we reaching the database in every request to check
   authentication? If we are, this is a DoS vector and we should have a plan to fix it
+  - 2026-06-12 [architect→orchestrator] **clarification — premise does not hold.** Auth is
+    stateless JWT verification with **zero DB queries**: the `AuthUser` extractor
+    (`crates/server/src/auth/session.rs:37`) calls `jwt().verify(token)`, which is an in-memory
+    HS256 signature + `exp` check (`crates/server/src/auth/jwt.rs:63-68`). There is no session
+    table; the user id is the token's `sub` claim, not a lookup. The only DB work on an
+    authenticated request is the business query itself. No DoS vector; no change needed.
+    (Adjacent, out-of-scope: `/login` + `/register` run argon2 with no rate-limiting — standard
+    hardening, would be a new inbox item + ADR if pursued.)
+- 2026-06-12 [architect] triaged the four human-feedback items (item re-entered from
+  `awaiting-merge` → `working`): #1 healthcheck → `platform-dev` (compose + Dockerfile, on-branch
+  net-new infra); #2 tests → `tester` adds JWT-expiry / password / config coverage closing a
+  documented-but-nonexistent gap, and the coverage-DoD-in-CI question is escalated to the operator
+  (needs sanctioned `cargo-llvm-cov` + a `CLAUDE.md` DoD change); #3 redundant `Debug` →
+  `server-dev` derives on `Jwt`+`JwtConfig`; #4 DoS question → clarified above (no change). No ADR
+  required by any item.
 
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
