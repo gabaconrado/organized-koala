@@ -25,14 +25,15 @@ for an in-flight item the authoritative live status is on its branch.
 | --- | --- | --- | --- | --- | --- |
 | [0001](./features/0001-foundational-slice.md) | Foundational vertical slice (auth + profile + minimal TODO) | planned | high | umbrella → 0002, 0003, 0004 | — |
 | [0002](./features/0002-contract-crate.md) | Contract crate + workspace restructure (slice 1 of 0001) | merged | high | — | — (merged) |
-| [0003](./features/0003-server-auth-profile-tasks.md) | Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001) | ready | high | 0002 | — |
+| [0003](./features/0003-server-auth-profile-tasks.md) | Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001) | ready (frozen; live on branch) | high | 0002 | feature/0003-server-auth-profile-tasks |
 | [0004](./features/0004-tui-foundational.md) | TUI — register/login, default profile, task add/list/close (slice 3 of 0001) | ready | high | 0003 | — |
 
 > **Dependency chain (slice 0001):** `0002` (contract) → `0003` (server) → `0004` (TUI). `0001`
-> is the umbrella tracking the three. `0002` is **merged** — the human fast-forwarded
-> `feature/0002-contract-crate` into `main` (head `acc081f`; last code `e93ed4f`) and the worktree
-> was removed. It had been **re-opened** after first reaching `awaiting-merge` by two `[human]`
-> feedback items (chrono-typed timestamps; a test-layout question), both **re-resolved** on-branch
-> (chrono implemented + re-reviewed + re-verified; test-layout was a clarification plus a
-> `rust-standards` rule). With the contract seam now on `main`, **`0003` (server) is unblocked and
-> ready to claim**; `0004` (TUI) follows `0003`.
+> is the umbrella tracking the three. `0002` is **merged**. `0003` (server) is **in-flight and
+> branch-owned** on `feature/0003-server-auth-profile-tasks`: the cycle ran build → review →
+> verify and the live item advanced to `awaiting-merge` on the branch (reviewer **approved** and
+> verifier **verified-with-gaps** at last code sha `f67a883`; two docker-only gaps — compose
+> `service_completed_successfully` gating + OTLP export — await the human's `./ok.sh up` at merge).
+> `main`'s snapshot stays frozen at the claim (`ready`, with a pointer note) until the human's
+> fast-forward merge brings the finished item back atomically with the code. `0004` (TUI) is
+> `ready` but **blocked behind 0003** (depends-on 0003) and becomes claimable once 0003 merges.

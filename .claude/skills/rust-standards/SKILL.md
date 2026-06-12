@@ -35,6 +35,17 @@ Idiomatic Rust layout (see [Rust by Example — Testing](https://doc.rust-lang.o
 - **Integration tests** live in the crate's top-level `tests/` directory, exercising the
   crate's **public API**; mock only external services. "Hard to test" ⇒ bubble up to
   architecture review (do not bend source).
+- **A binary crate that will be integration-tested needs a `[lib]` target — scaffold it
+  lib+bin from the start (learned 0003).** A crate's `tests/` directory links against the
+  crate's **library**, not its binary, so a binary-only crate (`main.rs` with no `[lib]`)
+  cannot expose anything — `app::router`, `AppState`, config types — for `tests/` to drive
+  in-process; the suite simply will not link. The fix is a `[lib] name = "<crate>"` target plus
+  a thin `src/lib.rs` that declares the module tree and re-exports the test seams, with
+  `main.rs` reduced to a shell over the lib (CLI parsing + a call into the library). Do this at
+  scaffold time for any binary crate expected to carry integration tests (e.g. `server`/
+  `organized-koalad`), not as a retrofit mid-cycle — 0003 had `tester` blocked until `server-dev`
+  added the split. Same shape applies to `tui`/`organized-koala` when its non-`TestBackend`
+  surface needs in-process tests.
 - For a crate whose entire public surface *is* its API — a pure-DTO crate like `contract`,
   with no private/internal logic — the crate-root `tests/` public-API suite plus doctests is
   the correct and complete layout; `module/tests.rs` unit tests apply only where there is

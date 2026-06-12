@@ -218,6 +218,21 @@ committed on a feature branch, leaving `main`'s scanner stale).
    docker/compose, OTel collector config), `CLAUDE.md`, the standards skills, and the
    agent/skill definitions under `.claude/`. **A change to any of these must NEVER ride a
    feature branch** — that is exactly the out-of-sync bug class.
+   - **Carve-out — net-new infra born alongside a new crate rides that crate's branch and
+     merges atomically with it (learned 0003).** The rule just above is about *modifying
+     existing shared infra* (the 0002 bug class: a `.githooks/` fix or an `ok.sh` edit that the
+     whole repo already depends on, stranded on one branch while `main` goes stale). It is
+     **not** a license to put arbitrary infra on branches. When infra is *net-new and only
+     meaningful because of a crate that does not yet exist on `main`* — e.g. 0003's `deploy/`
+     stack plus the `ok.sh` `up`/`run-server`/`migrate` verbs that shell to the
+     `organized-koalad` binary — landing it on `main` early is *itself* an out-of-sync bug in
+     the other direction: it would reference a non-existent crate, and the verifier needs
+     `./ok.sh up` to work **inside the worktree**. Such infra is authored on the crate's feature
+     branch and reaches `main` in the same merge as the crate it serves. **Decision test:** does
+     this change touch infra that something already on `main` depends on? → `main`-only. Is it
+     brand-new infra with no meaning until this branch's new crate merges? → it rides the branch
+     and merges atomically. When unsure, treat it as the former (main-only) — the carve-out is
+     deliberately narrow.
 2. **Feature-local → committed on the feature branch, inside the worktree.** The
    `board/features/NNNN-<slug>.md` item travels **with** the code it describes: its status
    flips (`working`→`review`→`awaiting-merge`), per-slice Log entries, the reviewer/verifier

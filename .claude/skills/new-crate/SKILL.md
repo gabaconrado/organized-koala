@@ -19,6 +19,15 @@ audience: dev
    `server` → binary `organized-koalad`, `tui` → binary `organized-koala`, narrow shared
    crates as needed).
 
+   **A binary crate that will be integration-tested must be lib+bin from the start (learned
+   0003).** A crate's top-level `tests/` directory links against the crate's **library**, not
+   its binary — a binary-only crate cannot expose `app::router`/`AppState`/config types for the
+   suite to drive in-process, so the tests will not link. Give such a crate a `[lib] name =
+   "<name>"` target plus a thin `src/lib.rs` declaring the module tree and re-exporting the test
+   seams, and reduce `main.rs` to a shell over the lib (CLI parsing + one call into the
+   library). Do this here at scaffold time, not as a mid-cycle retrofit — in 0003 the `server`
+   crate shipped binary-only and blocked `tester` until the split was added.
+
 2. **Inherit from the workspace** in `crates/<name>/Cargo.toml` — do NOT redefine anything
    the workspace owns:
 
@@ -87,9 +96,12 @@ audience: dev
 
 ## Reference example
 
-`crates/organized-koala/` is the seed crate and demonstrates every rule above — workspace
-inheritance, README-as-doc via `include_str!`, a documented public fn with a doc test, and
-unit tests in a sibling `tests.rs`.
+`crates/contract/` (the single source of truth for wire shapes) demonstrates the library-crate
+rules — workspace inheritance, README-as-doc via `include_str!`, documented public types with
+doc tests, and a crate-root `tests/` public-API suite. `crates/server/` demonstrates the
+lib+bin split for a binary crate that carries integration tests: a `[lib] name = "server"`
+target with a thin `src/lib.rs` re-exporting the test seams (`app::{router, AppState}`,
+config types) and a `main.rs` reduced to the clap CLI over the lib.
 
 ## Extending this skill
 

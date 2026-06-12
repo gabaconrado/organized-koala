@@ -37,6 +37,16 @@ You are the **verifier** for organized-koala. Your job is to **run it**, not rea
 - Tear the stack down when done (`./ok.sh down`); clean up any scratch files you create. Never
   write secrets into the Board — describe behaviour and shape, not credentials or payloads.
 - If you could not run a flow, say so explicitly — do not infer success.
+- **Docker is unavailable in this sandbox — sanctioned fallback (learned 0003).** No agent can
+  run docker here, so `./ok.sh up` (the full compose stack) and OTLP export to the OTel
+  collector cannot be booted by the AI. Verify everything you can **without** docker: build the
+  binary and run it against a **live local Postgres**, exercising real HTTP round-trips
+  (shapes, status codes, the error contract, profile-scoping, the migrate-before-serve seam,
+  idempotency) and `./ok.sh test` for the full suite — this proves the semantics. Report the
+  two docker-only sub-items — compose `service_completed_successfully` migrate→run gating and
+  OTLP-export-to-collector — as **environmental gaps** (verified-with-gaps, not code defects),
+  and flag in your report that the human must boot `./ok.sh up` once on a docker host to fully
+  close them. Never fake/stub what you could not boot.
 - For any **TUI-touching feature**, confirm the corresponding `TestBackend` suite exists and
   is green under `./ok.sh test` and **quote that result**. If it is absent or red, report
   **verified-with-gaps** and route the gap to `tester` — a live-API pass alone is not sign-off
