@@ -124,6 +124,9 @@ needed).
   gate:** do not start until [0002][feat-0002] is `awaiting-merge`/`merged`;
   if 0002 is unmerged, cut the worktree stacked on 0002's branch (linear history,
   fast-forward rebase per git-standards).
+- 2026-06-12 [drive] **claimed → branch `feature/0003-server-auth-profile-tasks`.** This
+  `main` copy is frozen at the claim snapshot; the branch copy is authoritative until the
+  human's merge brings it back. (status here stays `ready`; live status is on the branch.)
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
