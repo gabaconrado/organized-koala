@@ -274,12 +274,34 @@ async fn malformed_token_is_401(pool: PgPool) {
     res.expect_error(ErrorCode::Unauthenticated);
 }
 
-// NOTE: expired-token → 401 is intentionally NOT asserted here. The only public route to a
-// token is `Jwt::issue`, which always sets `exp = now + ttl` for a non-negative `ttl`; even a
-// zero TTL lands inside `jsonwebtoken`'s default 60 s `exp` leeway, so no genuinely-expired
-// token is constructible through the public surface. Expiry enforcement lives in `Jwt::verify`
-// (source-owned) and is covered by the verifier's live pass (ADR-0003); the extractor's reject
-// path is exercised here via the missing/malformed/foreign-signature cases.
+/// A protected route with an expired token → 401 `unauthenticated`. The token carries a valid
+/// HS256 signature under the app's secret and a real user subject, but its `exp` is an hour in
+/// the past — well outside `jsonwebtoken`'s 60 s `exp` leeway — so `Jwt::verify`'s expiry
+/// enforcement must reject it. `Jwt::issue` cannot mint such a token (its `ttl` is a
+/// non-negative `Duration`), so the token is hand-signed with the same secret and claim shape.
+#[sqlx::test]
+async fn expired_token_is_401(pool: PgPool) {
+    let app = app(pool);
+
+    // Same secret + claim shape as the app, but expired an hour ago (outside the 60 s leeway).
+    // Verification rejects on `exp` before any user lookup, so any subject UUID suffices.
+    let expired = common::mint_token(uuid::Uuid::new_v4(), -3600);
+    let res = send(&app, common::get_auth("/api/profiles", &expired)).await;
+    assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    res.expect_error(ErrorCode::Unauthenticated);
+}
+
+/// A control for `expired_token_is_401`: a freshly hand-signed token with the same secret and
+/// claim shape but a future `exp` verifies (200), proving the 401 above is driven by expiry —
+/// not by a claim-shape or signature mismatch in the hand-minted token.
+#[sqlx::test]
+async fn freshly_minted_token_is_accepted(pool: PgPool) {
+    let app = app(pool);
+
+    let fresh = common::mint_token(uuid::Uuid::new_v4(), 3600);
+    let res = send(&app, common::get_auth("/api/profiles", &fresh)).await;
+    assert_eq!(res.status, StatusCode::OK);
+}
 
 /// A token signed with a different secret → 401 `unauthenticated`. The token is issued by an
 /// app whose secret differs from the verifying app's, so the signature fails.

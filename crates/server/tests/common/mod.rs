@@ -17,11 +17,14 @@ use axum::body::Body;
 use axum::http::{Request, Response, StatusCode, header};
 use contract::{ErrorBody, ErrorCode};
 use http_body_util::BodyExt as _;
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt as _;
+use uuid::Uuid;
 
 use server::{AppState, JwtConfig, router};
 
@@ -42,6 +45,31 @@ pub fn app_with_ttl(pool: PgPool, ttl: Duration) -> Router {
         ttl,
     };
     router(AppState::new(pool, jwt))
+}
+
+/// The session-token claim shape as seen on the wire (subject + issued-at + expiry). Mirrored
+/// here so a test can mint a token with an arbitrary `exp`, exercising the verifier's expiry
+/// branch with a genuinely-elapsed token rather than one inside `jsonwebtoken`'s `exp` leeway.
+#[derive(Serialize, Deserialize)]
+struct TestClaims {
+    sub: String,
+    iat: i64,
+    exp: i64,
+}
+
+/// Mint an HS256 token for `user_id` signed with [`TEST_JWT_SECRET`] whose `exp` is
+/// `exp_secs_from_now` seconds from now (negative = already expired). A value well below
+/// `jsonwebtoken`'s default 60 s `exp` leeway yields a token the verifier must reject as
+/// expired. Mirrors the production claim shape as an external wire input — no source seam.
+pub fn mint_token(user_id: Uuid, exp_secs_from_now: i64) -> String {
+    let now = chrono::Utc::now().timestamp();
+    let claims = TestClaims {
+        sub: user_id.to_string(),
+        iat: now,
+        exp: now + exp_secs_from_now,
+    };
+    let key = EncodingKey::from_secret(TEST_JWT_SECRET.as_bytes());
+    encode(&Header::new(Algorithm::HS256), &claims, &key).expect("token should sign")
 }
 
 /// Build a router whose JWT signing secret differs from [`TEST_JWT_SECRET`], so a token

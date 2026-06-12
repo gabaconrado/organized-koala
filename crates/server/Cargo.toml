@@ -72,3 +72,8 @@ opentelemetry-otlp = { version = "0.30", features = ["grpc-tonic"] }
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+# Test-only: mint tokens with an arbitrary `exp` to drive the expired-token reject path,
+# mirroring the production HS256 claim shape as an external wire input.
+jsonwebtoken = "9"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+uuid = { version = "1", features = ["v4"] }

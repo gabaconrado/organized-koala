@@ -330,6 +330,23 @@ needed).
   cleanup pattern, no other bloat. Config-only edit (no `./ok.sh up`/pull/build run);
   `fmt --check` + `lint` green (neither touches docker). **Verifier must observe the `server`
   container reach `healthy` under `./ok.sh up`.**
+- 2026-06-12 [tester] human-feedback #2 (expired-token coverage gap): closed it at the
+  **HTTP integration layer** — no source edit. The slice-5 claim that expired-token→401 was
+  "covered by source-owned jwt unit tests" was inaccurate: those tests never existed, and the
+  verifier's live pass asserted missing/malformed/foreign-signature but not an expired token, so
+  `Jwt::verify`'s `exp` enforcement was untested at every layer. **That claim is now satisfied by
+  these integration tests, not unit tests.** Root obstacle the prior NOTE described is real:
+  `Jwt::issue` takes a non-negative `Duration`, and `Jwt::verify` keeps jsonwebtoken's default
+  60 s `exp` leeway, so no past-`exp` token is mintable via `issue`. Closed it without bending
+  source by hand-signing a token with the same HS256 secret + claim shape (an external wire
+  input) and an `exp` an hour in the past — well outside the 60 s leeway — then asserting
+  `GET /api/profiles` → 401 `unauthenticated`. Added `tests/auth.rs::expired_token_is_401` plus a
+  control `freshly_minted_token_is_accepted` (future `exp`, same secret/shape → 200) proving the
+  401 is driven by expiry, not a shape/signature mismatch. New test-only helper `mint_token` in
+  `tests/common/mod.rs`; `jsonwebtoken`/`chrono`/`uuid` added as `[dev-dependencies]` (test
+  wiring only, no source/`Cargo.lock` change). `./ok.sh test` green — server `auth.rs` 14 → 16,
+  both new tests pass; full suite green. `fmt --check` + `lint` clean. No source seam deferred to
+  server-dev: the public surface sufficed.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
