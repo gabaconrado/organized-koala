@@ -1,7 +1,7 @@
 ---
 id: 0003
 title: Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001)
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: [0002]
@@ -390,13 +390,24 @@ collector was observed live (31 spans in the `debug` exporter, not the prior log
 the branch is clean to merge. After merging, **0004 (TUI) is unblocked** as the final slice of the
 0001 foundational umbrella.
 
-- [ ] 2026-06-12 [human] **suggestion:** add the health-check endpoint to the compose server
+- [x] 2026-06-12 [human] **suggestion:** add the health-check endpoint to the compose server
   service as a probe health-check
-- [ ] 2026-06-12 [human] **question:** I don't see any unit test. Why? Is it worth to setup
+  - resolved `7833b15` (platform-dev): `healthcheck:` on the compose `server` service hitting
+    `/healthz`, `curl` added to the runtime image. Verifier observed the container reach Docker
+    `healthy` for real (probe ExitCode 0 in-container).
+- [x] 2026-06-12 [human] **question:** I don't see any unit test. Why? Is it worth to setup
   code coverage DoD and check in the workflow?
-- [ ] 2026-06-12 [human] **nitpick:** I see some custom `Debug` implementations for types that
+  - answered: zero server unit tests is policy-consistent (the public API is HTTP; coding-standards
+    and DoD favour public-API/integration coverage — 28 such tests exist). A real gap was found and
+    closed `4c679bd` (tester): expired-token→401 was untested at any layer. The coverage-DoD part is
+    a separate `main`-side item — operator sanctioned `cargo-llvm-cov` for a REPORTED metric (no hard
+    threshold); tracked as a new Board item, handled by `platform-dev`/`eng-manager` on `main`.
+- [x] 2026-06-12 [human] **nitpick:** I see some custom `Debug` implementations for types that
   are already using `SecretString` internally and don't need the custom. Not really a problem
   but it is unnecessary
+  - resolved `353026f` (server-dev): dropped the redundant hand-written `Debug` on `Jwt` and
+    `JwtConfig` for `#[derive(Debug)]` (`SecretString` already redacts). Load-bearing custom impls
+    (`Password`, `AppState`, `TelemetryGuard`) left intact.
 - [x] 2026-06-12 [human] **question:** Are we reaching the database in every request to check
   authentication? If we are, this is a DoS vector and we should have a plan to fix it
   - 2026-06-12 [architect→orchestrator] **clarification — premise does not hold.** Auth is
@@ -431,6 +442,15 @@ the branch is clean to merge. After merging, **0004 (TUI) is unblocked** as the 
   co-author trailer used `noreply@anthropic.com` not the git-standards `@organized-koala.local`
   form; second, Board MD013 >100-char lines (4/119/296) to reflow — the pre-commit hook is
   secret-scan only, so the markdown linter (`.claude/lint.sh` PostToolUse) does not gate commits.
+- 2026-06-12 [verifier] **VERIFY-STATUS: verified `4c679bd`** — live re-verification of the
+  feedback delta via the sanctioned `./ok.sh up`/`down` (Docker 29.5.3 / Compose v5.1.4). Observed
+  FOR REAL: the `server` container transitioned `starting` → `healthy` (probe ExitCode 0
+  in-container, `curl 7.88.1` present in the slim image, in-container `/healthz` → 200); migrate
+  one-shot exited 0 before server start (gating intact). Regression spot-check green: register/login
+  → profile-scoped task create/list/close, plus error contract (401 `unauthenticated`, 400
+  `validation_failed`, 404 `not_found` on a foreign profile). OTLP span export re-confirmed live.
+  Behaviour-neutral `Debug` derive not separately exercised; expired-token test owned by the tester
+  suite (green at `4c679bd`). No TUI code touched. Stack torn down clean; DoD clause 4 satisfied.
 
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
