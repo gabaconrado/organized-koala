@@ -1,5 +1,6 @@
 //! Task wire types: the flat TODO shape, its status, and the create request.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Lifecycle status of a [`Task`]. Serializes as a lowercase string (`open` / `done`).
@@ -27,13 +28,15 @@ pub enum TaskStatus {
 
 /// A TODO task, the flat shape of hard-constraint #3.
 ///
-/// `id` is a UUID string and `created_at` is an RFC 3339 UTC string. `closed_at` is `null`
-/// while the task is [`TaskStatus::Open`] and an RFC 3339 UTC string once it is
-/// [`TaskStatus::Done`].
+/// `id` is a UUID string and `created_at` is a UTC timestamp. `closed_at` is `null` while the
+/// task is [`TaskStatus::Open`] and a UTC timestamp once it is [`TaskStatus::Done`]. Both
+/// timestamps serialize to (and parse from) RFC 3339 with a `Z` offset, e.g.
+/// `"2026-06-11T12:00:00Z"`.
 ///
 /// # Examples
 ///
 /// ```
+/// use chrono::{DateTime, Utc};
 /// use contract::{Task, TaskStatus};
 ///
 /// let open = r#"{
@@ -47,6 +50,20 @@ pub enum TaskStatus {
 /// let task = serde_json::from_str::<Task>(open).unwrap();
 /// assert_eq!(task.status, TaskStatus::Open);
 /// assert!(task.closed_at.is_none());
+/// assert_eq!(
+///     task.created_at,
+///     "2026-06-11T12:00:00Z".parse::<DateTime<Utc>>().unwrap(),
+/// );
+///
+/// // A done task carries a `closed_at`; it re-serializes with the `Z` offset.
+/// let done = Task {
+///     status: TaskStatus::Done,
+///     closed_at: Some("2026-06-11T13:30:00Z".parse::<DateTime<Utc>>().unwrap()),
+///     ..task
+/// };
+/// let json = serde_json::to_value(&done).unwrap();
+/// assert_eq!(json["created_at"], "2026-06-11T12:00:00Z");
+/// assert_eq!(json["closed_at"], "2026-06-11T13:30:00Z");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Task {
@@ -58,10 +75,10 @@ pub struct Task {
     pub description: String,
     /// Whether the task is open or done.
     pub status: TaskStatus,
-    /// Creation timestamp (RFC 3339 UTC string).
-    pub created_at: String,
-    /// Close timestamp (RFC 3339 UTC string), or `null` while the task is open.
-    pub closed_at: Option<String>,
+    /// Creation timestamp; serializes as RFC 3339 UTC (e.g. `"2026-06-11T12:00:00Z"`).
+    pub created_at: DateTime<Utc>,
+    /// Close timestamp (RFC 3339 UTC), or `null` while the task is open.
+    pub closed_at: Option<DateTime<Utc>>,
 }
 
 /// Request body for `POST /api/profiles/{profile_id}/tasks`.
