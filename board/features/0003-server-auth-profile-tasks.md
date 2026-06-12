@@ -128,6 +128,34 @@ needed).
   carries ADR-0004/0005 + the merged `contract` crate. Branch
   `feature/0003-server-auth-profile-tasks`; session `drive-0003-20260612`. Status
   `ready` → `working`. Branch copy is now authoritative.
+- 2026-06-12 [server-dev] slice 1 (a7c9b81): scaffolded `crates/server` (binary
+  `organized-koalad`) as a workspace member via the new-crate conventions; clap admin CLI
+  per ADR-0004 — `run` (default no-arg, never mutates schema), `migrate` (idempotent), and
+  `rollback` (one step by default, bounded via `--steps`, never auto-invoked). Reversible
+  migrations (paired `*.up.sql`/`*.down.sql`) for `users`, `profiles`, `tasks` with FKs
+  (profile->user, task->profile) and the flat task status/closed-at domain, embedded via
+  `sqlx::migrate!`. OTLP export layer gated on `OK_OTLP_ENDPOINT`, degrading to log-only when
+  the collector is absent/unreachable. Env names chosen: `OK_DATABASE_URL`, `OK_JWT_SECRET`,
+  `OK_JWT_TTL_SECONDS` (default 86400 = 24h), `OK_BIND_ADDR` (default `0.0.0.0:8080`),
+  `OK_OTLP_ENDPOINT`, `OK_AUTO_MIGRATE` (dev-only hatch, default off — implemented now).
+- 2026-06-12 [server-dev] slice 2 (1a2cd5b): argon2 PHC password hashing (constant-time decoy
+  verify for absent users), JWT HS256 issue/verify (sub/iat/exp, expiry enforced; secret held
+  as `SecretString`, redacted everywhere), the `AuthUser` Bearer extractor, the thiserror
+  boundary error mapping each case to HTTP status + `contract::ErrorBody { code?, message }`
+  (internal causes logged, never sent), and the router + state. Endpoints: `GET /healthz`,
+  `POST /api/auth/register` (user + named default profile in one transaction → 201),
+  `POST /api/auth/login` (username-or-email → 200 token).
+- 2026-06-12 [server-dev] slice 3 (9d234ce): `GET /api/profiles` and the task surface
+  `GET|POST /api/profiles/{pid}/tasks` + `POST .../tasks/{tid}/close`. Every query is
+  ownership-joined on the authenticated user, so unowned/nonexistent profiles return
+  **404 `not_found`** (never 403); title is trimmed + non-empty (else 400
+  `validation_failed`); close is idempotent (preserves `closed_at`). All endpoints
+  `tracing`-instrumented (spans + INFO mutation events). Committed the `.sqlx/` offline cache;
+  `build`/`lint`/`fmt --check`/`prepare` all green. Smoke-tested live over HTTP against a
+  local Postgres: register/login, profile isolation (user B → 404 on user A's profile),
+  task add/list/close incl. idempotent re-close, all error codes (`invalid_credentials`,
+  `unauthenticated`, `not_found`, `username_taken`, `email_taken`, `validation_failed`), and
+  confirmed no secret in any log line. Defers slices 4 (deploy/ok.sh), 5 (tests), 6 (verify).
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
