@@ -1,14 +1,14 @@
 ---
 id: 0002
 title: Contract crate + workspace restructure (slice 1 of 0001)
-status: awaiting-merge   # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working   # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: []
 branch: feature/0002-contract-crate
 worktree: .claude/worktrees/0002-contract-crate
 created: 2026-06-11
-updated: 2026-06-11
+updated: 2026-06-12
 ---
 
 ## Feature request
@@ -123,6 +123,12 @@ fixed — deviations re-enter via `architect`).
 - [ ] 2026-06-12 [human] **thought**: Tests in the contracts crate are in the integrated tests
   directory (crate-root/tests) instead of along with the modules (crate-root/module/tests.rs).
   This seems to go against the testing directives
+- 2026-06-12 [drive] feedback sweep re-entry. `architect` triaged both items: (1) chrono ⇒
+  behaviour tweak, no ADR (Rust-representation change inside ADR-0005's frozen wire format,
+  delegated to `contract-owner`); (2) test layout ⇒ no conflict, the public-API `tests/` suite
+  plus doctests is the correct layout for a pure-DTO crate (clarification, and a `rust-standards`
+  note on `main`). Status `awaiting-merge` → `working` to implement (1) on-branch before merge
+  (zero blast radius — 0003/0004 not yet built). Re-review + re-verify to follow.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
