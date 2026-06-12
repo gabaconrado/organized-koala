@@ -156,6 +156,26 @@ needed).
   task add/list/close incl. idempotent re-close, all error codes (`invalid_credentials`,
   `unauthenticated`, `not_found`, `username_taken`, `email_taken`, `validation_failed`), and
   confirmed no secret in any log line. Defers slices 4 (deploy/ok.sh), 5 (tests), 6 (verify).
+- 2026-06-12 [platform-dev] slice 4 (deploy stack + ok.sh wiring): added `deploy/Dockerfile`
+  (multi-stage; build stage compiles `organized-koalad` in release with `SQLX_OFFLINE=true`
+  off the committed `.sqlx/` cache, runtime stage is `debian:bookworm-slim` running as an
+  unprivileged user, entrypoint the binary), `.dockerignore` (lean context; keeps the two
+  `include_str!` crate READMEs), and `deploy/docker-compose.yml` with the ADR-0004 graph:
+  Postgres (pg_isready healthcheck) -> one-shot `migrate` (`command: ["migrate"]`, gated
+  `depends_on postgres: service_healthy`) -> `server` (`command: ["run"]`, gated
+  `depends_on migrate: service_completed_successfully`) -> minimal OTel collector
+  (`deploy/otel/collector-config.yaml`: OTLP/gRPC receiver on 4317 + `debug` exporter); the
+  server's `OK_OTLP_ENDPOINT` points at the collector over gRPC. The migrate-before-serve
+  ordering lives entirely in the compose file (no host command, no `ok.sh` at runtime).
+  `ok.sh` wired: `up`/`down` (compose, migrations auto-applied via the one-shot),
+  `migrate`/`rollback` as dev-only delegating conveniences shelling to the binary,
+  `run-server` -> `organized-koalad run`, `test` boots a throwaway tmpfs Postgres
+  (`deploy/docker-compose.test.yml`) and points `sqlx::test` at it via `DATABASE_URL`
+  (honours a caller-provided `DATABASE_URL` if set); `--help` documents the dev-only framing.
+  Credentials live only in a gitignored `deploy/.env` that `up` generates with obvious
+  DEV-ONLY placeholders — the committed stack carries no credential literal (secret-scan
+  clean). `build`/`lint`/`fmt --check`/`secret-scan` green; shellcheck clean. Docker is
+  unavailable in this sandbox, so the stack is WIRING-ONLY pending the verifier's live boot.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary

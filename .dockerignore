@@ -1,0 +1,12 @@
+# Keep the Docker build context lean and reproducible: ship only sources + the committed
+# .sqlx/ cache, never host build artifacts, VCS internals, or coordination state.
+target/
+**/target/
+.git/
+.github/
+.claude/
+board/
+docs/
+deploy/
+*.md
+!crates/**/README.md

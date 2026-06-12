@@ -1,0 +1,84 @@
+# organized-koala deployment stack (ADR-0004).
+#
+# Service graph and gating (the migrate-before-serve ordering lives HERE, in compose — not in
+# ok.sh shell logic; the running system carries no ok.sh):
+#
+#   postgres            (healthcheck: pg_isready)
+#      └─ migrate        depends_on postgres: service_healthy   — one-shot `organized-koalad
+#                        migrate`, runs to completion, then exits 0
+#           └─ server    depends_on migrate: service_completed_successfully — long-running
+#                        `organized-koalad run`; never starts until the schema is current
+#   otel-collector      (independent) — server's OK_OTLP_ENDPOINT points at it
+#
+# `./ok.sh up` triggers this whole graph, so the schema is current with NO host command and
+# nothing on the run path mutating schema (ADR-0004 §2).
+#
+# SECRETS: this file holds NO credential literals. Credentials come from a gitignored env
+# file `deploy/.env` (read automatically by compose). `./ok.sh up` generates that file with
+# obvious DEV-ONLY placeholder values on first run if it is absent. NEVER commit a real
+# secret; the committed stack stays secret-free.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      # Sourced from deploy/.env (POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB).
+      POSTGRES_USER: ${POSTGRES_USER:?set in deploy/.env (see ok.sh up)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in deploy/.env (see ok.sh up)}
+      POSTGRES_DB: ${POSTGRES_DB:?set in deploy/.env (see ok.sh up)}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-koala} -d ${POSTGRES_DB:-koala}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No host port published by default; the server reaches Postgres over the compose network.
+
+  # One-shot: apply pending migrations, then exit. Gated on Postgres being healthy. The
+  # server service gates on THIS completing successfully (service_completed_successfully).
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: organized-koala/server:dev
+    command: ["migrate"]
+    restart: "no"
+    environment:
+      OK_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: organized-koala/server:dev
+    command: ["run"]
+    environment:
+      OK_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # JWT signing key sourced from deploy/.env (DEV-ONLY placeholder, NOT a real secret).
+      OK_JWT_SECRET: ${OK_JWT_SECRET:?set in deploy/.env (see ok.sh up)}
+      OK_JWT_TTL_SECONDS: ${OK_JWT_TTL_SECONDS:-86400}
+      OK_BIND_ADDR: 0.0.0.0:8080
+      # OTLP over gRPC (tonic) to the collector's receiver.
+      OK_OTLP_ENDPOINT: http://otel-collector:4317
+      OK_LOG: ${OK_LOG:-info}
+    ports:
+      - "${OK_HTTP_PORT:-8080}:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel/collector-config.yaml:/etc/otel/config.yaml:ro
+    # 4317 = OTLP/gRPC receiver (the server's OK_OTLP_ENDPOINT). Not published by default.
+
+volumes:
+  postgres-data:

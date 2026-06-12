@@ -1,0 +1,27 @@
+# Minimal OpenTelemetry Collector config for the local dev stack: accept OTLP over gRPC from
+# organized-koalad and print every span to the collector's own stdout (the `debug` exporter).
+# Enough for the verifier to observe spans live; richer pipelines (sampling, OTLP forwarding
+# to a backend) belong to the backlog observability item, not this slice.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        # The server's OK_OTLP_ENDPOINT (http://otel-collector:4317) lands here.
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch: {}
+
+exporters:
+  debug:
+    # `detailed` prints span names, attributes, and resource — visible via `docker compose
+    # logs otel-collector`, so spans are observable without an external backend.
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

@@ -1,0 +1,30 @@
+# Throwaway Postgres for `./ok.sh test`.
+#
+# The integration suite (crates/server/tests/**, written by the tester) uses sqlx::test, which
+# reads DATABASE_URL, creates a fresh per-test database, runs the embedded migrations into it,
+# and drops it afterwards — so the suite needs a live Postgres SERVER but owns its own
+# schema/teardown. This service provides exactly that server; ok.sh boots it, exports
+# DATABASE_URL at it, runs the tests, and tears it down.
+#
+# An ephemeral, no-volume instance: state is intentionally NOT persisted between runs.
+# Credentials are sourced from the env (ok.sh sets DEV/TEST-ONLY placeholder values); this
+# file holds no credential literals.
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${OK_TEST_PG_USER:?set by ok.sh test}
+      POSTGRES_PASSWORD: ${OK_TEST_PG_PW:?set by ok.sh test}
+      POSTGRES_DB: ${OK_TEST_PG_DB:?set by ok.sh test}
+    # Publish to a fixed host port so ok.sh can build a stable DATABASE_URL.
+    ports:
+      - "${OK_TEST_PG_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${OK_TEST_PG_USER} -d ${OK_TEST_PG_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    tmpfs:
+      # Keep the test DB entirely in memory; nothing persists across runs.
+      - /var/lib/postgresql/data
