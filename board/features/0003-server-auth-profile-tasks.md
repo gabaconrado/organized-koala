@@ -213,6 +213,26 @@ needed).
   `fmt --check` green. Live execution is pending the verifier — no Postgres reachable in this
   environment (no docker daemon / psql / DATABASE_URL), so the `#[sqlx::test]` suite was not run
   here; nothing was faked or weakened.
+- 2026-06-12 [reviewer] **REVIEW-STATUS: approved `f67a883`** (cold review of `main..f67a883`).
+  Mechanical gate green: `fmt --check`, `lint` (deny-warnings, no unjustified `#[allow]`),
+  `build` all exit 0; `sqlx prepare --check` passes (10 cache files match 10 query macros);
+  `secret-scan` clean. `./ok.sh test` not run live (docker/Postgres unavailable in sandbox) —
+  suite **compiles** (`cargo test -p server --no-run` exit 0, all three binaries produced);
+  live execution is the verifier's job (DoD #4), flagged not gate-failing. No contract drift
+  (`contract/` untouched; server defines no DTO, maps `ApiError`→`contract::ErrorBody` at the
+  boundary). Endpoints/shapes/codes match ADR-0005; CLI/compose match ADR-0004 (serve never
+  mutates schema; auto-migrate env-gated default-off; migrate one-shot gated on pg-healthy,
+  server gated on migrate `service_completed_successfully`). Hard constraints #2–#5 held:
+  single ownership gate `EXISTS(... user_id=$2)`→404-not-403, flat task table, argon2id+JWT
+  HS256 local-only. Security: secrets are `SecretString` with redacting `Debug`, never logged;
+  JWT `exp` enforced; constant-time decoy verify; no credential literal committed (`deploy/.env`
+  gitignored, DEV-ONLY placeholders). All 3 migrations have paired up/down. Git hygiene clean
+  (Conventional Commits, co-author footers, no merge commits, nothing pushed). Placement
+  correct: branch diff touches only `crates/server/**`, `deploy/**`, `ok.sh`, `board/`,
+  `Cargo.lock`, `.sqlx/`, `.dockerignore` — no ADR/.githooks/CLAUDE.md/.claude/** rode the
+  branch. Two non-blocking nits: (1) `common/mod.rs:39` `app_with_ttl` unused for its expired-
+  token purpose (jsonwebtoken 60s `exp` leeway — deferred to verifier); (2) `cmd_run_server`
+  forwards `run "$@"` though `run` takes no args (harmless). No blocking findings.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
