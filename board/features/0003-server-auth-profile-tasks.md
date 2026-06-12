@@ -369,13 +369,27 @@ carries no credential literal (gitignored `deploy/.env`, DEV-ONLY placeholders).
 tracing/OTLP wiring + `deploy/` stack + `ok.sh` wiring all delivered; `./ok.sh test|lint|
 fmt --check` green (28 integration tests over the public HTTP surface).
 
-**Verdicts.** Reviewer: **approved** at last code sha `f67a883` (mechanical gate green, no
-contract drift, hard constraints #2–#5 held, secrets redacted; two non-blocking nits). Verifier:
-**verified** at `f67a883` — re-verified live under the **sanctioned docker mechanism** (`./ok.sh`
-verbs over docker-compose; no external binary acquired) after docker became available. 28/28 tests
-green on the compose Postgres; full ADR-0005 HTTP surface with exact codes/bodies; two-user profile
-isolation → 404; idempotent re-close (byte-identical `closed_at`); the migrate→run gating proven
-live via `docker inspect`; 31 OTLP spans observed in the collector; secrets absent from logs.
+**Human-feedback re-entry (resolved).** After the first `awaiting-merge`, the operator authored
+four `[human]` items; the cycle re-ran (triage → fixes → review → verify) and returned to
+`awaiting-merge`. All four are checked `[x]` in the Log: **#1** added a compose `server`
+healthcheck on `/healthz` (+ `curl` in the runtime image) — verifier saw the container reach
+Docker `healthy` (`7833b15`); **#2** closed a **real** coverage gap — expired-token→401 was
+untested at every layer (a prior slice-5 Log entry had falsely claimed source-owned jwt unit
+tests that never existed), now asserted at the HTTP layer (`4c679bd`); **#3** dropped the
+redundant hand-written `Debug` on `Jwt`/`JwtConfig` for `#[derive(Debug)]` (`353026f`); **#4**
+clarified (no change) that auth is **stateless JWT with zero DB queries** — no DoS vector. A
+follow-up the operator sanctioned (a reported-only `./ok.sh coverage` verb over `cargo-llvm-cov`,
+no hard threshold) is a separate `main`-side Board item for a future cycle, not part of 0003.
+
+**Verdicts.** First pass — reviewer **approved `f67a883`**, verifier **verified `f67a883`** (live
+under the sanctioned docker mechanism: 28/28 tests, full ADR-0005 surface, two-user isolation →
+404, migrate→run gating via `docker inspect`, 31 OTLP spans). **Feedback re-entry (current head,
+delta `fca5f53..HEAD`)** — reviewer **`REVIEW-STATUS: approved 4c679bd`** (mechanical gate green;
+the two new auth tests pass; no contract drift; hard constraints intact), verifier
+**`VERIFY-STATUS: verified 4c679bd`** — live via `./ok.sh up`/`down`: the `server` container went
+`starting` → `healthy`, migrate one-shot exited 0 before server start, register/login/task
+CRUD + error-contract regression green, OTLP export re-confirmed. `4c679bd` is the last code sha;
+all later commits are board-only.
 
 **History — why this was blocked, and how it cleared.** An earlier verifier pass satisfied the
 DoD by downloading/running an **unsanctioned embedded Postgres** (and reusing a leftover `/tmp`
@@ -386,9 +400,10 @@ gap blocks + escalates, it is never engineered around). The item sat `blocked` o
 `exited(0)` → server started ~0.49 s later, never before); (2) OTLP span export to the OTel
 collector was observed live (31 spans in the `debug` exporter, not the prior log-only mode).
 
-**Merge-time note for the human:** no outstanding gaps and no code change since the approved sha —
-the branch is clean to merge. After merging, **0004 (TUI) is unblocked** as the final slice of the
-0001 foundational umbrella.
+**Merge-time note for the human:** all four feedback items are resolved and `[x]`-checked, no
+outstanding gaps, and no code change since the approved sha `4c679bd` — the branch is clean to
+merge. After merging, **0004 (TUI) is unblocked** as the final slice of the 0001 foundational
+umbrella.
 
 - [x] 2026-06-12 [human] **suggestion:** add the health-check endpoint to the compose server
   service as a probe health-check
