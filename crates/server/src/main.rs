@@ -1,15 +1,9 @@
-#![doc = include_str!("../README.md")]
-
-mod app;
-mod auth;
-mod config;
-mod db;
-mod error;
-mod handlers;
-mod telemetry;
+//! The `organized-koalad` binary: a thin shell over the `server` library that wires the
+//! `clap` admin CLI (ADR-0004) to the library's serve/migrate/rollback entry points.
 
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};
+use server::{app, config, db, telemetry};
 
 /// The `organized-koalad` admin CLI (ADR-0004): run the server, or apply/revert migrations.
 #[derive(Debug, Parser)]

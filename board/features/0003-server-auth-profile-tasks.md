@@ -201,6 +201,18 @@ needed).
   is left pristine. Expired-token→401 is intentionally not asserted via HTTP (no past-`exp`
   token is constructible through the public `Jwt::issue`; it lands inside jsonwebtoken's 60 s
   `exp` leeway) — covered by source-owned jwt unit tests and the verifier's live pass.
+- 2026-06-12 [server-dev] resolved the tester's slice-5 blocker via a lib+bin split (build
+  structure only): added a `[lib] name = "server"` target and a thin `src/lib.rs` that declares
+  the module tree (`app`, `auth`, `config`, `db`, `error`, `handlers`, `telemetry`) and
+  re-exports `app::{AppState, router}` + `config::{Config, JwtConfig}`. `main.rs` is now a thin
+  shell over the lib (`use server::{app, config, db, telemetry}`) carrying only the clap CLI;
+  the binary's `run`/`migrate`/`rollback` behaviour and all env vars are unchanged. No handler
+  logic, wire contract, error mapping, migrations, or `.sqlx/` semantics touched. The slice-5
+  suite (`tests/auth.rs`, `tasks.rs`, `profile_isolation.rs`) now links and compiles clean
+  (`cargo test -p server --no-run` exit 0; all three test binaries produced); `build`/`lint`/
+  `fmt --check` green. Live execution is pending the verifier — no Postgres reachable in this
+  environment (no docker daemon / psql / DATABASE_URL), so the `#[sqlx::test]` suite was not run
+  here; nothing was faked or weakened.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
