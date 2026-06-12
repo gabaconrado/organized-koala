@@ -5,6 +5,58 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-12 (0002 re-entry — human feedback: chrono timestamps + test-layout)
+
+Two `[human]` feedback items on the already-verified, `awaiting-merge` 0002 re-opened the cycle.
+`architect` triaged both; the cycle ran forward on `feature/0002-contract-crate` and stopped at
+the AI-terminal `awaiting-merge` again. Both feedback boxes are now `[x]`.
+
+What shipped (on the branch):
+
+- **Feedback-1 (chrono):** contract timestamps are now `chrono::DateTime<Utc>`
+  (`Task.created_at`/`closed_at`, `Profile.created_at`) instead of opaque strings — consumers
+  get a typed timestamp and malformed dates now fail to parse. `chrono` added pure-DTO
+  (`default-features = false, features = ["std","serde"]` — no clock/IO surface). **Wire bytes
+  are unchanged** (RFC 3339 `…Z`, `closed_at: null` still emitted), so it sits **inside**
+  ADR-0005's frozen wire format — **no wire change, no ADR.** Commits `bc61626` (contract),
+  `98d1a85` (tests); reviewer approved `98d1a85`, verifier VERIFIED — 41 integration + 12
+  doctests = 53 green.
+- **Feedback-2 (test layout):** resolved as a **clarification, no code change**. The
+  `contract` crate is pure-DTO — its whole surface is public — so the crate-root `tests/`
+  public-API suite plus doctests is the correct, complete layout; there is no private logic for
+  `module/tests.rs` to cover. Captured as a durable rule in `rust-standards` on `main`
+  (`8b56ed2`).
+
+Process point worth keeping (the durable learning of this re-entry):
+
+- **A pure-Rust-representation change on an `awaiting-merge` item, with identical wire bytes,
+  does NOT need an ADR.** ADR-0005 froze the *wire format*; it explicitly delegates the Rust
+  representation (chrono vs string, enum-with-catch-all, etc.) to `contract-owner`. Swapping the
+  in-crate type while the serialized bytes are byte-identical stays inside that delegation.
+  **Contrast:** a change to the wire shape itself (a renamed/added/removed field, a changed
+  encoding the other side observes) IS an ADR event and ripples to both consumers (CLAUDE.md
+  hard-constraint #2). The reviewer guarded the boundary by holding the exact-byte assertions
+  (`…Z` suffix, `closed_at: null` emitted) unweakened.
+- The re-entry mechanics held: the **unchecked box was the only re-entry signal**;
+  `architect` triaged to the smallest re-entry point (behaviour tweak, not a redesign); the
+  owning agent checked the box `[x]` only after on-branch resolution + re-review. Zero blast
+  radius because 0003/0004 are not built yet.
+
+Be aware:
+
+- 0002 remains **branch-owned** on `feature/0002-contract-crate`; the chrono delta advanced the
+  branch copy of the item (status, re-review/re-verify verdicts, Summary) — `main`'s snapshot
+  stays frozen at the claim until the human's merge. 0003 (server) is still `ready` and
+  unblocked once 0002 merges; 0004 (TUI) follows 0003.
+- No new crate dev agent — `contract-owner` still owns `crates/contract`.
+
+Docs updated (all on `main` — shared/cross-cutting, home #1): `docs/handoff.md` (this entry);
+`.claude/skills/rust-standards/SKILL.md` (the pure-DTO test-layout rule, `8b56ed2`);
+`board/README.md` regenerated (home #3, derived). The 0002 item's `## Summary` was updated for
+the chrono change **on the branch** (home #2).
+
+---
+
 ## Handoff — 2026-06-11 (0002 — contract crate + workspace restructure)
 
 Branch: `feature/0002-contract-crate` (head `638eef1`, last code `56833a6`, linear atop `main`
@@ -125,8 +177,9 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
 - **The `contract` crate exists** (0002, in-flight and branch-owned on
   `feature/0002-contract-crate`, awaiting human merge): a compile-only, pure-DTO seam carrying
   the foundational wire shapes (auth/profile/task DTOs, `ErrorBody`, error codes, the redacting
-  `Password` newtype) per ADR-0005. The workspace now matches the target layout (placeholder
-  crate removed). No HTTP/DB/TUI behaviour yet.
+  `Password` newtype) per ADR-0005. Timestamps are typed as `chrono::DateTime<Utc>` (malformed
+  dates rejected; wire bytes unchanged — RFC 3339 `…Z`) after human feedback. The workspace now
+  matches the target layout (placeholder crate removed). No HTTP/DB/TUI behaviour yet.
 - **No running application yet.** 0003 (server: auth + default profile + tasks + migrations +
   docker stack) is `ready` and unblocked; 0004 (TUI) follows it. Together 0002–0004 complete
   the foundational vertical slice 0001.
