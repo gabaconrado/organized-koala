@@ -257,6 +257,40 @@ needed).
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
 
+**What 0003 delivered.** `organized-koalad` now serves the full [ADR-0005][adr-0005] HTTP API
+against Postgres: register/login (argon2id + JWT HS256), the atomically-created named default
+profile, profile-scoped task add/list/close, and the `{ code?, message }` error contract with
+the exact ADR-0005 code set. It ships the [ADR-0004][adr-0004] admin CLI (`run` default no-arg
+and never schema-mutating, idempotent `migrate`, bounded `rollback`), reversible paired
+`*.up.sql`/`*.down.sql` migrations for `users`/`profiles`/`tasks` (embedded via
+`sqlx::migrate!`, `.sqlx/` offline cache committed), `tracing` spans + INFO mutation events with
+OTLP export (gated on `OK_OTLP_ENDPOINT`, log-only when absent), and the `deploy/` docker stack
+(multi-stage Dockerfile + compose: Postgres → one-shot `migrate` → `run` → OTel collector) wired
+through `ok.sh` (`up`/`down`, dev-only `migrate`/`rollback`, `run-server`, a tmpfs-Postgres
+`test`). Profile isolation is enforced by ownership-joined queries → unowned/nonexistent profile
+is **404 `not_found`** (never 403, no existence leak); close is idempotent. The committed stack
+carries no credential literal (gitignored `deploy/.env`, DEV-ONLY placeholders).
+
+**Acceptance criteria:** all met. CLI + migrations + endpoints + auth + error contract +
+tracing/OTLP wiring + `deploy/` stack + `ok.sh` wiring all delivered; `./ok.sh test|lint|
+fmt --check` green (28 integration tests over the public HTTP surface).
+
+**Verdicts.** Reviewer: **approved** at last code sha `f67a883` (mechanical gate green, no
+contract drift, hard constraints #2–#5 held, secrets redacted; two non-blocking nits). Verifier:
+**verified-with-gaps** at `f67a883` — docker unavailable in the sandbox, so used the sanctioned
+binary + live-Postgres fallback (real HTTP round-trips, nothing faked): 28/28 tests green, full
+API with exact codes/bodies, two-user profile isolation → 404, idempotent re-close, the
+migrate-before-serve seam proven, secrets absent from logs.
+
+**Two open gaps — environmental (docker-only), not code defects:** (1) `./ok.sh up` full compose
+stack and its `service_completed_successfully` migrate→run gating not booted; (2) OTLP span
+export to the OTel collector not observed (log-only degraded mode). Both were proven only by the
+binary fallback.
+
+**Merge-time note for the human:** boot `./ok.sh up` once on a docker host to close the two gaps
+above — confirm the migrate one-shot gates the `run` service and that spans reach the collector.
+After merging, **0004 (TUI) is unblocked** as the final slice of the 0001 foundational umbrella.
+
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
 [feat-0001]: ./0001-foundational-slice.md
