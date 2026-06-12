@@ -35,6 +35,10 @@ Idiomatic Rust layout (see [Rust by Example — Testing](https://doc.rust-lang.o
 - **Integration tests** live in the crate's top-level `tests/` directory, exercising the
   crate's **public API**; mock only external services. "Hard to test" ⇒ bubble up to
   architecture review (do not bend source).
+- For a crate whose entire public surface *is* its API — a pure-DTO crate like `contract`,
+  with no private/internal logic — the crate-root `tests/` public-API suite plus doctests is
+  the correct and complete layout; `module/tests.rs` unit tests apply only where there is
+  private/internal logic to cover (learned 0002).
 - In **test code**, `unwrap`/`expect`/`panic` are acceptable. If the clippy `*_used` /
   `panic` denies fire there, a crate-root `#![cfg_attr(test, allow(clippy::unwrap_used,
   clippy::expect_used, clippy::panic))]` is the sanctioned, documented exception.
