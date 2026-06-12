@@ -1,0 +1,70 @@
+[package]
+name = "server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
+
+[[bin]]
+name = "organized-koalad"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+contract = { path = "../contract" }
+
+# HTTP + async runtime.
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+
+# Database (offline-mode query cache committed under .sqlx/).
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "macros",
+    "uuid",
+    "chrono",
+    "migrate",
+] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+
+# Auth: argon2 password hashing + JWT sessions.
+argon2 = "0.5"
+password-hash = { version = "0.5", features = ["std"] }
+jsonwebtoken = "9"
+
+# CLI (ADR-0004: run / migrate / rollback).
+clap = { version = "4", features = ["derive", "env"] }
+
+# Serialization for wire bodies + claims.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Secrets: never leaked through Debug/log/span.
+secrecy = "0.10"
+
+# Errors: anyhow at the binary top, thiserror for the typed boundary error.
+anyhow = "1"
+thiserror = "2"
+
+# Observability.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+# tracing-opentelemetry 0.31 tracks the opentelemetry 0.30 line; the three must stay aligned.
+tracing-opentelemetry = "0.31"
+opentelemetry = "0.30"
+opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.30", features = ["grpc-tonic"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
