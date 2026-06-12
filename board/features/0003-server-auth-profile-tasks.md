@@ -1,14 +1,14 @@
 ---
 id: 0003
 title: Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001)
-status: ready        # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working      # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: [0002]
-branch: null         # feature/0003-server-auth-profile-tasks once a worktree is cut
-worktree: null       # .claude/worktrees/0003-server-auth-profile-tasks
+branch: feature/0003-server-auth-profile-tasks
+worktree: .claude/worktrees/0003-server-auth-profile-tasks
 created: 2026-06-11
-updated: 2026-06-11
+updated: 2026-06-12
 ---
 
 ## Feature request
@@ -124,9 +124,10 @@ needed).
   gate:** do not start until [0002][feat-0002] is `awaiting-merge`/`merged`;
   if 0002 is unmerged, cut the worktree stacked on 0002's branch (linear history,
   fast-forward rebase per git-standards).
-- 2026-06-12 [drive] **claimed → branch `feature/0003-server-auth-profile-tasks`.** This
-  `main` copy is frozen at the claim snapshot; the branch copy is authoritative until the
-  human's merge brings it back. (status here stays `ready`; live status is on the branch.)
+- 2026-06-12 [drive] claimed: 0002 is `merged`, so worktree cut from `main` (affa85d) which
+  carries ADR-0004/0005 + the merged `contract` crate. Branch
+  `feature/0003-server-auth-profile-tasks`; session `drive-0003-20260612`. Status
+  `ready` → `working`. Branch copy is now authoritative.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
