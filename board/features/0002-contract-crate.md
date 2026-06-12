@@ -118,8 +118,14 @@ fixed — deviations re-enter via `architect`).
   reviewer/verifier read-only and report verdicts the orchestrator commits on-branch). Handoff
   entry written; dashboards regenerated; `contract-owner` already owns `crates/contract` (no new
   agent). Summary filled; status `review` → `awaiting-merge`. Definition of done holds.
-- [ ] 2026-06-12 [human] **suggestion**: Can we use chrono::Datetime directly in the contract
+- [x] 2026-06-12 [human] **suggestion**: Can we use chrono::Datetime directly in the contract
   types so applications don't need to care about date formats?
+  - 2026-06-12 [contract-owner] Done on-branch and re-reviewed (approved `98d1a85`). Timestamps
+    are now `chrono::DateTime<Utc>` (`Task.created_at`/`closed_at`, `Profile.created_at`);
+    consumers get a typed timestamp instead of an opaque string, and malformed dates now fail to
+    parse. Wire bytes are unchanged (RFC 3339 `…Z`, `closed_at: null` still emitted), so it sits
+    inside ADR-0005's frozen wire format — no ADR. `chrono` added pure-DTO (`default-features =
+    false, features = ["std","serde"]`, no clock/IO).
 - [x] 2026-06-12 [human] **thought**: Tests in the contracts crate are in the integrated tests
   directory (crate-root/tests) instead of along with the modules (crate-root/module/tests.rs).
   This seems to go against the testing directives
@@ -144,6 +150,15 @@ fixed — deviations re-enter via `architect`).
   rejected; offset-bearing input normalized to UTC). Gate green from worktree root: 41
   integration + 12 doctests pass, lint clean (`--all-targets`), fmt clean. Commits: `bc61626`
   contract, `98d1a85` tests. status `working` → `review`.
+- 2026-06-12 [reviewer] cold re-review of the chrono delta (`56833a6..98d1a85`). Gate green from
+  worktree root: build clean; 41 integration + 12 doctests pass; lint clean (`--all-targets`, only
+  sanctioned test-cfg allow); fmt clean. Wire-format invariance HOLDS — exact-byte assertions
+  (`…Z` suffix, `closed_at: null` emitted, no `skip_serializing_if`/`rename` on timestamps) not
+  weakened; doctest confirms chrono emits `Z` not `+00:00`. No ADR needed — ADR-0005 delegates
+  Rust representation to `contract-owner`; wire format unchanged. Crate stays pure-DTO — chrono
+  `["std","serde"]` only, transitive deps `num-traits` + `serde`, no `iana-time-zone`/clock/IO.
+  Hardening tests non-vacuous. Confirmed `dbcd85d` is board-only (no code follows `98d1a85`). No
+  fix-now findings. REVIEW-STATUS: approved 98d1a85
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
