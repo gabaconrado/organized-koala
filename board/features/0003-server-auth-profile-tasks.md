@@ -361,6 +361,16 @@ collector was observed live (31 spans in the `debug` exporter, not the prior log
 the branch is clean to merge. After merging, **0004 (TUI) is unblocked** as the final slice of the
 0001 foundational umbrella.
 
+- [ ] 2026-06-12 [human] **suggestion:** add the health-check endpoint to the compose server
+  service as a probe health-check
+- [ ] 2026-06-12 [human] **question:** I don't see any unit test. Why? Is it worth to setup
+  code coverage DoD and check in the workflow?
+- [ ] 2026-06-12 [human] **nitpick:** I see some custom `Debug` implementations for types that
+  are already using `SecretString` internally and don't need the custom. Not really a problem
+  but it is unnecessary
+- [ ] 2026-06-12 [human] **question:** Are we reaching the database in every request to check
+  authentication? If we are, this is a DoS vector and we should have a plan to fix it
+
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
 [feat-0001]: ./0001-foundational-slice.md
