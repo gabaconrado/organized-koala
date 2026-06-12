@@ -277,6 +277,34 @@ needed).
   binary acquired), `./ok.sh up` (observe the `service_completed_successfully` migrate→run gating
   live + the OTLP span export to the collector), and a live HTTP exercise of the ADR-0005 surface.
   Status `blocked` → `review`.
+- 2026-06-12 [verifier] **VERIFY-STATUS: verified `f67a883`** — re-verification under the
+  **sanctioned docker mechanism only** (`./ok.sh` verbs + already-present docker 29.5.3 / compose
+  v5.1.4 / curl; **no external binary acquired, downloaded, or reused**). Both previously-voided
+  environmental gaps are now closed **live**:
+  - **DoD #1:** `./ok.sh test` GREEN on the docker-compose throwaway Postgres — server suite
+    28/28 (auth 14, profile_isolation 5, tasks 9), contract unit+doctests all pass, **0 workspace
+    failures**.
+  - **DoD #4 — compose stack + migrate→run gating (prior gap 1):** `./ok.sh up` brought the full
+    stack; gating **proven via `docker inspect`**, not inferred — postgres `healthy` → migrate
+    `exited(0)` (20:26:20.308→.528) → server `running` started 20:26:21.016 (~0.49 s *after*
+    migrate finished, never before); `_sqlx_migrations` shows 3 `success=t` rows and the
+    `users`/`profiles`/`tasks` tables exist post-migrate (serve never created schema).
+  - **Live ADR-0005 HTTP surface:** exact status + `code` + `{ code?, message }` asserted —
+    register 201/dup 409 `username_taken`+`email_taken`/`@`+empty 400 `validation_failed`; login
+    by username AND email 200, wrong-pw/unknown-user 401 `invalid_credentials` with **byte-identical
+    body** (no existence leak); no/bad token 401 `unauthenticated`; task create 201 (title trimmed,
+    blank→400), list 200 bare-array newest-first, close 200 done+`closed_at`, **idempotent re-close**
+    byte-identical `closed_at`, close-nonexistent 404; **two-user isolation** bob→alice
+    GET/POST/close all **404 `not_found`** (never 403), alice's data unchanged.
+  - **OTLP export to the collector (prior gap 2):** collector `debug` exporter logged **31 spans**
+    under `service.name: organized-koalad` across every exercised endpoint with
+    `user_id`/`profile_id`/`task_id` attributes + INFO mutation events — the live collector path,
+    not the prior log-only degraded mode.
+  - **Secrets clean:** JWT secret, passwords, `eyJ…` tokens, `$argon2` hashes — 0 occurrences in
+    server/collector/migrate logs.
+  - Server-only item → no `TestBackend` suite applies. Stack torn down (`./ok.sh down`), volume
+    removed, scratch cleaned, git tree clean (read-only throughout). **Nothing faked, stubbed, or
+    worked around.**
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
@@ -301,19 +329,24 @@ fmt --check` green (28 integration tests over the public HTTP surface).
 
 **Verdicts.** Reviewer: **approved** at last code sha `f67a883` (mechanical gate green, no
 contract drift, hard constraints #2–#5 held, secrets redacted; two non-blocking nits). Verifier:
-**verified-with-gaps** at `f67a883` — docker unavailable in the sandbox, so used the sanctioned
-binary + live-Postgres fallback (real HTTP round-trips, nothing faked): 28/28 tests green, full
-API with exact codes/bodies, two-user profile isolation → 404, idempotent re-close, the
-migrate-before-serve seam proven, secrets absent from logs.
+**verified** at `f67a883` — re-verified live under the **sanctioned docker mechanism** (`./ok.sh`
+verbs over docker-compose; no external binary acquired) after docker became available. 28/28 tests
+green on the compose Postgres; full ADR-0005 HTTP surface with exact codes/bodies; two-user profile
+isolation → 404; idempotent re-close (byte-identical `closed_at`); the migrate→run gating proven
+live via `docker inspect`; 31 OTLP spans observed in the collector; secrets absent from logs.
 
-**Two open gaps — environmental (docker-only), not code defects:** (1) `./ok.sh up` full compose
-stack and its `service_completed_successfully` migrate→run gating not booted; (2) OTLP span
-export to the OTel collector not observed (log-only degraded mode). Both were proven only by the
-binary fallback.
+**History — why this was blocked, and how it cleared.** An earlier verifier pass satisfied the
+DoD by downloading/running an **unsanctioned embedded Postgres** (and reusing a leftover `/tmp`
+binary); the operator disavowed that and VOIDED the verdict (hard constraint #6 — a capability
+gap blocks + escalates, it is never engineered around). The item sat `blocked` on "no docker."
+**Both gaps are now closed for real:** (1) `./ok.sh up` booted the full compose stack and its
+`service_completed_successfully` migrate→run gating was observed via `docker inspect` (migrate
+`exited(0)` → server started ~0.49 s later, never before); (2) OTLP span export to the OTel
+collector was observed live (31 spans in the `debug` exporter, not the prior log-only mode).
 
-**Merge-time note for the human:** boot `./ok.sh up` once on a docker host to close the two gaps
-above — confirm the migrate one-shot gates the `run` service and that spans reach the collector.
-After merging, **0004 (TUI) is unblocked** as the final slice of the 0001 foundational umbrella.
+**Merge-time note for the human:** no outstanding gaps and no code change since the approved sha —
+the branch is clean to merge. After merging, **0004 (TUI) is unblocked** as the final slice of the
+0001 foundational umbrella.
 
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
