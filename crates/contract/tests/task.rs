@@ -4,12 +4,24 @@
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+use chrono::{DateTime, Utc};
 use contract::{CreateTaskRequest, Task, TaskStatus};
 use serde_json::{Value, json};
 
 const TASK_ID: &str = "5f9a2c1e-0b3d-4e6f-8a1b-2c3d4e5f6a7b";
 const CREATED_AT: &str = "2026-06-11T12:00:00Z";
 const CLOSED_AT: &str = "2026-06-11T13:30:00Z";
+
+/// Parse the canonical `created_at` const into a typed timestamp for struct construction.
+/// (`DateTime` has no `const` parse, so the typed values live in `let` bindings.)
+fn created_at() -> DateTime<Utc> {
+    CREATED_AT.parse().unwrap()
+}
+
+/// Parse the canonical `closed_at` const into a typed timestamp for struct construction.
+fn closed_at() -> DateTime<Utc> {
+    CLOSED_AT.parse().unwrap()
+}
 
 // --- TaskStatus: lowercase enum strings. ---
 
@@ -63,7 +75,7 @@ fn open_task_serializes_with_closed_at_present_as_null() {
         title: "Write the contract crate".to_owned(),
         description: "ADR-0005 DTOs".to_owned(),
         status: TaskStatus::Open,
-        created_at: CREATED_AT.to_owned(),
+        created_at: created_at(),
         closed_at: None,
     };
     let json = serde_json::to_value(&task).unwrap();
@@ -92,8 +104,8 @@ fn done_task_serializes_with_closed_at_string() {
         title: "Write the contract crate".to_owned(),
         description: String::new(),
         status: TaskStatus::Done,
-        created_at: CREATED_AT.to_owned(),
-        closed_at: Some(CLOSED_AT.to_owned()),
+        created_at: created_at(),
+        closed_at: Some(closed_at()),
     };
     let json = serde_json::to_value(&task).unwrap();
     let object = json.as_object().unwrap();
@@ -142,8 +154,8 @@ fn done_task_round_trips_losslessly() {
         title: "Write the contract crate".to_owned(),
         description: "ADR-0005 DTOs".to_owned(),
         status: TaskStatus::Done,
-        created_at: CREATED_AT.to_owned(),
-        closed_at: Some(CLOSED_AT.to_owned()),
+        created_at: created_at(),
+        closed_at: Some(closed_at()),
     };
     let wire = serde_json::to_string(&task).unwrap();
     let back: Task = serde_json::from_str(&wire).unwrap();
@@ -157,7 +169,7 @@ fn open_task_round_trips_losslessly() {
         title: "Write the contract crate".to_owned(),
         description: "ADR-0005 DTOs".to_owned(),
         status: TaskStatus::Open,
-        created_at: CREATED_AT.to_owned(),
+        created_at: created_at(),
         closed_at: None,
     };
     let wire = serde_json::to_string(&task).unwrap();
@@ -193,7 +205,63 @@ fn task_list_deserializes_as_a_bare_array() {
     assert_eq!(newer.title, "newer");
     assert_eq!(newer.status, TaskStatus::Open);
     assert_eq!(older.status, TaskStatus::Done);
-    assert_eq!(older.closed_at.as_deref(), Some(CLOSED_AT));
+    assert_eq!(older.closed_at, Some(closed_at()));
+}
+
+// --- Typed-timestamp parsing: the `DateTime<Utc>` field validates on the wire. ---
+
+#[test]
+fn task_rejects_a_malformed_created_at() {
+    // The typed `created_at` rejects a non-RFC-3339 string at deserialize time — behaviour the
+    // old `String` field could not give us.
+    let wire = json!({
+        "id": TASK_ID,
+        "title": "t",
+        "description": "d",
+        "status": "open",
+        "created_at": "not-a-date",
+        "closed_at": null,
+    });
+    assert!(serde_json::from_value::<Task>(wire).is_err());
+}
+
+#[test]
+fn task_rejects_a_malformed_closed_at() {
+    // A present-but-malformed `closed_at` is also rejected (it is `Option<DateTime<Utc>>`, so a
+    // non-null value must still parse).
+    let wire = json!({
+        "id": TASK_ID,
+        "title": "t",
+        "description": "d",
+        "status": "done",
+        "created_at": CREATED_AT,
+        "closed_at": "13:30 yesterday",
+    });
+    assert!(serde_json::from_value::<Task>(wire).is_err());
+}
+
+#[test]
+fn task_normalizes_an_offset_bearing_created_at_to_utc() {
+    // An RFC 3339 input carrying a non-Z offset is accepted and normalized to UTC, so it
+    // re-serializes with the canonical `Z` suffix. `11:00:00+01:00` is `10:00:00Z`.
+    let wire = json!({
+        "id": TASK_ID,
+        "title": "t",
+        "description": "d",
+        "status": "open",
+        "created_at": "2026-06-11T11:00:00+01:00",
+        "closed_at": null,
+    });
+    let task: Task = serde_json::from_value(wire).unwrap();
+    assert_eq!(
+        task.created_at,
+        "2026-06-11T10:00:00Z".parse::<DateTime<Utc>>().unwrap()
+    );
+    let reserialized = serde_json::to_value(&task).unwrap();
+    assert_eq!(
+        reserialized.get("created_at").unwrap(),
+        "2026-06-11T10:00:00Z"
+    );
 }
 
 // --- CreateTaskRequest: minimal create body. ---
