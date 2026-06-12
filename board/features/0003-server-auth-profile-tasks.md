@@ -466,6 +466,14 @@ umbrella.
   `validation_failed`, 404 `not_found` on a foreign profile). OTLP span export re-confirmed live.
   Behaviour-neutral `Debug` derive not separately exercised; expired-token test owned by the tester
   suite (green at `4c679bd`). No TUI code touched. Stack torn down clean; DoD clause 4 satisfied.
+- 2026-06-12 [drive] clean rebase onto `main` (picked up the eng-manager learnings commit that
+  landed on `main` this cycle, home #1) to restore fast-forward mergeability. Conflict-free — the
+  branch and that `main` commit touch disjoint paths, so the code is byte-identical and only shas
+  changed. Re-map of the feedback-re-entry code shas: `353026f` → `a853c84` (Debug derive),
+  `7833b15` → `0831c0e` (healthcheck), and the approved/verified last code sha **`4c679bd` →
+  `05c7ac9`**. The reviewer-approved and verifier-verified verdicts above still attest this tree;
+  every commit after `05c7ac9` is Board-only (no re-review owed). Branch is clean to fast-forward
+  merge onto `main`.
 
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
