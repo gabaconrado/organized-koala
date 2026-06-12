@@ -168,6 +168,16 @@ fixed — deviations re-enter via `architect`).
   `created_at`/`closed_at` rejected; `+01:00` input normalized to `10:00:00Z` on the wire. `./ok.sh
   build` clean (contract rlib). Wire format unchanged vs the prior `String` representation per the
   round-trip suite. Worktree clean, no scratch files.
+- 2026-06-12 [drive] rebased the branch onto `main` head `db01298` (the cycle's shared edits —
+  `rust-standards`, handoff, dashboard — landed on `main` per home #1, leaving the branch behind).
+  Rebase was **clean and content-identical** — `git range-diff` shows every commit `=` and the
+  three dropped commits (`d0966d6`, `8b56ed2`, `0193638`) are the ones now absorbed as the new
+  base. The `crates/contract` diff between old `98d1a85` and rebased `e93ed4f` is empty, so the
+  reviewer/verifier verdicts above carry over unchanged. **Post-rebase code-sha mapping** (the
+  verdict shas above name pre-rebase commits): `7ca3e25`→`3501468` (feat), `56833a6`→`ce4e3cf`
+  (round-trip tests), `bc61626`→`693dbac` (chrono), `98d1a85`→`e93ed4f` (chrono tests). **Last
+  code sha is now `e93ed4f`** (reviewer-approved-equivalent); only board-only commits follow it.
+  The branch is now a clean fast-forward onto `main` (head `0718a89` pre-note).
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
