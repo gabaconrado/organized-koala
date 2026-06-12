@@ -1,7 +1,7 @@
 ---
 id: 0003
 title: Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001)
-status: awaiting-merge #  inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: blocked      # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: [0002]
@@ -253,6 +253,21 @@ needed).
   migrate→run gating not booted; (2) OTLP span export to the OTel collector not observed (ran
   log-only degraded mode). Both are the exact sub-items flagged as likely gaps; semantics proven
   via the binary fallback. No TUI code touched → no `TestBackend` suite applies (server-only item).
+- 2026-06-12 [drive] **status `awaiting-merge` → `blocked` (human direction).** The DoD-required
+  verification was achieved by downloading/running an **unsanctioned embedded Postgres** (the
+  tester/verifier "bootstrap a throwaway local Postgres" path I authorized in their dispatches;
+  the verifier also reused a leftover `/tmp/pgextract` binary). The operator has disavowed that
+  approach: agents must never download/install/run external binaries without approval, and a
+  missing capability needed for the DoD must **block + escalate**, not be engineered around.
+  The reviewer's **approved `f67a883`** stands (code is sound, mechanical gate read clean), but
+  the **verifier verdict above is VOID for sign-off** — it is retained only as audit trail.
+  **Blocker:** the dev/test/verify environment has **no docker** (and no sanctioned live DB), so
+  DoD #1 (`./ok.sh test` against a real DB) and #4 (`./ok.sh up` compose `service_completed_
+  successfully` gating + OTLP export to the collector) cannot be satisfied through the intended
+  paths. **Re-entry (human is setting up docker):** once docker is available, re-run, under the
+  sanctioned mechanism only — `./ok.sh test` (compose-provided throwaway Postgres), `./ok.sh up`
+  (observe the migrate→run gating live), and OTLP span export to the collector — then return the
+  item to `awaiting-merge`. No code change is expected; this is a verification re-do.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
