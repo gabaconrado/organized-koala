@@ -233,6 +233,26 @@ needed).
   branch. Two non-blocking nits: (1) `common/mod.rs:39` `app_with_ttl` unused for its expired-
   token purpose (jsonwebtoken 60s `exp` leeway — deferred to verifier); (2) `cmd_run_server`
   forwards `run "$@"` though `run` takes no args (harmless). No blocking findings.
+- 2026-06-12 [verifier] **VERIFY-STATUS: verified-with-gaps `f67a883`.** Docker unavailable in
+  the sandbox, so used the sanctioned binary + live-Postgres fallback (real HTTP round-trips
+  against a live server over a live DB; nothing faked/stubbed). **Verified live:** `./ok.sh test`
+  GREEN (auth 14/14, profile_isolation 5/5, tasks 9/9; 0 workspace failures); CLI `run`/`migrate`
+  (idempotent)/`rollback` per ADR-0004; **migrate-before-serve seam proven** (fresh unmigrated DB:
+  `/healthz`→200 but `register`→500 `internal` since serve never creates schema; after
+  `organized-koalad migrate`, same running server served `register`→201 — no restart); auto-migrate
+  hatch warns + migrates, default-off confirmed; full ADR-0005 HTTP surface with exact status
+  codes + `{ code?, message }` bodies (register 201/dup 409 `username_taken`/`email_taken`/`@`+empty
+  400 `validation_failed`; login by username AND email 200, wrong-pw/unknown-user 401
+  `invalid_credentials` with identical body = no existence leak; no/bad token 401 `unauthenticated`;
+  task create 201 trimmed-title/blank 400, list bare-array newest-first, close 200 done+`closed_at`,
+  **idempotent re-close** byte-identical `closed_at`, close-nonexistent 404); **profile isolation
+  across two users** — bob vs alice GET/POST/close → **404 `not_found`** (never 403, alice's data
+  unchanged = no effect); tracing spans + INFO mutation events observed live; **secrets clean**
+  (JWT secret, passwords, tokens absent from logs). **Gaps (environmental, docker-only — not code
+  defects):** (1) `./ok.sh up` full compose stack + its `service_completed_successfully`
+  migrate→run gating not booted; (2) OTLP span export to the OTel collector not observed (ran
+  log-only degraded mode). Both are the exact sub-items flagged as likely gaps; semantics proven
+  via the binary fallback. No TUI code touched → no `TestBackend` suite applies (server-only item).
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
