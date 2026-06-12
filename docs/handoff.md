@@ -5,6 +5,73 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-12 (0003 feedback re-entry — four human items resolved, re-verified, `awaiting-merge`)
+
+**Feedback re-entry, not a fresh feature.** 0003 was at `awaiting-merge` (verified `f67a883`)
+when the operator authored four `[human]` items in its Log. `architect` triaged them; the cycle
+ran forward (triage → fixes → review → verify) and the item is back at `awaiting-merge` on its
+branch. The four resolutions:
+
+- **#1 (suggestion) — compose server healthcheck.** `7833b15` (platform-dev): a `healthcheck:`
+  on the compose `server` service hitting pure-liveness `GET /healthz` on the in-container port
+  8080, plus `curl` added to the slim runtime image. The verifier observed the container reach
+  Docker `healthy` for real (probe ExitCode 0 in-container).
+- **#2 (question) — no unit tests / coverage DoD.** Answered + a real gap closed. Zero server
+  unit tests is policy-consistent (the public API is HTTP; coding-standards favours public-API
+  coverage — 28 such tests exist). But `4c679bd` (tester) closed a **genuine** gap:
+  expired-token→401 was untested at *every* layer, while a prior slice-5 Log entry had falsely
+  claimed "source-owned jwt unit tests" that never existed. Closed at the HTTP layer by
+  hand-signing an hour-past-`exp` token (outside jsonwebtoken's 60 s leeway) → 401
+  `unauthenticated`, with a fresh-token control. **The coverage-DoD-in-CI part is a separate
+  `main`-side decision the operator SANCTIONED:** add `cargo-llvm-cov` behind a new `./ok.sh
+  coverage` verb for a **REPORTED** coverage metric with **NO hard threshold** — to be planned as
+  a new Board item (see follow-up below). Not created here (that is `architect` planning).
+- **#3 (nitpick) — redundant custom `Debug`.** `353026f` (server-dev): dropped the hand-written
+  `Debug` on `Jwt`/`JwtConfig` for `#[derive(Debug)]` (`SecretString` already redacts);
+  load-bearing custom impls (`Password`/`AppState`/`TelemetryGuard`) left intact.
+- **#4 (question, DoS) — DB hit on every authenticated request?** Clarified, no change. Auth is
+  stateless JWT verification with **zero** DB queries (`session.rs:37` → `jwt.rs:63-68`, no
+  session table; the user id is the token `sub` claim). The premise did not hold; the only DB
+  work on an authed request is the business query itself.
+
+**Verdicts (feedback delta `fca5f53..HEAD`).** reviewer **`REVIEW-STATUS: approved 4c679bd`**;
+verifier **`VERIFY-STATUS: verified 4c679bd`** — re-verified live via the sanctioned `./ok.sh
+up`/`down` (Docker 29.5.3 / Compose v5.1.4): the `server` container went `starting` → `healthy`
+(curl present in the slim image), migrate one-shot exited 0 before server start, regression
+spot-check of register/login/task CRUD + error contract green, OTLP export re-confirmed.
+
+**Follow-up the next cycle picks up — operator-sanctioned coverage verb.** A new Board item is
+to be planned on `main` (`architect`): an `./ok.sh coverage` verb wrapping `cargo-llvm-cov` that
+**reports** a coverage metric with **no hard threshold** (not a DoD gate). `cargo-llvm-cov` is
+operator-sanctioned for this; `platform-dev` owns the verb, `eng-manager` documents it. This is
+deliberately **not** created here — recorded so it is not lost.
+
+**Learnings captured (each to the smallest right home):**
+
+- **git-standards** — the co-author footer identity is owned by `git-standards`, **never copied
+  from a dispatch prompt**. `353026f` committed with `<noreply@anthropic.com>` because the
+  orchestrator's dispatch prompt hardcoded that trailer; the `<agent>@organized-koala.local` form
+  is the only authority.
+- **docs-standards** — two notes: (a) never let a wrapped Board prose line begin with `#` or a
+  list-like token — `rumdl fmt`'s auto-fix splits the paragraph with an inserted blank line
+  (MD032); reword (e.g. "constraints 1–6"); never blindly accept `rumdl fmt` on prose. (b) A
+  successful commit does **not** prove markdown is lint-clean — `.githooks/pre-commit` is a
+  secret-scan only; markdown linting is the PostToolUse `.claude/lint.sh` hook and does not gate
+  commits, so run `rumdl check --config .claude/rumdl.toml <file>` explicitly.
+- **coding-standards** + **reviewer agent** — a "covered by …" claim must name a test that
+  actually exists. The slice-5 phantom-test claim let an untested `exp` path reach
+  `awaiting-merge`; the reviewer now spot-checks that cited coverage is real (a phantom claim is
+  changes-requested).
+
+**Homes.** Cross-cutting edits on `main` (homes #1/#3): this `docs/handoff.md` entry (+ the
+"What works right now" snapshot refreshed), the four standards/agent edits above, and the
+regenerated `board/README.md`. **Feature-local on the branch (home #2):** the item's `## Summary`
+and the four `[x]`-checked feedback items live on `feature/0003-server-auth-profile-tasks` and
+return to `main` atomically at the human's merge. `main`'s frozen copy of the item is left
+untouched at the claim snapshot.
+
+---
+
 ## Handoff — 2026-06-12 (0003 re-verified under the sanctioned mechanism — block cleared, `awaiting-merge`)
 
 **The capability-gap block on 0003 is cleared.** Docker was provisioned by the operator (Engine
@@ -401,13 +468,16 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   full ADR-0005 HTTP API against Postgres — argon2 + JWT auth, the atomically-created default
   profile, profile-scoped add/list/close tasks, the `{ code?, message }` error contract, the
   ADR-0004 `run`/`migrate`/`rollback` CLI, reversible migrations, `tracing`/OTLP instrumentation,
-  and the `deploy/` docker stack. Reviewer **approved `f67a883`** (cold code review); after the
-  operator provisioned docker the verifier returned **`verified f67a883`** under the sanctioned
-  mechanism only — `./ok.sh test` 28/28 green, `./ok.sh up` full stack with the migrate→run
-  `service_completed_successfully` gating proven via `docker inspect`, the full ADR-0005 surface
-  with exact codes/bodies, two-user profile isolation → 404, idempotent re-close, and 31 OTLP
-  spans observed live in the collector. **0003 is `awaiting-merge` on its branch** (zero code
-  change at re-entry; `main`'s snapshot stays frozen until the human's merge). No TUI yet.
+  and the `deploy/` docker stack (now with a compose `server` healthcheck on `/healthz`). After a
+  four-item human-feedback re-entry (healthcheck added; a real expired-token→401 coverage gap
+  closed; redundant `Debug` impls dropped; a DoS question clarified as a non-issue — auth is
+  stateless JWT with zero DB queries), reviewer **approved `4c679bd`** and verifier returned
+  **`verified 4c679bd`** under the sanctioned docker mechanism (`./ok.sh up` healthy server
+  container, migrate→run gating, regression + OTLP re-confirmed). **0003 is `awaiting-merge` on
+  its branch**; `main`'s snapshot stays frozen until the human's merge. No TUI yet.
 - **0004 (TUI: register/login + default profile + task add/list/close) is the last foundational
   slice** — `ready`, blocked behind 0003, and **unblocked the moment the human merges 0003**.
   Together 0002–0004 complete the vertical slice 0001.
+- **Pending plan (operator-sanctioned, not yet a Board item):** a reported-only coverage verb —
+  `./ok.sh coverage` over `cargo-llvm-cov`, **no hard threshold**, not a DoD gate. `architect` to
+  plan it as a new `main`-side item; `platform-dev` owns the verb.

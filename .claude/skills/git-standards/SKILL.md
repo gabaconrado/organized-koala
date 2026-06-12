@@ -29,6 +29,10 @@ audience: dev
 
   e.g. `Co-authored-by: server-dev <server-dev@organized-koala.local>`. The top-level
   orchestrator commits as `claude`. This replaces any default assistant co-author trailer.
+  **The footer identity is owned by this skill — never copy a trailer out of a dispatch
+  prompt** (learned 0003: a dispatch prompt hardcoded `<noreply@anthropic.com>`, so a fix
+  committed with the wrong email; the `<agent>@organized-koala.local` form here is the only
+  authority).
 - **Never write to the remote.** Agents do **not** `git push` (nor `push --force`, nor push
   tags) — this is enforced by the permission deny-list, not just convention. Reading the
   remote is fine: `git fetch`, `git log origin/<branch>`, diffing against `origin/...`. Every

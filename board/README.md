@@ -30,11 +30,14 @@ for an in-flight item the authoritative live status is on its branch.
 
 > **Dependency chain (slice 0001):** `0002` (contract) → `0003` (server) → `0004` (TUI). `0001`
 > is the umbrella tracking the three. `0002` is **merged**. `0003` (server) is **`awaiting-merge`
-> on its branch** (`feature/0003-server-auth-profile-tasks`): the reviewer **approved `f67a883`**,
-> and after the operator provisioned docker the verifier returned **`verified f67a883`** under the
-> sanctioned mechanism only (`./ok.sh test` 28/28, `./ok.sh up` with the migrate→run gating proven
-> via `docker inspect`, the full ADR-0005 surface, two-user isolation → 404, and OTLP spans
-> observed live). The capability-gap block is cleared with **zero code change** at re-entry
-> (board-only commits follow `f67a883`, so the approval is preserved). `main`'s snapshot stays
-> frozen at the claim until the human's merge. `0004` (TUI) is `ready` but **blocked behind 0003**
-> (depends-on 0003) and becomes claimable once 0003 merges.
+> on its branch** (`feature/0003-server-auth-profile-tasks`). After a four-item human-feedback
+> re-entry (compose `server` healthcheck added; a real expired-token→401 coverage gap closed;
+> redundant `Debug` impls dropped; a DoS question clarified — auth is stateless JWT with zero DB
+> queries), the reviewer **approved `4c679bd`** and the verifier returned **`verified 4c679bd`**
+> under the sanctioned docker mechanism (`./ok.sh up` healthy `server` container, migrate→run
+> gating intact, regression + OTLP re-confirmed). `main`'s snapshot stays frozen at the claim
+> until the human's merge. `0004` (TUI) is `ready` but **blocked behind 0003** (depends-on 0003)
+> and becomes claimable once 0003 merges.
+>
+> **Sanctioned follow-up (not yet a Board item):** a reported-only `./ok.sh coverage` verb over
+> `cargo-llvm-cov` (no hard threshold, not a DoD gate) — `architect` to plan it as a new item.

@@ -35,6 +35,11 @@ audience: dev
   mock internal collaborators.
 - **If it's hard to test, that's an architecture smell** — bubble up to `architect`; do not
   bend production code to make a test pass.
+- **A claim that a behaviour is "covered" must name a test that actually exists** (learned 0003).
+  A slice-5 Log entry asserted expired-token→401 was "covered by source-owned jwt unit tests"
+  that were never written, so an unenforced `exp` path reached `awaiting-merge` and only human
+  review caught it. Any Log/Summary line citing specific coverage must point at a real, passing
+  test; do not describe coverage you intend to add, only coverage that is present and green.
 
 ### Comments
 

@@ -40,6 +40,18 @@ edit.
   line-leading `+`/`*`/`-` as a list marker (`rumdl`/markdownlint MD004), so a continuation line
   of a Board Log bullet that wraps onto a leading `+` (e.g. a commit-count "37 + 12") trips the
   unordered-list-style rule. Reflow so the operator/symbol is not the first character of a line.
+- **Do not start a wrapped prose line with `#` or a list-like token** (learned 0003). A
+  continuation line inside a Board list item that wraps onto a leading `#` (e.g. "constraints
+  #1–#6" breaking so a line begins `#1`) is misparsed by `rumdl` as a block boundary → MD032,
+  and `rumdl fmt`'s auto-fix "resolves" it by **inserting a blank line that splits the prose
+  paragraph** — corrupting it. Leading `(1)`-style tokens are similarly risky. Reword (e.g.
+  "constraints 1–6") so no wrapped line begins with `#` or a list marker. **Never blindly accept
+  `rumdl fmt` output on prose** — re-read the diff.
+- **A successful commit does NOT prove markdown is lint-clean** (learned 0003). `.githooks/pre-commit`
+  is a **secret-scan only**; markdown linting (`rumdl`, line-length 100) is the PostToolUse
+  `.claude/lint.sh` hook, which does **not** gate `git commit`. So a long line can commit cleanly.
+  After editing any Markdown, run `rumdl check --config .claude/rumdl.toml <file>` explicitly
+  before considering it done.
 
 ## Extending this skill
 

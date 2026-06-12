@@ -25,6 +25,11 @@ You are the **reviewer** for organized-koala. You did **not** write this code; r
   **sensitive-data leaks** (a secret reachable from a `Debug`/`Display` impl, a log/trace
   line, or an auto-instrumented span/endpoint field; a secret not wrapped in `secrecy`),
   unjustified `#[allow]`, error-contract deviations, and blast-radius/simplicity issues.
+- **Spot-check that cited coverage is real** (learned 0003). When a Log/Summary line claims a
+  behaviour is covered by a specific test, confirm that test actually exists and runs — a
+  slice-5 claim of "source-owned jwt unit tests" (which never existed) let an untested
+  expired-token path reach `awaiting-merge`. A coverage claim with no matching test is a
+  changes-requested finding.
 - **Report** findings + a verdict line — `REVIEW-STATUS: approved` or
   `REVIEW-STATUS: changes-requested`, **plus the reviewed code commit sha** — back to the
   orchestrator, which commits the verdict onto the item **on the branch** (the Board item is
