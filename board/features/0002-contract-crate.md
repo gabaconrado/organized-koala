@@ -159,6 +159,15 @@ fixed — deviations re-enter via `architect`).
   `["std","serde"]` only, transitive deps `num-traits` + `serde`, no `iana-time-zone`/clock/IO.
   Hardening tests non-vacuous. Confirmed `dbcd85d` is board-only (no code follows `98d1a85`). No
   fix-now findings. REVIEW-STATUS: approved 98d1a85
+- 2026-06-12 [verifier] VERIFIED the chrono delta at head `5ed575b` (last code `98d1a85`). Pure-DTO
+  seam, no stack to boot — live-stack E2E correctly deferred to 0003/0004 per ADR-0003. No hidden
+  runtime surface: chrono `["std","serde"]` only, transitive deps `chrono`+`num-traits`+`serde`,
+  greps for `iana-time-zone`/`tokio`/`reqwest`/`libc`/clock found none. `./ok.sh test` green and
+  non-vacuous: 9 auth + 12 error + 4 profile + 16 task = 41 integration + 12 doctests = 53 passed.
+  Spot-checked: `…Z` suffix + `closed_at: null` emitted asserted on real JSON bytes; malformed
+  `created_at`/`closed_at` rejected; `+01:00` input normalized to `10:00:00Z` on the wire. `./ok.sh
+  build` clean (contract rlib). Wire format unchanged vs the prior `String` representation per the
+  round-trip suite. Worktree clean, no scratch files.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
