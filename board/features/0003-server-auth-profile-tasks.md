@@ -420,6 +420,17 @@ the branch is clean to merge. After merging, **0004 (TUI) is unblocked** as the 
   whose own `Debug` already renders `[REDACTED]`, so the derive still redacts — verified the inner
   secret is printed nowhere. Left the genuinely load-bearing custom impls untouched (`Password`,
   `AppState`, `TelemetryGuard`). `fmt --check`/`lint`/`test` all clean/green.
+- 2026-06-12 [reviewer] **REVIEW-STATUS: approved `4c679bd`** (cold re-review of the feedback
+  re-entry diff `fca5f53..HEAD`). Mechanical gate green: `fmt --check`/`lint`/`test` all exit 0,
+  the two new auth tests (`expired_token_is_401`, `freshly_minted_token_is_accepted`) ran and
+  passed. Per-commit: `353026f` derive `Debug` still redacts (`SecretString`); `7833b15`
+  healthcheck targets the real in-container port 8080 on pure-liveness `/healthz`, Dockerfile
+  hygiene intact, migrate ordering preserved; `4c679bd` test hand-signs an hour-past `exp` beyond
+  the 60s leeway, dev-deps test-only, `Cargo.lock` unchanged. No contract drift; hard
+  constraints 1–6 intact. Two non-blocking nits handed to `eng-manager`: first, `353026f`'s
+  co-author trailer used `noreply@anthropic.com` not the git-standards `@organized-koala.local`
+  form; second, Board MD013 >100-char lines (4/119/296) to reflow — the pre-commit hook is
+  secret-scan only, so the markdown linter (`.claude/lint.sh` PostToolUse) does not gate commits.
 
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
