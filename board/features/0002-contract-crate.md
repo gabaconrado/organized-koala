@@ -118,6 +118,11 @@ fixed — deviations re-enter via `architect`).
   reviewer/verifier read-only and report verdicts the orchestrator commits on-branch). Handoff
   entry written; dashboards regenerated; `contract-owner` already owns `crates/contract` (no new
   agent). Summary filled; status `review` → `awaiting-merge`. Definition of done holds.
+- [ ] 2026-06-12 [human] **suggestion**: Can we use chrono::Datetime directly in the contract
+  types so applications don't need to care about date formats?
+- [ ] 2026-06-12 [human] **thought**: Tests in the contracts crate are in the integrated tests
+  directory (crate-root/tests) instead of along with the modules (crate-root/module/tests.rs).
+  This seems to go against the testing directives
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
