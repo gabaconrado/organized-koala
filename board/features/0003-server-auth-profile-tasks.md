@@ -1,7 +1,7 @@
 ---
 id: 0003
 title: Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001)
-status: blocked      # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review       # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: [0002]
@@ -268,6 +268,15 @@ needed).
   sanctioned mechanism only — `./ok.sh test` (compose-provided throwaway Postgres), `./ok.sh up`
   (observe the migrate→run gating live), and OTLP span export to the collector — then return the
   item to `awaiting-merge`. No code change is expected; this is a verification re-do.
+- 2026-06-12 [drive] **re-entry: docker is now available** (Engine 29.5.3, Compose v5.1.4 on
+  PATH; `docker version` server reachable). The capability gap that forced the block is
+  resolved, so the item leaves `blocked` and re-enters at the **verify** phase — no code change,
+  the reviewer's **approved `f67a883`** still stands and no code commit follows it. The voided
+  prior verifier verdict is **not** reused. Dispatching `verifier` to redo DoD #1 + #4 under the
+  **sanctioned mechanism only** — `./ok.sh test` (docker-compose throwaway Postgres, no external
+  binary acquired), `./ok.sh up` (observe the `service_completed_successfully` migrate→run gating
+  live + the OTLP span export to the collector), and a live HTTP exercise of the ADR-0005 surface.
+  Status `blocked` → `review`.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
