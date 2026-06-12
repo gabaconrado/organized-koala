@@ -193,10 +193,26 @@ DB code — a pure-DTO seam that 0003 (server) and 0004 (TUI) build against.
   lowercase enums, `closed_at` nullable-and-emitted (not omitted), `code` omitted when `None`,
   bare task arrays.
 
-**Validation:** 37 serde/wire-format integration tests + 12 doctests, all green; `./ok.sh`
+**Human-feedback follow-up (timestamps typed):** after this item first reached
+`awaiting-merge`, human feedback asked the contract to carry chrono dates directly so consumers
+need not parse strings. Timestamps (`Task.created_at`/`closed_at`, `Profile.created_at`) are now
+`chrono::DateTime<Utc>` rather than opaque strings — consumers get a typed value and malformed
+dates now **fail to parse**. The **wire bytes are unchanged** (RFC 3339 `…Z`, `closed_at: null`
+still emitted), so this stays inside ADR-0005's frozen wire format — no wire change, no ADR
+(ADR-0005 delegates the Rust representation to `contract-owner`). `chrono` is added pure-DTO
+(`default-features = false, features = ["std","serde"]` — no clock/IO surface). Both `[human]`
+feedback items are resolved: the chrono change was implemented, re-reviewed (approved `98d1a85`)
+and re-verified; the second item — questioning the crate-root `tests/` layout — was a
+clarification (no code change): a pure-DTO crate whose whole surface is public is correctly and
+completely covered by the public-API `tests/` suite plus doctests, captured as a durable
+`rust-standards` rule.
+
+**Validation:** serde/wire-format integration tests + 12 doctests, all green; `./ok.sh`
 build/lint/fmt clean (deny-warnings, `missing-docs` enforced). Reviewer approved at code head
-`56833a6`; verifier confirmed the pure-DTO seam with no hidden runtime surface — live-stack E2E
-correctly deferred to 0003/0004 per [ADR-0003][adr-0003].
+`56833a6` (initial cycle); after the chrono follow-up the suite grew to 41 integration + 12
+doctests = 53, re-reviewed (approved `98d1a85`) and re-verified. Verifier confirmed the pure-DTO
+seam with no hidden runtime surface — live-stack E2E correctly deferred to 0003/0004 per
+[ADR-0003][adr-0003].
 
 **For the human merging:** the branch `feature/0002-contract-crate` (head `832a0c9`, last code
 `56833a6`) is linear atop `main` and is a fast-forward. `main` already carries everything this
