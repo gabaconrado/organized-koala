@@ -1,7 +1,7 @@
 ---
 id: 0002
 title: Contract crate + workspace restructure (slice 1 of 0001)
-status: working   # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review   # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: []
@@ -120,15 +120,30 @@ fixed — deviations re-enter via `architect`).
   agent). Summary filled; status `review` → `awaiting-merge`. Definition of done holds.
 - [ ] 2026-06-12 [human] **suggestion**: Can we use chrono::Datetime directly in the contract
   types so applications don't need to care about date formats?
-- [ ] 2026-06-12 [human] **thought**: Tests in the contracts crate are in the integrated tests
+- [x] 2026-06-12 [human] **thought**: Tests in the contracts crate are in the integrated tests
   directory (crate-root/tests) instead of along with the modules (crate-root/module/tests.rs).
   This seems to go against the testing directives
+  - 2026-06-12 [drive] Resolved (clarification, no code change). `rust-standards` defines two
+    layers: unit tests in `module/tests.rs` for *internal/private* logic, and integration tests
+    in the crate-root `tests/` exercising the *public API*. The `contract` crate is pure-DTO —
+    its entire surface is public and the suite locks the serde wire format as an external
+    consumer sees it, so `tests/` + doctests is the correct, complete layout (and what the plan's
+    slice 3 specified). There is no private logic for `module/tests.rs` to cover. `eng-manager`
+    adds a clarifying line to the `rust-standards` skill on `main` so this is a durable rule.
 - 2026-06-12 [drive] feedback sweep re-entry. `architect` triaged both items: (1) chrono ⇒
   behaviour tweak, no ADR (Rust-representation change inside ADR-0005's frozen wire format,
   delegated to `contract-owner`); (2) test layout ⇒ no conflict, the public-API `tests/` suite
   plus doctests is the correct layout for a pure-DTO crate (clarification, and a `rust-standards`
   note on `main`). Status `awaiting-merge` → `working` to implement (1) on-branch before merge
   (zero blast radius — 0003/0004 not yet built). Re-review + re-verify to follow.
+- 2026-06-12 [drive] re-build complete. `contract-owner` typed the timestamps as
+  `chrono::DateTime<Utc>` (`Task.created_at`/`closed_at`, `Profile.created_at`), adding `chrono`
+  with `default-features = false, features = ["std","serde"]` (no clock/IO surface) — wire bytes
+  unchanged (RFC 3339 `…Z`, `closed_at: null` still emitted), verified. `tester` adapted the
+  integration suite and added contract-hardening cases (malformed `created_at`/`closed_at`
+  rejected; offset-bearing input normalized to UTC). Gate green from worktree root: 41
+  integration + 12 doctests pass, lint clean (`--all-targets`), fmt clean. Commits: `bc61626`
+  contract, `98d1a85` tests. status `working` → `review`.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
