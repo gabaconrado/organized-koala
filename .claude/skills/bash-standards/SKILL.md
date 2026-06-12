@@ -18,6 +18,12 @@ audience: dev
 - Resolve the script's own directory rather than assuming a CWD:
   `ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"`.
 - Keep operational complexity inside `ok.sh` verbs; call sites invoke verbs, not raw tools.
+- **Never download/install/run an external binary without the operator's approval** (CLAUDE.md
+  hard constraint #6). `ok.sh` and any script must not fetch+run a tool to satisfy a step: a
+  missing tool (docker, a live DB, any required binary) **fails loudly and escalates** — it does
+  not silently acquire and run something. Detect the missing capability, print a precise message,
+  and exit non-zero; do not `curl … | sh`, do not pull an embedded/throwaway DB image, do not
+  reuse a leftover binary.
 - `readonly` for constants; lowercase for locals, UPPER_CASE for exported/global config.
 
 ```bash

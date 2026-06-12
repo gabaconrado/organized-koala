@@ -5,7 +5,54 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-12 (policy correction — no unsanctioned binaries; 0003 reverted to `blocked`)
+
+**Operator policy correction, encoded on `main`.** Supersedes the docker-fallback framing in the
+0003 entry below. Two linked, load-bearing rules now binding on every agent in every phase
+(CLAUDE.md hard constraint **#6** + tightened "Ambiguity policy"):
+
+1. **No agent downloads, installs, or runs an external binary without the operator's explicit
+   approval** — including anything written into a dispatch prompt.
+2. **A missing capability the Definition of Done needs (docker, a live DB, any required tool)
+   sets the item to `blocked` with a precise question and STOPS for human intervention — it is
+   never engineered around.** `verified-with-gaps` is for genuinely-minor *inferred* sub-items,
+   never for "couldn't run it because a required tool was missing."
+
+**Origin.** In the 0003 cycle docker was absent in the sandbox. The orchestrator authorized the
+tester/verifier to "bootstrap a throwaway local Postgres"; they downloaded/ran an embedded
+Postgres 16.2 and the verifier reused a leftover `/tmp/pgextract` binary. The operator has
+**disavowed** this. The "binary + live-Postgres fallback" verification of 0003 is therefore
+**void for sign-off**.
+
+**Status change.** 0003 was moved **`awaiting-merge` → `blocked`** (on its branch — the
+orchestrator committed the block + Log entry there; `main`'s snapshot stays frozen at the claim).
+It is **not** heading to merge.
+
+**Re-entry plan.** Operator sets up docker → 0003 is re-verified under the **sanctioned mechanism
+only** (`./ok.sh up` / the real compose stack, no improvised DB, no downloaded binary) → back to
+`awaiting-merge`. The reviewer's **`REVIEW-STATUS: approved f67a883` stands** (cold code review is
+unaffected by the runtime gap); only the **verifier verdict is void** until the sanctioned live
+pass is done.
+
+**Docs corrected on `main`:** CLAUDE.md (hard constraint #6 + tightened Ambiguity policy);
+`.claude/agents/verifier.md` (the 3ac2a46 "sanctioned binary/live-Postgres fallback + merge-time
+ask" language **removed** and replaced with report-not-verified + block-and-escalate);
+`.claude/agents/tester.md`, `server-dev.md`, `platform-dev.md` (each now carries the
+no-unsanctioned-binaries / block-on-missing-capability rule); `bash-standards` (scripts fail loud
+and escalate, never fetch+run); `board/README.md` regenerated (0003 → `blocked`). **Kept intact**
+(correct learnings from 3ac2a46): the lib+bin rule in `rust-standards`/`new-crate`, and the
+net-new-infra carve-out in CLAUDE.md "The Board" home #1.
+
+---
+
 ## Handoff — 2026-06-12 (0003 — server: auth + default profile + tasks + migrations + docker stack)
+
+> **SUPERSEDED in part by the policy-correction entry above (2026-06-12).** The "docker
+> unavailable → sanctioned binary + live-Postgres fallback → verified-with-gaps → human boots
+> `./ok.sh up` at merge" framing in this entry is **disavowed**. 0003 is **`blocked`**, not
+> heading to merge; its verifier verdict is **void for sign-off** pending a sanctioned live pass
+> on a docker host. The reviewer's `approved f67a883` stands. Read the entry below as the cycle's
+> historical record, not as current policy or status.
 
 Branch: `feature/0003-server-auth-profile-tasks` (last code sha `f67a883`). Slice 2 of 3 of the
 foundational slice 0001 — the server side of the tracer bullet, verifiable live over HTTP before
@@ -285,15 +332,16 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   the foundational wire shapes (auth/profile/task DTOs, `ErrorBody`, error codes, the redacting
   `Password` newtype) per ADR-0005, with `chrono::DateTime<Utc>` timestamps (wire bytes
   unchanged — RFC 3339 `…Z`). The workspace matches the target layout (placeholder crate gone).
-- **The server exists and runs** (0003, branch-owned on `feature/0003-server-auth-profile-tasks`,
-  awaiting human merge): `organized-koalad` serves the full ADR-0005 HTTP API against Postgres —
-  argon2 + JWT auth, the atomically-created default profile, profile-scoped add/list/close tasks,
-  the `{ code?, message }` error contract, the ADR-0004 `run`/`migrate`/`rollback` CLI, reversible
-  migrations, `tracing`/OTLP instrumentation, and the `deploy/` docker stack (`./ok.sh up`).
-  Verified live (binary + live-Postgres fallback): 28/28 integration tests green, full API with
-  exact codes, profile isolation → 404, idempotent re-close, migrate-before-serve seam, secrets
-  absent from logs. **Two docker-only sub-items await the human's `./ok.sh up` at merge:** the
-  compose `service_completed_successfully` gating and OTLP export to the OTel collector. No TUI
-  yet.
+- **The server is written and code-reviewed but `blocked` on verification** (0003, branch-owned
+  on `feature/0003-server-auth-profile-tasks`): `organized-koalad` implements the full ADR-0005
+  HTTP API against Postgres — argon2 + JWT auth, the atomically-created default profile,
+  profile-scoped add/list/close tasks, the `{ code?, message }` error contract, the ADR-0004
+  `run`/`migrate`/`rollback` CLI, reversible migrations, `tracing`/OTLP instrumentation, and the
+  `deploy/` docker stack. Reviewer **approved `f67a883`** (cold code review). **0003 is `blocked`,
+  not awaiting-merge:** docker is unavailable in the sandbox, the prior "binary + live-Postgres
+  fallback" verification is **disavowed** (hard constraint #6), and the verifier verdict is **void
+  for sign-off**. Re-entry: operator sets up docker → re-verify under the sanctioned mechanism
+  (real `./ok.sh up`) → `awaiting-merge`. No TUI yet.
 - **0004 (TUI: register/login + default profile + task add/list/close) is the last foundational
-  slice** — unblocked once 0003 merges. Together 0002–0004 complete the vertical slice 0001.
+  slice** — `ready` but blocked behind 0003, unblocked once 0003 merges. Together 0002–0004
+  complete the vertical slice 0001.

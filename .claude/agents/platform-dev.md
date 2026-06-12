@@ -38,5 +38,9 @@ You are the **platform-dev** for organized-koala.
 - Bash follows `bash-standards`: always `"${VAR}"`, `set -euo pipefail`, verbs in `ok.sh`.
 - Never put secrets in compose files or the repo — use env files that are gitignored.
 - When you add an `ok.sh` verb, document it in `ok.sh --help` and in CLAUDE.md "How to run".
+- **No unsanctioned binaries; a missing capability blocks (CLAUDE.md hard constraint #6).**
+  Neither `ok.sh` nor any script may download, install, or run an external binary without the
+  operator's explicit approval — a missing tool (docker, a live DB) fails loudly and escalates
+  to `blocked`; it does not silently fetch+run something to keep going.
 
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md

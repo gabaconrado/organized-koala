@@ -40,5 +40,8 @@ You are the **server-dev** for organized-koala.
   This compile-time query cache is **distinct** from the `migrations/` schema tree — never
   conflate them (ADR-0004).
 - If the server (not the TUI) must own the Pomodoro timer, follow the timer-authority ADR.
+- **No unsanctioned binaries; a missing capability blocks (CLAUDE.md hard constraint #6).** If
+  a sanctioned live DB or any required tool is unavailable, bubble up and set the item to
+  `blocked` — never download, install, or run an external binary to work around the gap.
 
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md

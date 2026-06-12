@@ -33,5 +33,9 @@ You are the **tester** for organized-koala.
 - You may add test-only helpers, but only in test files.
 - Tests must pass under `./ok.sh test` with sqlx offline mode.
 - Follow `rust-standards` for error handling and file layout in test code.
+- **No unsanctioned binaries; a missing capability blocks (CLAUDE.md hard constraint #6).** If
+  a sanctioned live DB or any tool the suite needs is unavailable, bubble up and set the item
+  to `blocked` — never download, install, or run an external binary (e.g. an embedded/throwaway
+  Postgres) to make a test runnable.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
