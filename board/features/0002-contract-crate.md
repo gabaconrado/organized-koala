@@ -1,7 +1,7 @@
 ---
 id: 0002
 title: Contract crate + workspace restructure (slice 1 of 0001)
-status: review   # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge   # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: []
