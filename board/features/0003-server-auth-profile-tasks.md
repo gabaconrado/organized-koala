@@ -176,6 +176,31 @@ needed).
   DEV-ONLY placeholders — the committed stack carries no credential literal (secret-scan
   clean). `build`/`lint`/`fmt --check`/`secret-scan` green; shellcheck clean. Docker is
   unavailable in this sandbox, so the stack is WIRING-ONLY pending the verifier's live boot.
+- 2026-06-12 [tester] slice 5: integration suite for the public HTTP surface under
+  `crates/server/tests/` — `auth.rs` (14), `tasks.rs` (9), `profile_isolation.rs` (5), shared
+  `common/mod.rs`. Drives the real `axum` router in-process via `tower::ServiceExt::oneshot`
+  over a per-test DB from `#[sqlx::test]` (the DB is the one real external service). Covers:
+  register→201 + default profile; login by username AND email; `username_taken`/`email_taken`
+  (409), `invalid_credentials` (401, wrong-password + unknown-user), `unauthenticated` (401,
+  missing/malformed/foreign-signature token), register validation (`@`-ban, empty
+  username/email/password, invalid email) → `validation_failed` (400); profile isolation
+  (user B GET/POST/close on user A's profile → **404 `not_found`**, never a leak, and the
+  write/close has no effect); tasks add (201 shape, trimmed title, blank-title→400), list
+  (profile-scoped, newest-first, empty), close (done + `closed_at`), idempotent re-close
+  (preserves original `closed_at`), close-nonexistent→404; `GET /healthz`→200; every error
+  asserts the exact ADR-0005 `code`, not just status. **All 28 ran GREEN** against a live
+  throwaway Postgres 16.2; `lint`/`fmt --check` clean on the test code.
+  **BLOCKER (source gap — escalated, not fixed by tester):** the `server` crate is
+  binary-only (no `[lib]` target), so `crates/server/tests/` cannot link `app::router` /
+  `AppState` / `config::JwtConfig`. The dev-deps `tower` + `http-body-util` were added for
+  exactly this in-process testing but the library target to support it is missing, so
+  `./ok.sh test` will not compile the suite until server-dev adds it. Minimal fix (server-dev):
+  add a `[lib] name = "server"` target + a thin `src/lib.rs` re-exporting
+  `app::{router, AppState}` and `config::JwtConfig`, with `main.rs` consuming the lib. The
+  suite was verified green against a temporary local lib target that was then reverted; source
+  is left pristine. Expired-token→401 is intentionally not asserted via HTTP (no past-`exp`
+  token is constructible through the public `Jwt::issue`; it lands inside jsonwebtoken's 60 s
+  `exp` leeway) — covered by source-owned jwt unit tests and the verifier's live pass.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
