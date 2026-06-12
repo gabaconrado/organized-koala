@@ -5,6 +5,70 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-12 (0003 re-verified under the sanctioned mechanism — block cleared, `awaiting-merge`)
+
+**The capability-gap block on 0003 is cleared.** Docker was provisioned by the operator (Engine
+29.5.3, Compose v5.1.4), and 0003 was re-verified **under the sanctioned mechanism only** — the
+real docker-compose stack via `./ok.sh`, **no external binary acquired, no improvised DB**. This
+closes the loop opened by the policy-correction entry below: a `blocked` capability gap is
+recoverable.
+
+**Re-entry mechanics.** drive re-entered 0003 at the **verify** phase — there was **zero code
+change** (last code sha is still `f67a883`; only Board-only commits follow it), so the reviewer's
+**`REVIEW-STATUS: approved f67a883` was preserved** (a board-only commit does not invalidate the
+approval; the orchestrator confirmed no code commit follows the approved sha). No re-review was
+needed; only the previously-void verifier verdict had to be re-earned live.
+
+**Verifier verdict: `VERIFY-STATUS: verified f67a883`** (on the branch), closing both prior
+environmental gaps live under docker:
+
+- `./ok.sh test` — **28/28 green** on the compose Postgres.
+- `./ok.sh up` full stack — the ADR-0004 migrate→run `service_completed_successfully` gating
+  **proven via `docker inspect`**: the one-shot `migrate` `exited(0)`, and the `run` service
+  started ~0.49 s later — never before. (Prior gap-1, the un-booted compose gating, is closed.)
+- Full ADR-0005 HTTP surface live with exact codes/bodies; two-user profile isolation → 404
+  `not_found`; idempotent re-close (byte-identical `closed_at`).
+- **OTLP export observed live** — 31 spans landed in the collector `debug` exporter. (Prior
+  gap-2, log-only degraded mode, is closed.)
+- Secrets clean in logs/Board; clean teardown (`./ok.sh down`); read-only throughout.
+
+drive then flipped the branch item **`blocked` → `review` → `awaiting-merge`**. 0003 is now at
+the AI-terminal state, awaiting the human merge.
+
+**The validated process learning — the recovery loop works end-to-end.** The
+**block → escalate → human provisions the capability → re-verify under the sanctioned mechanism**
+loop ran to completion and is now demonstrated, not just asserted. The takeaways worth keeping:
+
+- **A `blocked` item is recoverable with zero code churn.** Because the block was purely
+  environmental (a missing capability, not a code defect), provisioning docker was sufficient;
+  nothing in `crates/server` or `deploy/` changed. The hard-constraint-#6 discipline (block +
+  escalate, never engineer around) cost **no** rework — it deferred the *runtime confirmation*,
+  not the *code*.
+- **Re-entry was at verify, and reviewer approval at the last code sha survived.** The three-home
+  Board model held: the cycle's intervening status changes were board-only commits on the branch,
+  so `approved f67a883` still names the last code sha. The orchestrator's "no code commit follows
+  the approved sha" check is what makes a verify-only re-entry safe — re-review is unnecessary.
+- The existing **verifier agent instructions needed no edit** — it already encodes the
+  block-and-escalate-on-missing-capability rule and the sanctioned-mechanism-only constraint
+  (added in the policy-correction cycle). This re-entry *exercised* those instructions exactly as
+  written; no refinement was manufactured.
+
+**Sequencing — merge of 0003 unblocks 0004.** 0004 (TUI, the third and final slice of the 0001
+umbrella) depends-on 0003 and becomes claimable once the human merges
+`feature/0003-server-auth-profile-tasks`. No new crate dev agent — `server-dev` already owns
+`crates/server`.
+
+Docs updated (all on `main` — derived/cross-cutting, homes #1/#3): `docs/handoff.md` (this entry,
+plus the "What works right now" snapshot refreshed); `board/README.md` regenerated (home #3,
+derived).
+**`main`'s frozen copy of `board/features/0003-*.md` is left untouched** at the claim snapshot
+(`ready` + pointer) — the branch copy carries the live `awaiting-merge` status and verdicts and
+returns to `main` atomically with the code at the human's merge (home #2). No `CLAUDE.md` or
+agent/skill edit — the #6 policy and verifier discipline are already in place and were validated,
+not changed.
+
+---
+
 ## Handoff — 2026-06-12 (policy correction — no unsanctioned binaries; 0003 reverted to `blocked`)
 
 **Operator policy correction, encoded on `main`.** Supersedes the docker-fallback framing in the
@@ -332,16 +396,18 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   the foundational wire shapes (auth/profile/task DTOs, `ErrorBody`, error codes, the redacting
   `Password` newtype) per ADR-0005, with `chrono::DateTime<Utc>` timestamps (wire bytes
   unchanged — RFC 3339 `…Z`). The workspace matches the target layout (placeholder crate gone).
-- **The server is written and code-reviewed but `blocked` on verification** (0003, branch-owned
-  on `feature/0003-server-auth-profile-tasks`): `organized-koalad` implements the full ADR-0005
-  HTTP API against Postgres — argon2 + JWT auth, the atomically-created default profile,
-  profile-scoped add/list/close tasks, the `{ code?, message }` error contract, the ADR-0004
-  `run`/`migrate`/`rollback` CLI, reversible migrations, `tracing`/OTLP instrumentation, and the
-  `deploy/` docker stack. Reviewer **approved `f67a883`** (cold code review). **0003 is `blocked`,
-  not awaiting-merge:** docker is unavailable in the sandbox, the prior "binary + live-Postgres
-  fallback" verification is **disavowed** (hard constraint #6), and the verifier verdict is **void
-  for sign-off**. Re-entry: operator sets up docker → re-verify under the sanctioned mechanism
-  (real `./ok.sh up`) → `awaiting-merge`. No TUI yet.
+- **The server is written, code-reviewed, live-verified, and `awaiting-merge`** (0003,
+  branch-owned on `feature/0003-server-auth-profile-tasks`): `organized-koalad` implements the
+  full ADR-0005 HTTP API against Postgres — argon2 + JWT auth, the atomically-created default
+  profile, profile-scoped add/list/close tasks, the `{ code?, message }` error contract, the
+  ADR-0004 `run`/`migrate`/`rollback` CLI, reversible migrations, `tracing`/OTLP instrumentation,
+  and the `deploy/` docker stack. Reviewer **approved `f67a883`** (cold code review); after the
+  operator provisioned docker the verifier returned **`verified f67a883`** under the sanctioned
+  mechanism only — `./ok.sh test` 28/28 green, `./ok.sh up` full stack with the migrate→run
+  `service_completed_successfully` gating proven via `docker inspect`, the full ADR-0005 surface
+  with exact codes/bodies, two-user profile isolation → 404, idempotent re-close, and 31 OTLP
+  spans observed live in the collector. **0003 is `awaiting-merge` on its branch** (zero code
+  change at re-entry; `main`'s snapshot stays frozen until the human's merge). No TUI yet.
 - **0004 (TUI: register/login + default profile + task add/list/close) is the last foundational
-  slice** — `ready` but blocked behind 0003, unblocked once 0003 merges. Together 0002–0004
-  complete the vertical slice 0001.
+  slice** — `ready`, blocked behind 0003, and **unblocked the moment the human merges 0003**.
+  Together 0002–0004 complete the vertical slice 0001.
