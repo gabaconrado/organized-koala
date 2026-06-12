@@ -67,6 +67,15 @@ services:
       OK_LOG: ${OK_LOG:-info}
     ports:
       - "${OK_HTTP_PORT:-8080}:8080"
+    # Liveness probe: GET /healthz (unauthenticated, no DB) on the in-container bind port
+    # (OK_BIND_ADDR above is 0.0.0.0:8080). start_period covers boot; the migrate one-shot
+    # has already completed before this service starts, so only server boot is in scope.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       migrate:
         condition: service_completed_successfully

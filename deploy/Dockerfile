@@ -24,9 +24,10 @@ RUN cargo build --release --bin organized-koalad
 # --- runtime stage -----------------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 
-# ca-certificates for outbound TLS (e.g. OTLP); libgcc/libssl are pulled in by the base.
+# ca-certificates for outbound TLS (e.g. OTLP); curl for the compose liveness healthcheck
+# (GET /healthz). libgcc/libssl are pulled in by the base.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Run as an unprivileged user.

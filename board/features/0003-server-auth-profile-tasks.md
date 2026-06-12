@@ -318,6 +318,18 @@ needed).
   `f67a883`) now name **`fca5f53`** — the identical-tree post-rebase commit. No code commit follows
   it (all subsequent commits are board-only), so the approval/verification remain valid at head and
   no re-review is required. Pre-rebase tip preserved at ref `backup/0003-pre-rebase` (`ffc0d7a`).
+- 2026-06-12 [platform-dev] human-feedback #1 (server healthcheck): added a `healthcheck:` block
+  to the compose `server` service hitting the pure liveness endpoint
+  `GET /healthz` (unauthenticated, no DB touch) on the **in-container** bind port **8080**
+  (`OK_BIND_ADDR: 0.0.0.0:8080`; the host-side `OK_HTTP_PORT` only maps the published port and is
+  not the in-container port). Probe: `["CMD","curl","-fsS","http://localhost:8080/healthz"]`,
+  `interval 10s`, `timeout 3s`, `retries 5`, `start_period 10s` to cover server boot (the migrate
+  one-shot has already `service_completed_successfully` before `server` starts, so only boot is in
+  scope). The runtime image had no curl/wget (`debian:bookworm-slim` + `ca-certificates` only), so
+  added `curl` to the runtime `apt-get install` line — same `--no-install-recommends` + apt-cache
+  cleanup pattern, no other bloat. Config-only edit (no `./ok.sh up`/pull/build run);
+  `fmt --check` + `lint` green (neither touches docker). **Verifier must observe the `server`
+  container reach `healthy` under `./ok.sh up`.**
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
