@@ -385,6 +385,12 @@ the branch is clean to merge. After merging, **0004 (TUI) is unblocked** as the 
   (needs sanctioned `cargo-llvm-cov` + a `CLAUDE.md` DoD change); #3 redundant `Debug` →
   `server-dev` derives on `Jwt`+`JwtConfig`; #4 DoS question → clarified above (no change). No ADR
   required by any item.
+- 2026-06-12 [server-dev] nitpick #3 resolved: dropped the redundant hand-written `Debug` impls
+  on `Jwt` (`crates/server/src/auth/jwt.rs`) and `JwtConfig` (`crates/server/src/config.rs`) in
+  favour of `#[derive(Debug)]`. Both hold their secret as `secrecy::SecretString` (`SecretBox`),
+  whose own `Debug` already renders `[REDACTED]`, so the derive still redacts — verified the inner
+  secret is printed nowhere. Left the genuinely load-bearing custom impls untouched (`Password`,
+  `AppState`, `TelemetryGuard`). `fmt --check`/`lint`/`test` all clean/green.
 
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md

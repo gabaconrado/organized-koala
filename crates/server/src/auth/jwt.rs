@@ -23,18 +23,10 @@ struct Claims {
 }
 
 /// Issues and verifies HS256 session tokens. Holds the signing secret redacted.
+#[derive(Debug)]
 pub struct Jwt {
     secret: SecretString,
     ttl: Duration,
-}
-
-impl std::fmt::Debug for Jwt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Jwt")
-            .field("secret", &"[REDACTED]")
-            .field("ttl", &self.ttl)
-            .finish()
-    }
 }
 
 impl Jwt {

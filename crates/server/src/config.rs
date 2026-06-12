@@ -12,20 +12,12 @@ const DEFAULT_JWT_TTL_SECONDS: u64 = 86_400;
 const DEFAULT_BIND_ADDR: &str = "0.0.0.0:8080";
 
 /// JWT signing configuration. `secret` is redacted in any `Debug`/log output.
+#[derive(Debug)]
 pub struct JwtConfig {
     /// HS256 signing secret.
     pub secret: SecretString,
     /// Token time-to-live.
     pub ttl: Duration,
-}
-
-impl std::fmt::Debug for JwtConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("JwtConfig")
-            .field("secret", &"[REDACTED]")
-            .field("ttl", &self.ttl)
-            .finish()
-    }
 }
 
 /// Resolved configuration for `organized-koalad run`.
