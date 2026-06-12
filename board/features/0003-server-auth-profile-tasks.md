@@ -305,6 +305,19 @@ needed).
   - Server-only item → no `TestBackend` suite applies. Stack torn down (`./ok.sh down`), volume
     removed, scratch cleaned, git tree clean (read-only throughout). **Nothing faked, stubbed, or
     worked around.**
+- 2026-06-12 [drive] **rebased onto `main` (clean, fast-forward, linear history)** to sync the
+  branch with `main` before the human reviews. Picked up `main`'s shared/cross-cutting state the
+  branch was missing — `CLAUDE.md` #6 (no-unsanctioned-binaries policy), the updated
+  agent/skill defs (`verifier`/`server-dev`/`tester`/`platform-dev`, `bash-standards`/
+  `new-crate`/`rust-standards`), the regenerated `board/README.md`, and `docs/handoff.md`. The
+  only file both sides touched was this item; `main`'s frozen-snapshot pointer note is `main`-only
+  and was correctly dropped from the branch (home #2: the branch copy is authoritative). **No code
+  changed:** the `crates/`/`deploy/`/`ok.sh`/`.sqlx/` paths are byte-identical pre/post rebase
+  (`crates/` subtree hash `0bcfd6fa…` unchanged), so the build/lint/fmt/test/verify results stand.
+  **Approved-sha re-map:** the reviewer's `approved`/verifier's `verified` (recorded above against
+  `f67a883`) now name **`fca5f53`** — the identical-tree post-rebase commit. No code commit follows
+  it (all subsequent commits are board-only), so the approval/verification remain valid at head and
+  no re-review is required. Pre-rebase tip preserved at ref `backup/0003-pre-rebase` (`ffc0d7a`).
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
