@@ -25,19 +25,17 @@ for an in-flight item the authoritative live status is on its branch.
 | --- | --- | --- | --- | --- | --- |
 | [0001](./features/0001-foundational-slice.md) | Foundational vertical slice (auth + profile + minimal TODO) | planned | high | umbrella → 0002, 0003, 0004 | — |
 | [0002](./features/0002-contract-crate.md) | Contract crate + workspace restructure (slice 1 of 0001) | merged | high | — | — (merged) |
-| [0003](./features/0003-server-auth-profile-tasks.md) | Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001) | awaiting-merge (live on branch) | high | 0002 | feature/0003-server-auth-profile-tasks |
+| [0003](./features/0003-server-auth-profile-tasks.md) | Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001) | merged | high | 0002 | — (merged) |
 | [0004](./features/0004-tui-foundational.md) | TUI — register/login, default profile, task add/list/close (slice 3 of 0001) | ready | high | 0003 | — |
 
 > **Dependency chain (slice 0001):** `0002` (contract) → `0003` (server) → `0004` (TUI). `0001`
-> is the umbrella tracking the three. `0002` is **merged**. `0003` (server) is **`awaiting-merge`
-> on its branch** (`feature/0003-server-auth-profile-tasks`). After a four-item human-feedback
-> re-entry (compose `server` healthcheck added; a real expired-token→401 coverage gap closed;
-> redundant `Debug` impls dropped; a DoS question clarified — auth is stateless JWT with zero DB
-> queries), the reviewer **approved `4c679bd`** and the verifier returned **`verified 4c679bd`**
-> under the sanctioned docker mechanism (`./ok.sh up` healthy `server` container, migrate→run
-> gating intact, regression + OTLP re-confirmed). `main`'s snapshot stays frozen at the claim
-> until the human's merge. `0004` (TUI) is `ready` but **blocked behind 0003** (depends-on 0003)
-> and becomes claimable once 0003 merges.
+> is the umbrella tracking the three. `0002` and `0003` are **merged**. `0003` (server) merged on
+> 2026-06-13 after a four-item human-feedback re-entry (compose `server` healthcheck added; a real
+> expired-token→401 coverage gap closed; redundant `Debug` impls dropped; a DoS question clarified
+> — auth is stateless JWT with zero DB queries), with the reviewer **approved** and verifier
+> **`verified`** at the rebased code sha `05c7ac9` (was `4c679bd`) under the sanctioned docker
+> mechanism. `0004` (TUI) is `ready` and now **claimable** — its dependency `0003` is on `main`.
+> Only `0001` (umbrella) remains open behind it.
 >
 > **Sanctioned follow-up (not yet a Board item):** a reported-only `./ok.sh coverage` verb over
 > `cargo-llvm-cov` (no hard threshold, not a DoD gate) — `architect` to plan it as a new item.

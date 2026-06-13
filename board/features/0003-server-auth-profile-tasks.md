@@ -1,14 +1,14 @@
 ---
 id: 0003
 title: Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001)
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: [0002]
 branch: feature/0003-server-auth-profile-tasks
 worktree: .claude/worktrees/0003-server-auth-profile-tasks
 created: 2026-06-11
-updated: 2026-06-12
+updated: 2026-06-13
 ---
 
 ## Feature request
@@ -474,6 +474,10 @@ umbrella.
   `05c7ac9`**. The reviewer-approved and verifier-verified verdicts above still attest this tree;
   every commit after `05c7ac9` is Board-only (no re-review owed). Branch is clean to fast-forward
   merge onto `main`.
+- 2026-06-13 [human] fast-forward merged `feature/0003-server-auth-profile-tasks` into `main`
+  (main `fa3f96a` → `23a5b56`); worktree removed and the merged branch deleted. Status
+  `awaiting-merge` → `merged`. This completes slice 2 of the 0001 umbrella; 0004 (TUI) is now
+  unblocked — its dependency 0003 is on `main`.
 
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
