@@ -5,6 +5,111 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-18 (0004 — TUI: register/login + profile + task add/list/close; slice 0001 closes)
+
+Branch: `feature/0004-tui-foundational` (last code sha `8fb0505`). Slice 3 of 3 of the 0001
+umbrella — the TUI side of the tracer bullet, closing the loop TUI ↔ `contract` ↔ server ↔
+Postgres. The cycle ran build → review → verify and stopped at the AI-terminal `awaiting-merge`
+on the branch.
+
+What shipped (on the branch):
+
+- **`crates/tui`** (binary `organized-koala`, lib+bin split) — `ratatui` 0.29, `crossterm`
+  0.28, blocking `reqwest` 0.12 (rustls). The crate was **auto-discovered** by the existing
+  `members = ["crates/*"]` glob; **no root `Cargo.toml` edit** was needed.
+- **`src/client/`** — a `Client` trait over health/register/login/list-profiles/list-tasks/
+  create-task/close-task, every method typed on `contract` DTOs (no local wire types —
+  hard-constraint #2). The `reqwest` impl is `HttpClient`; the standard `ErrorBody`
+  (code + message) maps to a typed `ClientError` (`Api` preserving the `ErrorCode` for
+  branching; `Offline` for any transport failure or unintelligible body).
+- **`src/app/`** — a **pure** screen state machine (`Auth` → `TaskList`, plus a blocking
+  `Offline` screen) advanced by `App::handle_event` over a transport-agnostic `Event` enum,
+  with the `Client` injected. Auth: login (identifier + password) and register (username,
+  email, password, profile-name); on success fetches `GET /api/profiles`, auto-selects the
+  first profile (per the plan's single-profile Assumption), loads its task list. Task list:
+  newest-first with done/undone markers, add-task sub-flow (Title + Description), mark-done
+  sends `…/close` and replaces the row from the server response, refresh re-fetches.
+  Error-code branching per ADR-0005: `unauthenticated` drops the in-memory session → login;
+  `validation_failed`/other `Api` errors surface inline; transport failure → blocking offline
+  screen with a manual retry. **JWT + active profile id live in process memory only**
+  (hard-constraint #1; no on-disk/cross-run state).
+- **`src/ui/`** pure draw fns; **`src/terminal/`** the crossterm driver with a pure `map_key`
+  and a raw-mode guard restoring the terminal on drop.
+- **Keybindings (now pinned by tests):** `Esc`/`Ctrl+C` quit (`Esc` = cancel in the add-task
+  sub-flow); `Enter` submit; `Tab`/`Down` next, `Shift+Tab`/`Up` prev; `Backspace`; auth `F2`
+  toggles login/register; task-list `a` add / `c` mark-done / `r` refresh / `q` quit; offline
+  `r` retry; printable keys typed literally in text-entry contexts.
+- **Tests (tester):** 35 `TestBackend` tests under `crates/tui/tests/` (the only mock a held,
+  recording fake `Client` — ADR-0003 layer 2, no binary, no live DB): `keybindings.rs` (11)
+  pinning the whole `map_key` contract incl. context-sensitivity, `rendering.rs` (7)
+  buffer-snapshotting auth/task-list/add-task/offline (masked password — plaintext never
+  rendered), `error_branches.rs` (9) driving the ADR-0005 `code` branches, `flows.rs` (8)
+  the login/register→profile→list sequence, add-task, mark-done, and statelessness.
+
+Verdicts:
+
+- **Reviewer: REVIEW-STATUS approved `8fb0505`** — all four gates green at HEAD; hard-constraints
+  #1/#2 held (no local DTOs; no persistence/file-IO; offline path fabricates no cached data),
+  the ADR-0005 error contract wired+tested, the layer-2 `TestBackend` suite present and green,
+  no contract/migration/shared-state drift, `#[allow]` audit clean. **No fix-now findings.** One
+  non-blocking nit: the orchestrator's board-claim commit `846ba2a` used a
+  `noreply@anthropic.com` co-author trailer instead of the project form (board-only, outside
+  reviewed code) — now closed durably in `git-standards` (see learnings below).
+- **Verifier: VERIFY-STATUS verified `8fb0505`** — capabilities present (Docker 29.5.3, Compose
+  v5.1.4), **no gap**. Booted `./ok.sh up` in the worktree and exercised the live reqwest client
+  path (ADR-0003 layer 1): every endpoint the `Client` consumes round-tripped with `contract`-
+  matching shapes (`register` 201, `login` 200, `GET /api/profiles` 200, task list/create/close
+  open→done with `closed_at` set); error contract verified live with exact wire strings
+  (`unauthenticated`/`invalid_credentials` 401, `username_taken`/`email_taken` 409,
+  `validation_failed` 400, `not_found` 404); profile-scoping (#4) with a second account → 404 no
+  leak; persistence across a server restart; OTel spans received end-to-end by the collector. The
+  layer-2 `TestBackend` suite confirmed green under `./ok.sh test`. Only un-driven items
+  (neither a blocker): interactive crossterm on a real TTY (routed to the ungated
+  `docs/manual-smoke.md` check per ADR-0003 §3) and the out-of-scope timer endpoint.
+
+No contract change, no migration, no new ADR (TUI-only, inside the frozen ADR-0005 wire format
+and ADR-0003 verification routing). **No new crate-dev agent** — `tui-dev` already owns
+`crates/tui`.
+
+Durable learnings captured this cycle (each to the smallest right home, all on `main`):
+
+- **rust-standards + tui-dev agent — separate the pure core from the effectful shell to make an
+  IO/interactive surface testable.** The whole TUI surface was `TestBackend`-driveable with no
+  live server and no TTY because the crate is a pure update fn (`App::handle_event`), pure draw
+  fns, and a pure `map_key`, with the one external service (the server) behind an injected
+  `Client` trait. That is the ADR-0003 layer-2 enabler; recorded as the general rule in
+  `rust-standards` and as a front-of-mind constraint on the `tui-dev` agent.
+- **git-standards — the orchestrator's co-author trailer is `claude <claude@organized-koala.local>`,
+  and that applies to Board-only commits too.** The 0004 board-claim commit used
+  `<noreply@anthropic.com>` (the reviewer's nit). Tightened the existing footer rule to pin the
+  orchestrator's domain form explicitly and state `<noreply@anthropic.com>` is never correct here.
+
+Deliberately **skipped** (did not earn a durable edit): no `CLAUDE.md` gotcha — this cycle hit
+no new recurring miss (the three-home model and #6 held cleanly; the auto-discovery of the crate
+via `members = ["crates/*"]` and the lib+bin split are already captured). No `docs-standards`,
+`bash-standards`, or `coding-standards` change — nothing new surfaced there. No new ADR — TUI-only.
+
+Backlog deferred per the plan's Assumptions (next cycles, not lost): profile picker / multiple-
+profiles switch UX; task edit/delete; Notes; Pomodoro (still gated on ADR-0002 timer authority);
+TUI-side tracing/OTel; and the `docs/manual-smoke.md` TTY checklist for raw-mode/teardown
+behaviour invisible to `TestBackend`. Also still pending from 0003: the operator-sanctioned
+reported-only `./ok.sh coverage` verb over `cargo-llvm-cov` (no hard threshold) — `architect` to
+plan as a new `main`-side Board item.
+
+**Sequencing — the foundational slice closes with this merge.** Merging
+`feature/0004-tui-foundational` puts all three children (0002/0003/0004) on `main`, so parent
+0001's end-to-end acceptance (register/login → profile → task add/list/close, TUI ↔ contract ↔
+server ↔ Postgres) becomes closeable. `0001` is the only foundational item left open after this.
+
+**Homes.** Cross-cutting edits on `main` (homes #1/#3): this `docs/handoff.md` entry (+ the "What
+works right now" snapshot refreshed), the `rust-standards`/`git-standards`/`tui-dev` learnings,
+`docs/build-plan.md`, and the regenerated `board/README.md`. **Feature-local on the branch
+(home #2):** the item's `## Summary`. The orchestrator advances the branch status to
+`awaiting-merge` after this; **`main`'s frozen copy of `board/features/0004-tui-foundational.md`
+is left untouched** at the claim snapshot until the human's merge.
+
+---
+
 ## Handoff — 2026-06-12 (0003 feedback re-entry — four human items resolved, re-verified, `awaiting-merge`)
 
 **Feedback re-entry, not a fresh feature.** 0003 was at `awaiting-merge` (verified `f67a883`)
@@ -463,21 +568,26 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   the foundational wire shapes (auth/profile/task DTOs, `ErrorBody`, error codes, the redacting
   `Password` newtype) per ADR-0005, with `chrono::DateTime<Utc>` timestamps (wire bytes
   unchanged — RFC 3339 `…Z`). The workspace matches the target layout (placeholder crate gone).
-- **The server is written, code-reviewed, live-verified, and `awaiting-merge`** (0003,
-  branch-owned on `feature/0003-server-auth-profile-tasks`): `organized-koalad` implements the
-  full ADR-0005 HTTP API against Postgres — argon2 + JWT auth, the atomically-created default
-  profile, profile-scoped add/list/close tasks, the `{ code?, message }` error contract, the
-  ADR-0004 `run`/`migrate`/`rollback` CLI, reversible migrations, `tracing`/OTLP instrumentation,
-  and the `deploy/` docker stack (now with a compose `server` healthcheck on `/healthz`). After a
-  four-item human-feedback re-entry (healthcheck added; a real expired-token→401 coverage gap
-  closed; redundant `Debug` impls dropped; a DoS question clarified as a non-issue — auth is
-  stateless JWT with zero DB queries), reviewer **approved `4c679bd`** and verifier returned
-  **`verified 4c679bd`** under the sanctioned docker mechanism (`./ok.sh up` healthy server
-  container, migrate→run gating, regression + OTLP re-confirmed). **0003 is `awaiting-merge` on
-  its branch**; `main`'s snapshot stays frozen until the human's merge. No TUI yet.
-- **0004 (TUI: register/login + default profile + task add/list/close) is the last foundational
-  slice** — `ready`, blocked behind 0003, and **unblocked the moment the human merges 0003**.
-  Together 0002–0004 complete the vertical slice 0001.
+- **The server is merged on `main`** (0003): `organized-koalad` implements the full ADR-0005
+  HTTP API against Postgres — argon2 + JWT auth, the atomically-created default profile,
+  profile-scoped add/list/close tasks, the `{ code?, message }` error contract, the ADR-0004
+  `run`/`migrate`/`rollback` CLI, reversible migrations, `tracing`/OTLP instrumentation, and the
+  `deploy/` docker stack (compose `server` healthcheck on `/healthz`). Merged after a four-item
+  human-feedback re-entry; reviewed + live-verified under the sanctioned docker mechanism.
+- **The TUI is written, code-reviewed, live-verified, and `awaiting-merge`** (0004, branch-owned
+  on `feature/0004-tui-foundational`): `organized-koala` (ratatui/crossterm/reqwest) completes
+  the loop — register/login (auto-selecting the single default profile), task list (newest-first,
+  done/undone markers, add Title+Description, mark-done), ADR-0005 error-code branching
+  (`unauthenticated`→login, `validation_failed`→inline, offline→blocking+retry), and statelessness
+  (JWT + active profile id in process memory only). Built as a pure core (update fn + draw fns +
+  `map_key`) behind an injected `Client` trait, so the whole interactive surface is `TestBackend`-
+  tested (35 tests, ADR-0003 layer 2). Reviewer **approved `8fb0505`**; verifier returned
+  **`verified 8fb0505`** live over the full reqwest path (Docker 29.5.3 / Compose v5.1.4 — error
+  contract, profile-scoping, persistence, OTel spans). **0004 is `awaiting-merge` on its branch**;
+  `main`'s snapshot stays frozen until the human's merge.
+- **Merging 0004 closes the foundational slice 0001.** With 0002/0003 already on `main` and 0004
+  the last child, the end-to-end acceptance (TUI ↔ contract ↔ server ↔ Postgres) becomes
+  closeable; `0001` (umbrella) is the only foundational item left open after that.
 - **Pending plan (operator-sanctioned, not yet a Board item):** a reported-only coverage verb —
   `./ok.sh coverage` over `cargo-llvm-cov`, **no hard threshold**, not a DoD gate. `architect` to
   plan it as a new `main`-side item; `platform-dev` owns the verb.

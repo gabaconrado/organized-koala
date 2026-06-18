@@ -53,6 +53,21 @@ Idiomatic Rust layout (see [Rust by Example — Testing](https://doc.rust-lang.o
 - In **test code**, `unwrap`/`expect`/`panic` are acceptable. If the clippy `*_used` /
   `panic` denies fire there, a crate-root `#![cfg_attr(test, allow(clippy::unwrap_used,
   clippy::expect_used, clippy::panic))]` is the sanctioned, documented exception.
+- **Make an interactive / IO-driven surface testable by separating the pure core from the
+  effectful shell (learned 0004).** The TUI's whole interactive surface was driven through
+  `ratatui`'s `TestBackend` with **no live server and no real terminal** because the crate was
+  built as three pure layers behind one injected effect: (a) a **pure update function**
+  (`App::handle_event` — a state machine over a transport-agnostic `Event` enum, returning the
+  next state, never doing IO itself); (b) **pure draw functions** (`ui::*` that render a state
+  into a `Frame`/buffer); (c) a **pure key-mapping** (`map_key`: `crossterm::KeyEvent` →
+  `Event`, with no side effects); and the one external service — the server — reached only
+  through an **injected `Client` trait**, so tests swap in a scripted fake while production uses
+  the `reqwest` impl. The effectful shell (the crossterm driver, raw-mode guard, the real HTTP
+  client) is a thin rim around that core. This is the ADR-0003 layer-2 enabler: `map_key`,
+  `handle_event`, and the draw fns are unit/`TestBackend`-testable directly, and the only mock
+  is the sanctioned external-service trait — no internal collaborator is mocked. If view code
+  and HTTP code intertwine (so the suite can't be written without a live server or TTY), that
+  is the ADR-0003 architecture smell — bubble up, don't bend the test.
 
 ### Documentation
 

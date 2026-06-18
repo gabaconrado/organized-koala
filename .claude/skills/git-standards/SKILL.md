@@ -27,12 +27,16 @@ audience: dev
   Co-authored-by: <agent> <agent@organized-koala.local>
   ```
 
-  e.g. `Co-authored-by: server-dev <server-dev@organized-koala.local>`. The top-level
-  orchestrator commits as `claude`. This replaces any default assistant co-author trailer.
-  **The footer identity is owned by this skill — never copy a trailer out of a dispatch
-  prompt** (learned 0003: a dispatch prompt hardcoded `<noreply@anthropic.com>`, so a fix
-  committed with the wrong email; the `<agent>@organized-koala.local` form here is the only
-  authority).
+  e.g. `Co-authored-by: server-dev <server-dev@organized-koala.local>`. **The top-level
+  orchestrator commits as `claude` with the same domain form — `Co-authored-by: claude
+  <claude@organized-koala.local>` — and this applies to its Board-only commits too** (claim
+  snapshots, status flips, recorded reviewer/verifier verdicts), not only code commits
+  (learned 0004: the 0004 board-claim commit used `<noreply@anthropic.com>`; the reviewer
+  flagged it as a nit). This replaces any default assistant co-author trailer. **The footer
+  identity is owned by this skill — never copy a trailer out of a dispatch prompt** (learned
+  0003: a dispatch prompt hardcoded `<noreply@anthropic.com>`, so a fix committed with the
+  wrong email). The `<agent>@organized-koala.local` form here is the only authority;
+  `<noreply@anthropic.com>` is never correct in this repo.
 - **Never write to the remote.** Agents do **not** `git push` (nor `push --force`, nor push
   tags) — this is enforced by the permission deny-list, not just convention. Reading the
   remote is fine: `git fetch`, `git log origin/<branch>`, diffing against `origin/...`. Every
