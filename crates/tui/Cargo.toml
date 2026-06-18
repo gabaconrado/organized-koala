@@ -1,0 +1,45 @@
+[package]
+name = "tui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
+
+[lib]
+name = "tui"
+path = "src/lib.rs"
+
+[[bin]]
+name = "organized-koala"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+contract = { path = "../contract" }
+
+# Terminal UI + input.
+ratatui = "0.29"
+crossterm = "0.28"
+
+# HTTP client. `blocking` keeps the client synchronous so the app core can be driven from a
+# plain terminal loop without an async runtime; `json` (de)serializes `contract` DTOs.
+reqwest = { version = "0.12", default-features = false, features = [
+    "blocking",
+    "json",
+    "rustls-tls",
+] }
+
+# `serde` provides the `DeserializeOwned` bound used when decoding response bodies; the
+# `contract` DTOs supply the impls and `reqwest`'s `json` feature does the (de)serialization.
+serde = "1"
+
+# Errors: anyhow at the binary top, thiserror for the typed client-boundary error.
+anyhow = "1"
+thiserror = "2"
