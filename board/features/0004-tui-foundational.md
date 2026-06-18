@@ -1,7 +1,7 @@
 ---
 id: 0004
 title: TUI — register/login, default profile, task add/list/close (slice 3 of 0001)
-status: working      # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review       # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: [0003]
@@ -172,6 +172,19 @@ reqwest path against the live 0003 stack (layer 1).
   passes), `./ok.sh fmt --check` clean, `./ok.sh lint` clean (no `#[allow]` beyond the
   sanctioned test-only `unwrap`/`expect`/`panic` exception plus a documented `dead_code` allow
   on the shared `common` fixture). No source touched.
+- 2026-06-18 [reviewer] cold review of `8a7981b..8fb0505` (`crates/`, `Cargo.lock`,
+  `Cargo.toml`). All four gates green at HEAD (`build`/`test`/`lint`/`fmt --check`). Verified:
+  hard-constraint #2 (no local wire DTOs; every shape from `contract`), #1 (no file I/O,
+  no persistence, no logging; JWT + active profile id in process memory only; offline path
+  fabricates no cached data — statelessness tests assert this), the ADR-0005 error contract
+  (`code`-preserving typed error; `unauthenticated`→login, `validation_failed`→inline,
+  offline→blocking+retry all wired and tested), the ADR-0003 layer-2 `TestBackend` suite
+  (exists, green, 35 tests, only mock is the injected `Client`), and no contract/migration/
+  shared-state drift on the branch. `#[allow]` audit clean — only the sanctioned test-only
+  exceptions, none leaked into source. No fix-now findings. One non-blocking nit: the
+  orchestrator's board-claim commit `846ba2a` used a `noreply@anthropic.com` co-author
+  trailer instead of the project `<agent>@organized-koala.local` form (board-only, outside
+  reviewed code). Verdict: **REVIEW-STATUS: approved 8fb0505**. Status `working` → `review`.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
