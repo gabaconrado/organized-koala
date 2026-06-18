@@ -110,6 +110,10 @@ reqwest path against the live 0003 stack (layer 1).
   [0003][feat-0003] is `awaiting-merge`/`merged` (the verifier
   needs the live stack); compile-time work only needs 0002, but the gate stays on 0003 to
   keep the cycle linear.
+- 2026-06-18 [orchestrator] claimed via `/drive`; worktree + branch
+  `feature/0004-tui-foundational` cut from `main`@8a7981b. **This `main` copy is frozen at the
+  claim snapshot** — the branch copy is now authoritative and advances there until the human's
+  merge brings the finished item back to `main`.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
