@@ -143,6 +143,35 @@ reqwest path against the live 0003 stack (layer 1).
   list when not entering text: `a` add task, `c` mark selected done, `r` refresh, `q` quit.
   Offline screen: `r` retry. In text-entry contexts (auth forms, the add-task fields)
   printable keys are typed literally rather than treated as commands.
+- 2026-06-18 [tester] slice 3 — `TestBackend` suite added under `crates/tui/tests/`, the only
+  mock being a held, recording fake `Client` (ADR-0003 layer 2; no binary, no live DB). Shared
+  scaffolding lives in `tests/common/mod.rs`: a clone-shared `FakeClient` (interior `Rc`,
+  scripted per-endpoint response queues, a recorded call log), DTO builders that parse the
+  canonical wire JSON through the `contract` derives (so the suite needs no direct `chrono`
+  dep), and a `TestBackend` buffer-text render helper. Coverage across four files:
+  - `keybindings.rs` (11 tests) pins the whole `map_key` contract — `Esc`/`Ctrl+C` quit (and
+    `Esc` = cancel only in the add-task flow), `Enter` submit, `Tab`/`Down` = next and
+    `BackTab`/`Up` = prev, `Backspace`, auth-only `F2` toggle, task-list `a`/`c`/`r`/`q`
+    commands, offline `r` retry, and the context-sensitivity (`a`/`c`/`r`/`q` typed literally
+    in the auth form and the open add-task flow; `r` literal on auth).
+  - `rendering.rs` (7 tests) buffer-snapshots the login and register screens (field labels,
+    masked password — plaintext never rendered), the task list (newest-first ordering,
+    `[ ]`/`[x]` markers, profile in the header), the add-task panel, and the blocking offline
+    screen.
+  - `error_branches.rs` (9 tests) drives the ADR-0005 `code` branches through the fake:
+    `validation_failed`/`invalid_credentials` surface inline and keep the session;
+    `unauthenticated` (on refresh and on close) returns to login with the in-memory session
+    dropped; transport failure goes to the blocking offline screen, and a manual `r` retry
+    recovers (or stays offline while still down).
+  - `flows.rs` (8 tests) covers login/register reaching the auto-selected profile's list (the
+    exact login -> profiles -> list-tasks call sequence), the add-task flow posting Title +
+    Description then re-rendering from the server's fresh list, mark-done sending `…/close` and
+    replacing the row from the returned `Task`, and statelessness (the rendered list equals the
+    server response, refresh drops stale data, a new app holds no session).
+  Gates from the worktree root: `./ok.sh test` green (35 new tui tests; whole workspace
+  passes), `./ok.sh fmt --check` clean, `./ok.sh lint` clean (no `#[allow]` beyond the
+  sanctioned test-only `unwrap`/`expect`/`panic` exception plus a documented `dead_code` allow
+  on the shared `common` fixture). No source touched.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary

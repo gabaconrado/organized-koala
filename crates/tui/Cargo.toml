@@ -43,3 +43,8 @@ serde = "1"
 # Errors: anyhow at the binary top, thiserror for the typed client-boundary error.
 anyhow = "1"
 thiserror = "2"
+
+[dev-dependencies]
+# Test-only: build `contract` DTOs (`Task`/`Profile`, with their `chrono` timestamps) from
+# canonical JSON via their derived `Deserialize`, so the suite needs no direct `chrono` dep.
+serde_json = "1"
