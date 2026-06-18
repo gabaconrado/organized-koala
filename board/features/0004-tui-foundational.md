@@ -185,6 +185,22 @@ reqwest path against the live 0003 stack (layer 1).
   orchestrator's board-claim commit `846ba2a` used a `noreply@anthropic.com` co-author
   trailer instead of the project `<agent>@organized-koala.local` form (board-only, outside
   reviewed code). Verdict: **REVIEW-STATUS: approved 8fb0505**. Status `working` → `review`.
+- 2026-06-18 [verifier] **VERIFIED** at code sha `8fb0505`. Capabilities present (Docker
+  29.5.3, Compose v5.1.4) — no gap. Booted `./ok.sh up` in the worktree (postgres healthy →
+  `migrate` exited 0 → server healthy → otel-collector up) and exercised the live reqwest
+  client path (ADR-0003 layer 1): every endpoint the `tui` `Client` consumes round-tripped
+  with shapes matching `contract` — `register` 201, `login` 200, `GET /api/profiles` 200,
+  task list/create/close (open→done, `closed_at` set). Error contract verified live with
+  exact wire strings: `unauthenticated`/`invalid_credentials` 401, `username_taken`/
+  `email_taken` 409, `validation_failed` 400, `not_found` 404. Profile-scoping (#4) verified
+  with a second account — cross-profile reads/writes return 404 with no existence leak.
+  Persistence verified across a server restart. OTel spans verified end-to-end: the
+  collector received exported OTLP/gRPC spans (`list_profiles`/`list_tasks` with
+  `user_id`/`profile_id` attrs). Layer-2 handshake: the `TestBackend` suite exists and is
+  green under `./ok.sh test` (error_branches 9, flows 8, keybindings 11, rendering 7; whole
+  workspace 0 failed). Only un-driven items: interactive crossterm on a real TTY (routed to
+  the ungated manual smoke check per ADR-0003 §3) and the out-of-scope timer endpoint —
+  neither blocks. Stack torn down; no edits, no scratch files.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
