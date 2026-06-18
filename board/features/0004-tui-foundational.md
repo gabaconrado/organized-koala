@@ -114,6 +114,35 @@ reqwest path against the live 0003 stack (layer 1).
   `.claude/worktrees/0004-tui-foundational` on branch `feature/0004-tui-foundational` from
   `main`@8a7981b (carries ADR-0005 and the contract/server crates merged from 0002/0003);
   `ready` → `working`. Dependency gate satisfied: 0003 `merged`. Session: drive-2026-06-18.
+- 2026-06-18 [tui-dev] slice 1 — scaffolded `crates/tui` (binary `organized-koala`,
+  lib+bin split) via the `new-crate` skill; deps `ratatui` 0.29, `crossterm` 0.28, blocking
+  `reqwest` 0.12 (rustls). Built `src/client/mod.rs`: a `Client` trait over health, register,
+  login, list-profiles, list-tasks, create-task, close-task (all typed on `contract` DTOs,
+  no local DTOs), with the `reqwest` impl `HttpClient`. The standard `ErrorBody` (code plus
+  message) maps to a typed `ClientError`: `Api` (preserving the `ErrorCode` for branching)
+  and `Offline` for any transport failure or unintelligible body. Crate auto-discovered by
+  the existing `members = ["crates/*"]`; no root `Cargo.toml` edit needed.
+- 2026-06-18 [tui-dev] slice 2 — app core + views. `src/app/mod.rs` is a pure screen state
+  machine (`Auth` to `TaskList`, plus a blocking `Offline` screen) advanced by
+  `App::handle_event` over a transport-agnostic `Event` enum, with the `Client` injected, so
+  `tester` can drive it through `TestBackend` with a fake client (ADR-0003). Auth: login
+  (identifier plus password) and register (username, email, password, profile-name); on
+  success fetches `GET /api/profiles` and auto-selects the first profile (per Assumptions),
+  then loads its task list. Task list: newest-first with done/undone markers, add-task
+  sub-flow (Title plus Description), mark-done sends the close request and replaces the task
+  in place from the server response, refresh re-fetches. Error-code branching per ADR-0005:
+  `unauthenticated` drops the in-memory session and returns to login; `validation_failed`
+  (and other Api errors) surface inline; offline goes to the blocking screen with a manual
+  retry. `src/ui/mod.rs` holds pure draw fns; `src/terminal/mod.rs` is the crossterm driver
+  with a pure `map_key` mapping and a raw-mode guard restoring the terminal on drop. JWT plus
+  active profile id live in process memory only (hard-constraint #1).
+- 2026-06-18 [tui-dev] keybindings chosen (pin these in the `TestBackend` suite): global
+  `Esc` or `Ctrl+C` quit, except in the add-task sub-flow where `Esc` cancels instead;
+  `Enter` submit/confirm; `Tab` or `Down` next field/item, `Shift+Tab` or `Up` previous;
+  `Backspace` delete in the focused field. Auth screen: `F2` toggles login/register. Task
+  list when not entering text: `a` add task, `c` mark selected done, `r` refresh, `q` quit.
+  Offline screen: `r` retry. In text-entry contexts (auth forms, the add-task fields)
+  printable keys are typed literally rather than treated as commands.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
