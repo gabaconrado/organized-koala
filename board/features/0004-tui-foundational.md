@@ -1,14 +1,14 @@
 ---
 id: 0004
 title: TUI — register/login, default profile, task add/list/close (slice 3 of 0001)
-status: ready        # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working      # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: [0003]
-branch: null         # feature/0004-tui-foundational once a worktree is cut
-worktree: null       # .claude/worktrees/0004-tui-foundational
+branch: feature/0004-tui-foundational
+worktree: .claude/worktrees/0004-tui-foundational
 created: 2026-06-11
-updated: 2026-06-11
+updated: 2026-06-18
 ---
 
 ## Feature request
@@ -110,10 +110,10 @@ reqwest path against the live 0003 stack (layer 1).
   [0003][feat-0003] is `awaiting-merge`/`merged` (the verifier
   needs the live stack); compile-time work only needs 0002, but the gate stays on 0003 to
   keep the cycle linear.
-- 2026-06-18 [orchestrator] claimed via `/drive`; worktree + branch
-  `feature/0004-tui-foundational` cut from `main`@8a7981b. **This `main` copy is frozen at the
-  claim snapshot** — the branch copy is now authoritative and advances there until the human's
-  merge brings the finished item back to `main`.
+- 2026-06-18 [orchestrator] claimed via `/drive`; cut worktree
+  `.claude/worktrees/0004-tui-foundational` on branch `feature/0004-tui-foundational` from
+  `main`@8a7981b (carries ADR-0005 and the contract/server crates merged from 0002/0003);
+  `ready` → `working`. Dependency gate satisfied: 0003 `merged`. Session: drive-2026-06-18.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
