@@ -205,6 +205,43 @@ reqwest path against the live 0003 stack (layer 1).
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
 
+**What was built.** `crates/tui` (binary `organized-koala`, lib+bin split; `ratatui` 0.29,
+`crossterm` 0.28, blocking `reqwest` 0.12/rustls), the stateless TUI client that closes the
+0001 tracer bullet: TUI ↔ `contract` ↔ server ↔ Postgres. The crate is structured as a pure
+core behind one injected effect — a `Client` trait over health/register/login/list-profiles/
+list-tasks/create-task/close-task (typed entirely on `contract` DTOs, no local wire shapes),
+with the `reqwest` impl `HttpClient` and `ErrorBody` → a `code`-preserving typed `ClientError`;
+a pure screen state machine `App::handle_event` (`Auth` → `TaskList` + a blocking `Offline`
+screen); pure `ui` draw fns; and a crossterm driver with a pure `map_key` and a raw-mode guard.
+The auth screen registers (username, email, password, profile-name) or logs in, then fetches
+`GET /api/profiles` and auto-selects the single default profile into its task list (newest-
+first, done/undone markers, add-task Title+Description sub-flow, mark-done via `…/close`
+re-rendering from the server response). Keybindings (now pinned by tests): `Esc`/`Ctrl+C` quit
+(`Esc` = cancel in add-task), `Enter` submit, `Tab`/`Down` next, `Shift+Tab`/`Up` prev,
+`Backspace`, auth `F2` login/register toggle, task-list `a`/`c`/`r`/`q`, offline `r` retry.
+
+**Acceptance criteria — all satisfied.** `crates/tui` exists with the required deps and imports
+every wire shape from `contract` (#2); the auth→profile→task-list flow works; the task-list view
+renders newest-first with markers, the add-task flow, and server-driven mark-done; error
+handling branches on the ADR-0005 `code` (`unauthenticated`→login, `validation_failed`→inline,
+offline→clear blocking message with manual retry, no cached data — #1); no on-disk/cross-run
+state (JWT + active profile id in process memory only); and `tester`'s `ratatui` `TestBackend`
+suite (35 tests across keybindings/rendering/error-branches/flows, ADR-0003 layer 2) covers
+view/update, keybindings, and error-code branching, with `./ok.sh test|lint|fmt --check` green.
+
+**Verdicts.** Reviewer **`REVIEW-STATUS: approved 8fb0505`** (all gates green; #1/#2 held; error
+contract + layer-2 suite verified; no fix-now findings — one board-only co-author-trailer nit).
+Verifier **`VERIFY-STATUS: verified 8fb0505`** — live over the full reqwest client path
+(Docker 29.5.3 / Compose v5.1.4): every `Client` endpoint round-tripped with `contract`-matching
+shapes, the ADR-0005 error contract with exact wire strings, profile-scoping (#4) with a second
+account (404, no leak), persistence across a server restart, and OTel spans received end-to-end;
+the `TestBackend` suite confirmed green. No contract change, no migration, no new ADR.
+
+**Slice 0001 closeable.** This is slice 3 of 3 of the 0001 umbrella; merging it puts all three
+children (0002 contract, 0003 server, 0004 TUI) on `main`, so parent 0001's end-to-end
+acceptance — register/login → profile → task add/list/close across TUI ↔ contract ↔ server ↔
+Postgres — is now closeable with this slice.
+
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
 [feat-0001]: ./0001-foundational-slice.md
