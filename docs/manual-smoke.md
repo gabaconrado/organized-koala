@@ -16,6 +16,10 @@ Run this checklist when **any** of the following happens — not on routine feat
 - First boot on a **new target platform** (a new OS, terminal emulator, or architecture).
 - Any change to **terminal setup/teardown** — raw-mode toggling, alternate-screen
   enter/leave, panic-hook restore, or the resize path.
+- Any change to the **poll-loop redraw path** — the `terminal::run` render cadence
+  (`event::poll` tick), the in-flight spinner repaint, or the cancel handling while a request
+  is outstanding (added in 0005). The buffer-level behaviour is covered by `tester`'s
+  `TestBackend` suite; the real-terminal *repaint and teardown* under continuous redraw is not.
 
 If a real-terminal regression ever escapes to the human between runs, that is the signal to
 **add a new trigger to this list** — not to build a PTY-based gate.
@@ -34,8 +38,14 @@ terminal, then launch the TUI with `./ok.sh run-tui`.
 - [ ] **Keybinding round-trip on a real TTY** — at least one navigation key and one action key
   produce the expected on-screen result (deterministic mapping is already covered by tester;
   here we only confirm real `crossterm` key delivery works).
+- [ ] **Request in flight — live repaint + cancel** — trigger a server request (e.g. submit
+  login or refresh the task list) and confirm the spinner **animates** (the glyph advances, the
+  UI does not freeze) with the "working… (Esc to cancel)" hint visible; pressing **Esc** while
+  in flight cancels cleanly and the UI stays interactive. The buffer contents are tester-covered;
+  here we confirm the real-terminal animation paints without flicker/artifacts.
 - [ ] **Clean teardown on quit** — quitting leaves raw mode, leaves the alternate screen, and
-  restores the cursor; the shell prompt returns normal and the terminal is usable.
+  restores the cursor; the shell prompt returns normal and the terminal is usable. Quitting
+  **while a request is in flight** also restores the terminal cleanly (no stuck raw mode).
 - [ ] **Teardown on panic** — if the app panics, the panic hook still restores the terminal
   (no stuck raw mode / hidden cursor).
 
