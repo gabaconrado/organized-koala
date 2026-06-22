@@ -172,7 +172,7 @@ reqwest path against the live 0003 stack (layer 1).
   passes), `./ok.sh fmt --check` clean, `./ok.sh lint` clean (no `#[allow]` beyond the
   sanctioned test-only `unwrap`/`expect`/`panic` exception plus a documented `dead_code` allow
   on the shared `common` fixture). No source touched.
-- 2026-06-18 [reviewer] cold review of `161300c..b0ec5ee` (`crates/`, `Cargo.lock`,
+- 2026-06-18 [reviewer] cold review of `bd3f797..53da791` (`crates/`, `Cargo.lock`,
   `Cargo.toml`). All four gates green at HEAD (`build`/`test`/`lint`/`fmt --check`). Verified:
   hard-constraint #2 (no local wire DTOs; every shape from `contract`), #1 (no file I/O,
   no persistence, no logging; JWT + active profile id in process memory only; offline path
@@ -184,8 +184,8 @@ reqwest path against the live 0003 stack (layer 1).
   exceptions, none leaked into source. No fix-now findings. One non-blocking nit: the
   orchestrator's board-claim commit `846ba2a` used a `noreply@anthropic.com` co-author
   trailer instead of the project `<agent>@organized-koala.local` form (board-only, outside
-  reviewed code). Verdict: **REVIEW-STATUS: approved b0ec5ee**. Status `working` → `review`.
-- 2026-06-18 [verifier] **VERIFIED** at code sha `b0ec5ee`. Capabilities present (Docker
+  reviewed code). Verdict: **REVIEW-STATUS: approved 53da791**. Status `working` → `review`.
+- 2026-06-18 [verifier] **VERIFIED** at code sha `53da791`. Capabilities present (Docker
   29.5.3, Compose v5.1.4) — no gap. Booted `./ok.sh up` in the worktree (postgres healthy →
   `migrate` exited 0 → server healthy → otel-collector up) and exercised the live reqwest
   client path (ADR-0003 layer 1): every endpoint the `tui` `Client` consumes round-tripped
@@ -201,16 +201,17 @@ reqwest path against the live 0003 stack (layer 1).
   workspace 0 failed). Only un-driven items: interactive crossterm on a real TTY (routed to
   the ungated manual smoke check per ADR-0003 §3) and the out-of-scope timer endpoint —
   neither blocks. Stack torn down; no edits, no scratch files.
-- 2026-06-22 [orchestrator] rebased the branch onto `main`@161300c (was based on
-  `main`@8a7981b) so the human reviews it up-to-date. Only conflict was this Board file
-  (`main`'s frozen-pointer note vs. the branch's authoritative claim entry) — resolved in
-  favour of the branch per the state-home rule. Rebase rewrote shas; the verdict citations
-  above were relabelled `8fb0505` → `b0ec5ee` (test sha) and the review range to
-  `161300c..b0ec5ee`. **Safe because the code tree is byte-identical pre/post rebase**:
-  `git diff 8fb0505 b0ec5ee -- crates/ Cargo.toml Cargo.lock` is empty (`main` moved only
-  `docs/` + `.claude/`), so the approved+verified attestation carries forward unchanged — no
-  re-review needed. Gates re-run green on the rebased tree (`test`/`lint`/`fmt --check`); no
-  code commit follows `b0ec5ee`.
+- 2026-06-22 [orchestrator] freshened the branch against `main` (drive step 7) so the human
+  reviews it up-to-date — rebased from its original base `main`@8a7981b onto `main`@bd3f797.
+  The only conflict was this Board file (`main`'s frozen-pointer note vs. the branch's
+  authoritative claim entry), resolved in favour of the branch per the state-home rule. The
+  rebases rewrote shas, so the verdict citations above were relabelled to the final code sha:
+  `8fb0505` → **`53da791`** (test/last-code sha), and the reviewer's review range to
+  `bd3f797..53da791`. **Safe because the code tree is byte-identical to what was reviewed**:
+  `git diff 8fb0505 53da791 -- crates/ Cargo.toml Cargo.lock` is empty (`main` moved only in
+  `docs/` + `.claude/` + this Board file), so the approved+verified attestation carries forward
+  unchanged — no re-review needed (DoD clause 7, code-identical branch). Gates re-run green on
+  the rebased tree (`test`/`lint`/`fmt --check`); no code commit follows `53da791`.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
@@ -239,9 +240,9 @@ state (JWT + active profile id in process memory only); and `tester`'s `ratatui`
 suite (35 tests across keybindings/rendering/error-branches/flows, ADR-0003 layer 2) covers
 view/update, keybindings, and error-code branching, with `./ok.sh test|lint|fmt --check` green.
 
-**Verdicts.** Reviewer **`REVIEW-STATUS: approved b0ec5ee`** (all gates green; #1/#2 held; error
+**Verdicts.** Reviewer **`REVIEW-STATUS: approved 53da791`** (all gates green; #1/#2 held; error
 contract + layer-2 suite verified; no fix-now findings — one board-only co-author-trailer nit).
-Verifier **`VERIFY-STATUS: verified b0ec5ee`** — live over the full reqwest client path
+Verifier **`VERIFY-STATUS: verified 53da791`** — live over the full reqwest client path
 (Docker 29.5.3 / Compose v5.1.4): every `Client` endpoint round-tripped with `contract`-matching
 shapes, the ADR-0005 error contract with exact wire strings, profile-scoping (#4) with a second
 account (404, no leak), persistence across a server restart, and OTel spans received end-to-end;
