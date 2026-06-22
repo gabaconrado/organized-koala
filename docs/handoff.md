@@ -90,8 +90,12 @@ Next cycle should know:
   repaint and terminal raw-mode teardown are invisible to `TestBackend` (accepted residual risk
   per ADR-0003 §3); when the manual-smoke checklist is authored, add a "request in flight →
   spinner animates, Esc cancels, terminal restores cleanly on quit" item.
+  **✓ Resolved `4318d65`** — the checklist already existed; the in-flight item + a poll-loop-path
+  trigger were added to `docs/manual-smoke.md` directly (docs-only, main-side, no cycle).
 - The **`main.rs:4` stale doc comment** (pre-existing health-probe nit) is a free pickup for the
   next `tui-dev` touch.
+  **✓ Tracked** — filed as Board chore `0006` (`board/features/0006-tui-mainrs-stale-doccomment.md`,
+  `inbox`), the inaugural use of the new `chore` item type; the next `/drive` will claim it.
 - Still pending from earlier cycles (not lost): the operator-sanctioned reported-only `./ok.sh
   coverage` verb over `cargo-llvm-cov` (no hard threshold) — `architect` to plan as a `main`-side
   item; and the deferred TUI backlog (profile-switch UX, task edit/delete, Notes, Pomodoro gated
