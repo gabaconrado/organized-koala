@@ -1,7 +1,7 @@
 ---
 id: 0005
 title: TUI — responsive (non-blocking) event loop + tui::app submodule reorganization
-status: review      # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge   # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high      # high | medium | low
 parent: null
 depends-on: [0004]
@@ -211,6 +211,12 @@ The pure core + synchronous `Client` trait keep the ADR-0003 `TestBackend` seam 
   standard ADR-0003 verifier split (interactive TUI owned by the green TestBackend suites). Stack torn
   down clean. **VERIFY-STATUS: verified** — pinned to code-hash
   `bc89672d4be5cdecd0bb54b340a24a5b8741cf21` (reported by verifier, committed here by orchestrator).
+- 2026-06-22 [orchestrator] step-7 freshen: rebased branch onto `main` (`d911315`; eng-manager's
+  shared learnings + regenerated dashboard). Only conflict was this feature-local Board file —
+  resolved in favour of the branch (dropped `main`'s frozen-pointer note). `./ok.sh code-hash` at
+  the rebased head is unchanged at `bc89672d4be5cdecd0bb54b340a24a5b8741cf21` (= OLD_HASH), so the
+  code is byte-identical and the `approved`/`verified` verdicts **carry forward untouched** — no
+  relabelling. Re-ran gates on the rebased tree: test/lint/fmt all green. `working`→`awaiting-merge`.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
