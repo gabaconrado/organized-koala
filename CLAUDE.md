@@ -215,6 +215,13 @@ A feature reaches `awaiting-merge` only when **all** hold:
    verifier confirms that suite exists and is green (see [ADR-0003][adr-0003]).
 5. Any contract change carries an ADR; any new gotcha is recorded in this file.
 6. **`reviewer` posted `REVIEW-STATUS: approved`** on the reviewed commit sha.
+7. **The branch is rebased current on `main`** (the `drive` step-7 freshen, so the human
+   reviews exactly what will merge). A rebase rewrites shas: if it left the **code tree
+   byte-identical** (`git diff <old-code-sha> <new-code-sha> -- crates/ Cargo.toml Cargo.lock`
+   empty — `main` moved only in `docs/`/`.claude/`/the Board file), the verdict shas are
+   **relabelled** with a provenance note and the approval carries forward; if the rebase
+   **changed code**, the `approved`/`verified` verdicts are void and the item **re-enters
+   review+verify** (it does not reach `awaiting-merge` on a stale approval).
 
 ## The Board
 

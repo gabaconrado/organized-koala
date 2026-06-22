@@ -99,10 +99,48 @@ item's `## Summary`. Those shared/cross-cutting edits (`docs/**`, `.claude/**`) 
 travels with the item). The derived `board/README.md` dashboard is regenerated on **`main`**
 from item frontmatter + active branch heads (home #3).
 
-### 7. Stop
+### 7. Freshen against `main` (rebase current — so the human reviews up-to-date)
+
+`main` has just advanced in step 6 (eng-manager's shared learnings + the regenerated
+dashboard), and other cycles may have merged since the worktree was cut. Before stopping,
+bring the branch up to date so the human reviews **exactly what will merge**. A rebase rewrites
+shas, so the move is gated on its effect on **code**, not done blindly.
+
+Recompute first: is `main` already an ancestor of the branch head
+(`git merge-base --is-ancestor main feature/NNNN-<slug>`)?
+
+- **Already current** → nothing to do; go to step 8.
+- **Behind** → the worktree must be clean (the per-slice commits in step 3 ensure this; if not,
+  abort and surface). **Record the pre-rebase approved code sha** as `OLD`, then `git rebase
+  main` in the worktree. The expected-and-only conflict is the feature-local Board file
+  (`main`'s frozen-pointer note vs. the branch's authoritative copy) — resolve in favour of the
+  **branch** (drop the pointer note). Then classify by the **decision gate** below, with `NEW` =
+  the rebased last code sha and the code paths = `crates/ Cargo.toml Cargo.lock`:
+
+  **Did the rebase change the code tree? — `git diff OLD NEW -- <code paths>`**
+
+  - **Empty (code byte-identical)** — `main` moved only where the branch doesn't (`docs/`,
+    `.claude/`, the Board file). The approved+verified attestation carries forward unchanged.
+    Re-run the gates on the rebased tree (`./ok.sh test|lint|fmt --check`), then **relabel** the
+    verdict shas in the Board (`OLD` → `NEW`, plus the reviewer's review range) and append a
+    provenance Log line **quoting the empty-diff proof**. This is a Board-only commit — it does
+    **not** retrigger review (CLAUDE.md: only a new code/test commit does). Item stays
+    `awaiting-merge`.
+  - **Non-empty (rebase touched code)** — real code conflicts were resolved, or a `main` change
+    to a shared crate altered this branch's compiled code. **The `approved`/`verified` verdicts
+    are now void** — they attest code the reviewer never saw. Do **not** relabel and do **not**
+    stay at `awaiting-merge`: set the item back to `review` (or `working` if gates now fail and
+    code must change) and **re-enter at step 4** (review) → step 5 (verify) on the rebased head.
+    Carrying a stale `approved` onto rebased-changed code is the exact failure this gate prevents.
+
+> This freezes drift only at the instant you stop: a parallel cycle may merge to `main`
+> afterwards, so the human's final ff-merge can still need a re-rebase. The step minimises
+> review-time surprise; it does not guarantee a permanently-current branch.
+
+### 8. Stop
 
 Set `status: awaiting-merge` **on the branch** and **STOP** — confirm Definition of done holds
 (tests/lint/fmt clean, verifier ran it, ADR for any contract change, `REVIEW-STATUS: approved`
-at the last code sha). The human reads the Summary + diff and **manually merges** the branch
-(→ `merged`), which brings the finished item back to `main` atomically with the code, then
-removes the worktree. The AI never merges.
+at the last code sha, **branch rebased current on `main` per step 7**). The human reads the
+Summary + diff and **manually merges** the branch (→ `merged`), which brings the finished item
+back to `main` atomically with the code, then removes the worktree. The AI never merges.
