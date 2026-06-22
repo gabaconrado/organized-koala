@@ -149,6 +149,15 @@ The pure core + synchronous `Client` trait keep the ADR-0003 `TestBackend` seam 
   present at base `f0204fd`); worktree `.claude/worktrees/0005-tui-responsive-event-loop`
   cut from `f0204fd`, branch `feature/0005-tui-responsive-event-loop`; `ready` → `working`.
   Session `ea39f44a`. Branch copy is now authoritative.
+- 2026-06-22 [tui-dev] slice 1 — seam split + app reorg. Split `app/` into submodules
+  `auth`/`task_add`/`task_list` (each owning its screen state); `app/mod.rs` keeps `App`,
+  `Screen`, `Session`, `Event`, and the `handle_event`/`apply_response` wiring. Added pure
+  protocol types (`ClientRequest`/`ClientResponse`/`Outcome`/`RequestId`/`Dispatch`) in
+  `app/protocol.rs`. `handle_event` is now pure `Event -> Option<Dispatch>` and `apply_response`
+  folds a `ClientResponse` into state (chaining post-auth profile→task load and post-create
+  refresh as follow-up dispatches). Dropped the `App<C>` generic — the core holds no client.
+  In-flight marker is `pending: Option<RequestId>` per screen state; error-code branching
+  preserved unchanged.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
