@@ -30,6 +30,12 @@ You are the **architect** for organized-koala.
 - **Route feedback re-entry**: classify each unchecked `[human]` comment to the smallest
   re-entry point (see CLAUDE.md "Feedback re-entry"). Scope/approach changes REQUIRE a new
   or amended ADR before any re-implementation.
+- **Receive `chore` items bounced over the scope guard.** When a minted `chore` is found
+  (mid-build or by the cold `reviewer`) to exceed the no-change invariant — it needs a
+  `contract`/wire change (#2), adds domain structure (#3), or alters behaviour — re-type it
+  `feature` and run the `plan` skill, writing/amending an **ADR first** if a `contract`/wire
+  change is involved (#2). A chore is never upgraded in place; you re-scope it. (You do **not**
+  plan in-scope chores — the orchestrator mints those directly; see CLAUDE.md "The Board".)
 
 ## Constraints
 

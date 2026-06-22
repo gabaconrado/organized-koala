@@ -202,7 +202,14 @@ comment is still data.
 
 ## Definition of done
 
-A feature reaches `awaiting-merge` only when **all** hold:
+The Definition of done depends on the item's `type:` (see "The Board"). A **`feature`** item
+(the default) must satisfy **all** of clauses 1–7 below. A **`chore`** item — a strictly
+scope-limited change with **no** behaviour, **no** contract/wire (#2), and **no**
+domain-structure (#3) change — satisfies the **lighter chore track** stated after the feature
+clauses. Both types flow through the **same** state machine and the **same** three-home model;
+only the gate set differs.
+
+### `feature` track — all seven
 
 1. `./ok.sh test` green — high coverage; tests cover the **public API**; mocks only for
    external services. "Hard to test" ⇒ bubble up to architecture review (do not bend source).
@@ -229,6 +236,29 @@ A feature reaches `awaiting-merge` only when **all** hold:
    `approved`/`verified` verdicts are void, and the item **re-enters review+verify** (it does
    not reach `awaiting-merge` on a stale approval).
 
+### `chore` track
+
+A `chore` reaches `awaiting-merge` on the **lighter** gate below. The cold reviewer is the
+safety net that **replaces** the live verifier pass for chores — so the no-change invariant is
+not self-attested by the author but checked by a fresh agent that did not write the change.
+Keyed to the feature clauses above:
+
+- **Clauses 1–3 (`./ok.sh test | lint | fmt --check`)** — all green, identical to the feature
+  track.
+- **Clause 4 (live `verifier`) — SKIPPED.** A chore changes no behaviour and no wire/API, so
+  there is nothing new for a live boot to exercise; the live pass is **not run** and is **not** a
+  chore gate. (If the change *did* have a live-observable effect, it is not a chore — see the
+  scope guard in "The Board.")
+- **Clause 5 (ADR) — N/A.** A chore makes no contract/domain decision by definition; a change
+  that turns out to need one is **no longer a chore** (scope guard).
+- **Clause 6 (`reviewer` approved) — REQUIRED and strengthened.** Pinned to the reviewed
+  **code-tree hash** (`./ok.sh code-hash`), recorded with the commit sha — **and the verdict
+  explicitly attests the chore invariant**: *no behaviour change, no `contract`/wire change
+  (#2), no domain-structure change (#3).* An approval that does not state that attestation is
+  not a valid chore sign-off.
+- **Clause 7 (branch rebased current on `main`)** — identical to the feature track (step-7
+  freshen; verdict pinning unchanged — the approval attests a code-tree hash).
+
 ## The Board
 
 `board/` is the coordination state (it replaces a ticket tracker). One file per work item in
@@ -242,6 +272,46 @@ The AI cycle is **terminal at `awaiting-merge`** — only the human moves an ite
 by manually merging the branch. `board/README.md` is a *derived* dashboard. The Board is
 committed (treat as potentially public): **never write secrets, tokens, or sensitive
 payloads into it.** A pre-commit secret scan is mandatory (see `.githooks/pre-commit`).
+
+**Item `type` — `feature` (default) or `chore`.** Every item's frontmatter carries a `type:`
+field, enum `feature | chore`. **New items set it explicitly**; a **missing `type:` means
+`feature`** (existing items 0001–0005, authored before this field, are implicitly `feature` and
+are **not** retrofitted). The `type` selects the Definition of done gate set (see "Definition of
+done"): both flow through the same `inbox → … → awaiting-merge` machine and the same three-home
+model — only the gates differ.
+
+- **`feature`** — the normal track: an `architect` plan (`plan` skill) + any required ADR before
+  code, and the full 7-clause DoD including the live `verifier` pass.
+- **`chore`** — a strictly scope-limited change with **no** behaviour, **no** `contract`/wire
+  (#2), and **no** domain-structure (#3) change. The maintenance bucket: refactors (renames,
+  module moves, extraction), doc/comment fixes, test-only changes, dependency bumps. It runs the
+  **lighter chore DoD** (clauses 1–3 + an invariant-attesting reviewer approval; the live
+  verifier pass is skipped — the cold reviewer is the safety net). **No ADR** — a chore makes no
+  contract/domain decision by definition.
+
+**The orchestrator MAY mint a `chore` directly — no `architect` plan required.** Unlike a
+`feature` (which always needs the `architect` plan + any ADR), a `chore` may be created by the
+orchestrator straight into `inbox` with `type: chore` and `priority: low` (the default for a
+minted chore), e.g. when a `reviewer` flags an out-of-scope pre-existing nit during a feature
+cycle, or `eng-manager` records a "free pickup" in handoff. The minted item needs only a
+`## Feature request` describing the scoped change and its acceptance — no `## Plan(s)` block.
+Once claimed it flows through the **normal** state machine (claim → branch-owned → review →
+`awaiting-merge`), obeys the three-home model, and its review verdict pins to `./ok.sh code-hash`
+exactly like any item.
+
+**Scope guard (load-bearing).** A `chore` is only a chore while the no-change invariant holds. If
+the change is found to exceed it — it needs a `contract`/wire change (#2), adds domain structure
+(#3), or alters observable behaviour — the item does **not** proceed as a chore:
+
+- **Who detects it.** Either the **dev agent mid-build** (it discovers the "rename" actually
+  needs a DTO field, or the refactor changes a response shape) **or** the **`reviewer`** (the
+  cold pass finds a behaviour/contract/domain delta the author missed — exactly what the
+  invariant attestation in chore-DoD clause 6 forces the reviewer to check).
+- **Re-entry path.** The detector sets the item `blocked` (mid-build) or the reviewer reports
+  `REVIEW-STATUS: changes-requested` naming the over-scope, and the orchestrator routes it to
+  **`architect`**, which **re-types it `feature`** and runs the `plan` skill (writing/amending an
+  **ADR first** if a `contract`/wire change is involved, per #2). The item then re-enters the
+  full feature track. A chore never "upgrades itself" in place — it is re-scoped by `architect`.
 
 **State has three homes, distinguished by which side of the `main`↔branch line it belongs on
 (learned 0002).** Putting cross-cutting state on a branch — or feature-local state on `main` —

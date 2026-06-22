@@ -8,7 +8,13 @@ audience: dev
 
 ## When to invoke
 
-- By `architect` on an `inbox` item, or on a feedback re-entry classified as scope/approach.
+- By `architect` on an `inbox` **`feature`** item, or on a feedback re-entry classified as
+  scope/approach, **or on a `chore` bounced back over the scope guard** (it exceeded the
+  no-change invariant; `architect` re-types it `feature` here and plans it — writing/amending an
+  ADR first if a `contract`/wire change is involved).
+- **Not** invoked for a `chore` that stays in scope: a `chore` is minted directly by the
+  orchestrator (no plan, no `## Plan(s)` block) and flows straight to claim — see CLAUDE.md
+  "The Board". The `plan` skill produces `feature`-grade plans only.
 
 ## Procedure
 
@@ -58,6 +64,9 @@ happen before the cycle cuts a worktree (`drive` step 2): a worktree is branched
 commit, so an ADR that exists only in the working tree is **invisible** inside the worktree and
 any `(see ADR-NNNN)` citation in code dangles and blocks the dev agent (learned 0002). The plan
 and its ADR are not "ready" until they are committed to `main`.
+
+A planned item is always `type: feature` (set the frontmatter field explicitly); only the
+orchestrator mints `type: chore`, and those skip this skill entirely.
 
 The item is **born on `main`** here (`inbox`→`planned`→`ready`). It then becomes
 **branch-owned on claim**: when `drive` step 2 cuts the worktree from this commit, the branch's

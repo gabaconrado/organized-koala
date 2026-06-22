@@ -19,15 +19,23 @@ advances on the feature branch while `main`'s snapshot stays frozen at the claim
 human's merge (see CLAUDE.md "The Board"). The `Status` column below shows `main`'s snapshot;
 for an in-flight item the authoritative live status is on its branch.
 
+**Item `type`.** Each item is `feature` (default) or `chore` (see CLAUDE.md "The Board"). A
+`feature` carries an `architect` plan + any ADR and runs the full Definition of done; a `chore`
+is a strictly scope-limited change (no behaviour / no `contract`-wire / no domain-structure
+delta) on the lighter chore DoD — the live verifier pass is skipped, the cold reviewer attesting
+the no-change invariant is the safety net. A missing `type:` in an item's frontmatter renders as
+`feature` here (the field is new; existing items predate it).
+
 ## Items
 
-| ID | Title | Status (main snapshot) | Priority | Depends on | Branch |
-| --- | --- | --- | --- | --- | --- |
-| [0001](./features/0001-foundational-slice.md) | Foundational vertical slice (auth + profile + minimal TODO) | merged | high | umbrella → 0002, 0003, 0004 | — (merged) |
-| [0002](./features/0002-contract-crate.md) | Contract crate + workspace restructure (slice 1 of 0001) | merged | high | — | — (merged) |
-| [0003](./features/0003-server-auth-profile-tasks.md) | Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001) | merged | high | 0002 | — (merged) |
-| [0004](./features/0004-tui-foundational.md) | TUI — register/login, default profile, task add/list/close (slice 3 of 0001) | merged | high | 0003 | — (merged) |
-| [0005](./features/0005-tui-responsive-event-loop.md) | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | ready (claim snapshot; live on branch) | high | 0004 | `feature/0005-tui-responsive-event-loop` |
+| ID | Title | Type | Status (main snapshot) | Priority | Depends on | Branch |
+| --- | --- | --- | --- | --- | --- | --- |
+| [0001](./features/0001-foundational-slice.md) | Foundational vertical slice (auth + profile + minimal TODO) | feature | merged | high | umbrella → 0002, 0003, 0004 | — (merged) |
+| [0002](./features/0002-contract-crate.md) | Contract crate + workspace restructure (slice 1 of 0001) | feature | merged | high | — | — (merged) |
+| [0003](./features/0003-server-auth-profile-tasks.md) | Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001) | feature | merged | high | 0002 | — (merged) |
+| [0004](./features/0004-tui-foundational.md) | TUI — register/login, default profile, task add/list/close (slice 3 of 0001) | feature | merged | high | 0003 | — (merged) |
+| [0005](./features/0005-tui-responsive-event-loop.md) | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | feature | ready (claim snapshot; live on branch) | high | 0004 | `feature/0005-tui-responsive-event-loop` |
+| [0006](./features/0006-tui-mainrs-stale-doccomment.md) | Fix stale doc comment in `tui/src/main.rs` | chore | inbox | low | — | — |
 
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**

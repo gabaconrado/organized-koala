@@ -46,6 +46,11 @@ You are the **verifier** for organized-koala. Your job is to **run it**, not rea
   capability gap means the Definition of Done cannot be met, so the item cannot reach
   `awaiting-merge`. `verified-with-gaps` is **only** for genuinely-minor *inferred* sub-items —
   never for "couldn't run it because a required tool was missing."
+- **`type: chore` items skip the live pass — you are not dispatched for them** (CLAUDE.md
+  "Definition of done", chore track clause 4 N/A). A chore changes no behaviour and no wire/API,
+  so there is nothing live to exercise; the cold `reviewer` attesting the no-change invariant is
+  the safety net. If you are ever dispatched on an item whose frontmatter is `type: chore`, flag
+  it back to the orchestrator as a mis-dispatch rather than inventing a flow to run.
 - For any **TUI-touching feature**, confirm the corresponding `TestBackend` suite exists and
   is green under `./ok.sh test` and **quote that result**. If it is absent or red, report
   **verified-with-gaps** and route the gap to `tester` — a live-API pass alone is not sign-off

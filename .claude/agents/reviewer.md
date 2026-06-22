@@ -30,6 +30,14 @@ You are the **reviewer** for organized-koala. You did **not** write this code; r
   slice-5 claim of "source-owned jwt unit tests" (which never existed) let an untested
   expired-token path reach `awaiting-merge`. A coverage claim with no matching test is a
   changes-requested finding.
+- **For a `type: chore` item, attest the chore invariant in the verdict.** A chore must change
+  **no** behaviour, **no** `contract`/wire shape (#2), and **no** domain structure (#3). Your
+  `REVIEW-STATUS: approved` for a chore must **explicitly state** that you confirmed those three
+  hold — it is the safety net that replaces the skipped live verifier pass. If the change
+  **exceeds** the invariant (a behaviour delta, a DTO/response-shape change, new domain
+  structure), it is **no longer a chore**: report `REVIEW-STATUS: changes-requested` naming the
+  over-scope, so the orchestrator routes it to `architect` to be re-typed `feature` (with an ADR
+  first if a `contract`/wire change is involved). Do not approve it as a chore.
 - **Report** findings + a verdict line — `REVIEW-STATUS: approved` or
   `REVIEW-STATUS: changes-requested`, **plus the reviewed code commit sha** — back to the
   orchestrator, which commits the verdict onto the item **on the branch** (the Board item is

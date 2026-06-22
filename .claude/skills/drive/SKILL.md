@@ -45,6 +45,16 @@ a feature branch. (Learned 0002: an ADR left uncommitted in the working tree doe
 worktree cut from the prior commit, so the code's `(see ADR-NNNN)` citations dangle and the dev
 agent blocks. The worktree in step 2 **must** be cut from the commit that carries the plan.)
 
+**Minting a `chore` (no `architect` plan).** Not every item needs a plan. The orchestrator may
+create a `type: chore` item directly in `inbox` (`priority: low`) — a strictly scope-limited
+change with no behaviour/`contract`/domain delta (refactor, doc/comment fix, test-only change,
+dep bump) — **without** dispatching `architect`. Typical trigger: a `reviewer` flags an
+out-of-scope pre-existing nit during a feature cycle, or `eng-manager` logs a "free pickup." A
+minted chore carries only a `## Feature request` (the scoped change + acceptance) — no
+`## Plan(s)`. It then claims and cycles exactly like any item (steps 2–8) on the **lighter chore
+DoD** (CLAUDE.md "Definition of done"). The minted chore item is born on `main` and committed
+there before its worktree is cut, same as a planned item.
+
 ### 2. Claim + isolate
 
 For the highest-priority, oldest `ready` item, cut a worktree + branch **from the `main` commit
@@ -65,6 +75,10 @@ decisions index, `ok.sh`, `.githooks/`, docker/OTel config, `CLAUDE.md`, standar
 `.claude/` agent-skill defs) onto the branch** — those live on `main` only (home #1); committing
 one on a branch is the out-of-sync bug class.
 
+For a `type: chore` there is no plan/ADR to carry on the base commit — verify only that the
+minted item file (with its `## Feature request`) is committed on `main` at the base, then cut the
+worktree as above.
+
 ### 3. Build (in the worktree)
 
 Dispatch the assigned dev agent(s) — `contract-owner` → `server-dev` → `tui-dev` /
@@ -83,9 +97,20 @@ commit does. The verdict **pins to the code-tree hash** (`./ok.sh code-hash`), r
 the last code sha for reference; it stays valid as long as `./ok.sh code-hash HEAD` equals the
 attested hash (CLAUDE.md "Verdict pinning") — this is what survives the step-7 rebase untouched.
 
+For a `type: chore`, the reviewer's `approved` verdict must additionally **attest the chore
+invariant** (no behaviour / no `contract`-wire (#2) / no domain-structure (#3) change). If the
+cold pass finds the change exceeds that invariant, the reviewer reports
+`REVIEW-STATUS: changes-requested` naming the over-scope and the orchestrator routes the item to
+`architect` to **re-type it `feature`** (with an ADR first if a `contract`/wire change is
+involved) — re-entering at step 1's plan, not continuing as a chore (CLAUDE.md scope guard).
+
 ### 5. Verify (run it)
 
-Dispatch `verifier`: boots the stack, exercises the affected flows live, quotes what ran vs.
+**`type: chore` skips this step.** A chore changes no behaviour and no wire/API, so there is
+nothing live to exercise (CLAUDE.md "Definition of done" chore track, clause 4 N/A); the cold
+`reviewer` of step 4 — attesting the no-change invariant — is the safety net. Go straight to
+step 6. **For a `type: feature`:** dispatch `verifier`: boots the stack, exercises the affected
+flows live, quotes what ran vs.
 inferred, reports verified / verified-with-gaps / not-verified. The verifier is **read-only on
 everything** (code AND Board): as with review, the verdict is **reported back** and the
 orchestrator commits it onto the item **on the branch**, pinned to the same **code-tree hash**
@@ -148,8 +173,11 @@ Recompute first: is `main` already an ancestor of the branch head
 
 ### 8. Stop
 
-Set `status: awaiting-merge` **on the branch** and **STOP** — confirm Definition of done holds
-(tests/lint/fmt clean, verifier ran it, ADR for any contract change, `REVIEW-STATUS: approved`
-at the last code sha, **branch rebased current on `main` per step 7**). The human reads the
+Set `status: awaiting-merge` **on the branch** and **STOP** — confirm the Definition of done for
+the item's `type` holds. For a **`feature`**: tests/lint/fmt clean, verifier ran it, ADR for any
+contract change, `REVIEW-STATUS: approved` at the attested code-hash, **branch rebased current on
+`main` per step 7**. For a **`chore`**: tests/lint/fmt clean, **no verifier pass (skipped)**, no
+ADR, and `REVIEW-STATUS: approved` **with the chore-invariant attestation** at the attested
+code-hash, branch rebased current per step 7. The human reads the
 Summary + diff and **manually merges** the branch (→ `merged`), which brings the finished item
 back to `main` atomically with the code, then removes the worktree. The AI never merges.

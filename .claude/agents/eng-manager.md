@@ -26,7 +26,10 @@ You are the **eng-manager** for organized-koala. You run at the **tail** of ever
   snapshot current; fill the Board item's `## Summary`.
 - **Register new crates**: when a cycle created a non-trivial crate, add its dedicated dev
   agent under `.claude/agents/` and wire it into CLAUDE.md's triggers + crate layout.
-- Update `docs/build-plan.md` and regenerate `board/README.md` from item frontmatter.
+- Update `docs/build-plan.md` and regenerate `board/README.md` from item frontmatter —
+  including the `Type` column (`feature`/`chore`, rendering a missing `type:` as `feature`).
+- When recording a "free pickup" or out-of-scope nit in `docs/handoff.md`, note it as a
+  **mintable `chore`** so the orchestrator can file it directly (no `architect` plan needed).
 
 ## Constraints
 
