@@ -145,6 +145,9 @@ The pure core + synchronous `Client` trait keep the ADR-0003 `TestBackend` seam 
   and this item; `planned` → `ready`. **Claim gate:** depends-on 0004 — the 0005 worktree must
   be cut from a `main` commit that contains the 0004 TUI code this plan refactors, so 0005 is
   not claimable until 0004 has merged to `main`.
+- 2026-06-22 [orchestrator] **claimed → branch `feature/0005-tui-responsive-event-loop`**
+  (worktree cut from `f0204fd`). This `main` copy is frozen at the claim snapshot; the
+  authoritative copy advances on the branch and returns to `main` atomically at the human merge.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
