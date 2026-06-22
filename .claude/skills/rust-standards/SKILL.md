@@ -68,6 +68,20 @@ Idiomatic Rust layout (see [Rust by Example — Testing](https://doc.rust-lang.o
   is the sanctioned external-service trait — no internal collaborator is mocked. If view code
   and HTTP code intertwine (so the suite can't be written without a live server or TTY), that
   is the ADR-0003 architecture smell — bubble up, don't bend the test.
+- **When the effectful shell is a worker thread + channels, test the pure seam with a
+  synchronous worker-analogue executor (learned 0005).** ADR-0006 moved IO off the UI thread:
+  the core became two pure steps — `handle_event(Event) -> Option<Dispatch>` (emits a request,
+  does no IO) and `apply_response(ClientResponse) -> Option<Dispatch>` (folds the result back in,
+  possibly chaining a follow-up) — with a real worker thread mapping each `ClientRequest` through
+  the live `Client` over `mpsc`. The sanctioned way to test that two-step seam is a small
+  **synchronous executor in the test harness that mirrors the worker**: it takes each emitted
+  `ClientRequest`, maps it through the injected fake `Client` (the sole external-service mock) to
+  a `ClientResponse`, feeds that into `apply_response`, and loops on chained follow-ups until the
+  flow settles. This drives the full request/response cycle end-to-end with **no async runtime
+  and no thread in the test**, and the only mock remains the sanctioned trait — the executor is
+  test-side plumbing, not a mocked internal collaborator. If writing that executor instead feels
+  like mocking an internal collaborator (it has to reach inside the core, not just at the
+  `Client` seam), that is the ADR-0003 smell — bubble up, don't bend the test.
 
 ### Documentation
 

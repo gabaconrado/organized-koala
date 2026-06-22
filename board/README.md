@@ -27,7 +27,7 @@ for an in-flight item the authoritative live status is on its branch.
 | [0002](./features/0002-contract-crate.md) | Contract crate + workspace restructure (slice 1 of 0001) | merged | high | — | — (merged) |
 | [0003](./features/0003-server-auth-profile-tasks.md) | Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001) | merged | high | 0002 | — (merged) |
 | [0004](./features/0004-tui-foundational.md) | TUI — register/login, default profile, task add/list/close (slice 3 of 0001) | merged | high | 0003 | — (merged) |
-| [0005](./features/0005-tui-responsive-event-loop.md) | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | ready | high | 0004 | — (not yet claimed) |
+| [0005](./features/0005-tui-responsive-event-loop.md) | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | ready (claim snapshot; live on branch) | high | 0004 | `feature/0005-tui-responsive-event-loop` |
 
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
@@ -36,11 +36,15 @@ for an in-flight item the authoritative live status is on its branch.
 > across restart, OTel spans; the ADR-0003 layer-2 `TestBackend` suite green). The tracer bullet
 > TUI ↔ `contract` ↔ server ↔ Postgres is complete.
 >
-> **Next up — `0005` (`ready`):** make the TUI responsive while requests are in flight (spinner +
-> cancel, no UI freeze) and reorganize `tui::app` into feature submodules. Governed by
+> **In flight — `0005` (branch-owned, mid-cycle).** Makes the TUI responsive while a request is
+> in flight (animated spinner + Esc-cancel, no UI freeze) and reorganizes `tui::app` into
+> `auth`/`task_add`/`task_list` submodules + `protocol.rs`. Governed by
 > [ADR-0006](../docs/adr/0006-tui-concurrency-and-responsiveness.md) (**Model A**: synchronous
-> `Client` on a worker thread + `mpsc` + polled render loop; no async runtime). Depends on `0004`
-> (now merged), so it is claimable on the next `/drive`.
+> `Client` on a worker thread + `std::sync::mpsc` + polled render loop; no async runtime).
+> TUI-only — `contract`/`server` unchanged. Reviewer **approved** + verifier **verified**, both
+> pinned to code-hash `bc89672d4be5cdecd0bb54b340a24a5b8741cf21`. The live status is on the
+> branch (heading to `awaiting-merge` this cycle); `main`'s snapshot above is frozen at the claim
+> (`ready` + pointer) until the human's merge.
 >
 > **Sanctioned follow-up (not yet a Board item):** a reported-only `./ok.sh coverage` verb over
 > `cargo-llvm-cov` (no hard threshold, not a DoD gate) — `architect` to plan it as a new item.

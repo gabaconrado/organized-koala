@@ -5,6 +5,110 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-22 (0005 — TUI responsive (non-blocking) event loop + `tui::app` reorg)
+
+Branch: `feature/0005-tui-responsive-event-loop` (last code sha `a4f99fd`, code-hash
+`bc89672d4be5cdecd0bb54b340a24a5b8741cf21`). The first item past the foundational slice: it
+resolves 0004's re-homed responsiveness feedback (*"the TUI freezes during every HTTP
+request"*) and folds in the requested `tui::app` submodule reorg (both restructure the same
+module). The cycle ran build → review → verify and stopped at the AI-terminal `awaiting-merge`
+on the branch. **TUI-only — `crates/contract` and `crates/server` are byte-identical to base
+`f0204fd`; no wire change, no new ADR beyond 0006.**
+
+What shipped (on the branch):
+
+- **Responsive UI per [ADR-0006][adr-0006] Model A** — synchronous `Client` on a worker thread,
+  `std::sync::mpsc` request/response, a polled render loop, **no `tokio`/async runtime**. The UI
+  thread never blocks on IO; a spinner animates and Esc(cancel)/Ctrl+C,`q`(quit) stay live in
+  flight. `client/worker.rs` is a single thread owning the real `HttpClient`, mapping a
+  `ClientRequest` → `Outcome` over two `mpsc` channels (no new dep). `terminal::run` is now a
+  poll loop: `event::poll(80ms)` for input + `try_recv` response drain + per-tick redraw. A 30s
+  `reqwest` timeout bounds an abandoned request (the `Client` trait is unchanged). `main.rs`
+  spawns the worker and passes the channels in.
+- **Client-free pure core.** The `App<C>` generic is gone. The core is two pure seams:
+  `handle_event(Event) -> Option<Dispatch>` and `apply_response(ClientResponse) ->
+  Option<Dispatch>` (chaining follow-ups — post-auth profile→task load, post-create refresh).
+  Error-code branching is preserved unchanged and routes async-arriving responses through the
+  same handlers.
+- **One-in-flight + cancel.** Each screen carries a transient `pending: Option<RequestId>`;
+  while set, request-triggering events are no-ops, `Cancel`/`Quit` stay live. Cancel is
+  user-perceived — the screen leaves the in-flight state at once and a superseded response is
+  dropped by `RequestId`-mismatch in `apply_response`; the worker is not force-killed.
+- **`tui::app` reorg.** `app/mod.rs` keeps `App`/`Screen`/`Session`/`Event` + the
+  `handle_event`/`apply_response` wiring; `app/protocol.rs` holds the pure
+  `ClientRequest`/`ClientResponse`/`Outcome`/`RequestId`/`Dispatch` types; feature submodules
+  `auth.rs`/`task_add.rs`/`task_list.rs` each own their screen state and handlers.
+- **Tests (tester).** Added a synchronous request executor to `tests/common/mod.rs`
+  (`execute`/`drive`/`submit`) — the test-side analogue of the worker thread: it maps a
+  `Dispatch`'s `ClientRequest` through the `FakeClient` (the sole external-service mock) to a
+  `ClientResponse` and feeds it back into `apply_response`, looping on chained follow-ups until
+  the flow settles. No internal collaborator is mocked. The `TestBackend` suite (ADR-0003 layer
+  2) is green and extended for in-flight render/no-op, cancel + stale-`RequestId` drop,
+  at-most-one-chained-request, and Esc→Cancel/Ctrl+C→Quit while pending (tui: flows 9,
+  error_branches 10, in_flight 5, keybindings 13, rendering 11).
+
+Verdicts (both pinned to code-hash `bc89672d4be5cdecd0bb54b340a24a5b8741cf21`):
+
+- **Reviewer: REVIEW-STATUS approved.** Gates green; `handle_event`/`apply_response` pure,
+  `App<C>` gone; one-in-flight invariant holds; stale/superseded `RequestId`-mismatch drop
+  correct; error-code branching preserved; `contract` diff empty; no tokio/async
+  (`reqwest::blocking` + `std::thread` + `std::mpsc`); 30s timeout + clean worker teardown; no
+  secret-leak path; tests are public-API with only the `Client` trait mocked. One non-blocking,
+  **pre-existing** nit: a stale doc comment at `main.rs:4` (about an initial health probe —
+  already stale at base `f0204fd`, out of scope here; **flagged for opportunistic cleanup in a
+  future TUI-touching cycle**).
+- **Verifier: VERIFY-STATUS verified.** Confirmed `crates/server`+`crates/contract` diff vs
+  `f0204fd` empty. Live over `./ok.sh up` (Docker 29.5.3 + Compose; postgres → migrate one-shot
+  → server → otel-collector): register/login, `GET /api/profiles`, task create/list/close, the
+  `{code,message}` error contract with correct statuses, two-user profile-scoping isolation (no
+  cross-profile read/write, 404 no existence leak), OTel server spans for every client call.
+  ADR-0003 delegation handshake: `TestBackend` suites present + green. Inferred (code-read):
+  that `HttpClient` issues exactly those requests — the standard ADR-0003 split (interactive TUI
+  owned by the green `TestBackend` suite).
+
+Durable learnings captured this cycle (each to the smallest right home, all on `main`):
+
+- **rust-standards + tester agent — the worker-analogue synchronous test executor is the
+  sanctioned way to test a pure `handle_event`/`apply_response` seam without async.** When the
+  effectful shell is a worker thread + channels (ADR-0006 Model A), the test harness mirrors it
+  with a small synchronous executor that maps each emitted `ClientRequest` through the injected
+  fake `Client` and feeds the `ClientResponse` back into `apply_response`, looping on chained
+  follow-ups. This drives the two-step seam end-to-end with the only mock being the sanctioned
+  external-service trait — no internal collaborator, no async runtime. Recorded as the general
+  pattern in `rust-standards` and as front-of-mind tester guidance.
+
+Deliberately **skipped** (did not earn a durable edit): **no `CLAUDE.md` gotcha** — this cycle
+hit no new recurring miss. The three-home model, the contract-frozen boundary (#2), and
+statelessness (#1) all held cleanly, and the pure-core/effectful-shell rule (the executor's
+foundation) already lives in `rust-standards`. No `docs-standards`/`bash-standards`/
+`coding-standards`/`git-standards` change — nothing new surfaced there. **No new crate** → no
+new dev agent; `tui-dev` already owns `crates/tui`. No new ADR — inside ADR-0006/ADR-0003.
+
+Next cycle should know:
+
+- **The poll-loop redraw path is a new candidate trigger for `docs/manual-smoke.md`.** Spinner
+  repaint and terminal raw-mode teardown are invisible to `TestBackend` (accepted residual risk
+  per ADR-0003 §3); when the manual-smoke checklist is authored, add a "request in flight →
+  spinner animates, Esc cancels, terminal restores cleanly on quit" item.
+- The **`main.rs:4` stale doc comment** (pre-existing health-probe nit) is a free pickup for the
+  next `tui-dev` touch.
+- Still pending from earlier cycles (not lost): the operator-sanctioned reported-only `./ok.sh
+  coverage` verb over `cargo-llvm-cov` (no hard threshold) — `architect` to plan as a `main`-side
+  item; and the deferred TUI backlog (profile-switch UX, task edit/delete, Notes, Pomodoro gated
+  on ADR-0002, TUI-side OTel).
+
+**Homes.** Cross-cutting edits on `main` (homes #1/#3): this `docs/handoff.md` entry (+ the
+"What works right now" snapshot refreshed), the `rust-standards`/`tester` learning,
+`docs/build-plan.md`, and the regenerated `board/README.md`. **Feature-local on the branch
+(home #2):** the item's `## Summary`. The orchestrator advances the branch status to
+`awaiting-merge` after this; **`main`'s frozen copy of
+`board/features/0005-tui-responsive-event-loop.md` is left untouched** at the claim snapshot
+until the human's merge.
+
+[adr-0006]: ./adr/0006-tui-concurrency-and-responsiveness.md
+
+---
+
 ## Handoff — 2026-06-18 (0004 — TUI: register/login + profile + task add/list/close; slice 0001 closes)
 
 Branch: `feature/0004-tui-foundational` (last code sha `8fb0505`). Slice 3 of 3 of the 0001
@@ -574,20 +678,27 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   `run`/`migrate`/`rollback` CLI, reversible migrations, `tracing`/OTLP instrumentation, and the
   `deploy/` docker stack (compose `server` healthcheck on `/healthz`). Merged after a four-item
   human-feedback re-entry; reviewed + live-verified under the sanctioned docker mechanism.
-- **The TUI is written, code-reviewed, live-verified, and `awaiting-merge`** (0004, branch-owned
-  on `feature/0004-tui-foundational`): `organized-koala` (ratatui/crossterm/reqwest) completes
+- **The TUI is merged on `main`** (0004): `organized-koala` (ratatui/crossterm/reqwest) completes
   the loop — register/login (auto-selecting the single default profile), task list (newest-first,
   done/undone markers, add Title+Description, mark-done), ADR-0005 error-code branching
   (`unauthenticated`→login, `validation_failed`→inline, offline→blocking+retry), and statelessness
   (JWT + active profile id in process memory only). Built as a pure core (update fn + draw fns +
   `map_key`) behind an injected `Client` trait, so the whole interactive surface is `TestBackend`-
-  tested (35 tests, ADR-0003 layer 2). Reviewer **approved `8fb0505`**; verifier returned
-  **`verified 8fb0505`** live over the full reqwest path (Docker 29.5.3 / Compose v5.1.4 — error
-  contract, profile-scoping, persistence, OTel spans). **0004 is `awaiting-merge` on its branch**;
-  `main`'s snapshot stays frozen until the human's merge.
-- **Merging 0004 closes the foundational slice 0001.** With 0002/0003 already on `main` and 0004
-  the last child, the end-to-end acceptance (TUI ↔ contract ↔ server ↔ Postgres) becomes
-  closeable; `0001` (umbrella) is the only foundational item left open after that.
+  tested (ADR-0003 layer 2). Reviewed + live-verified over the full reqwest path.
+- **The foundational slice 0001 is CLOSED.** With 0002/0003/0004 all on `main`, the umbrella
+  0001 merged too — the end-to-end tracer bullet TUI ↔ contract ↔ server ↔ Postgres is complete.
+- **The TUI responsive event loop is written, reviewed, live-verified, and `awaiting-merge`**
+  (0005, branch-owned on `feature/0005-tui-responsive-event-loop`): the TUI no longer freezes
+  during an HTTP request — it keeps rendering, animates a spinner with a "working… (Esc to
+  cancel)" hint, and stays interactive in flight. Per [ADR-0006][adr-0006] Model A: a synchronous
+  `Client` on a worker thread, `std::sync::mpsc` request/response, a polled (`event::poll`) render
+  loop — **no async runtime**. The `App` core is now client-free with two pure seams
+  (`handle_event`/`apply_response`); one request in flight at a time (transient `pending:
+  Option<RequestId>`), cancel is user-perceived (stale-`RequestId` response dropped). `tui::app`
+  was reorganized into `auth`/`task_add`/`task_list` submodules + `protocol.rs`. TUI-only —
+  `contract`/`server` unchanged. Reviewer **approved** + verifier **verified**, both pinned to
+  code-hash `bc89672d4be5cdecd0bb54b340a24a5b8741cf21`. **0005 is `awaiting-merge` on its
+  branch**; `main`'s snapshot stays frozen until the human's merge.
 - **Pending plan (operator-sanctioned, not yet a Board item):** a reported-only coverage verb —
   `./ok.sh coverage` over `cargo-llvm-cov`, **no hard threshold**, not a DoD gate. `architect` to
   plan it as a new `main`-side item; `platform-dev` owns the verb.

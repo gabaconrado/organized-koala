@@ -25,6 +25,13 @@ You are the **tester** for organized-koala.
   exercised via `ratatui`'s `TestBackend` (in-memory buffer) with synthetic `crossterm`
   `KeyEvent`s and the server mocked. This is the **gated home** of interactive-TUI verification
   per [ADR-0003][adr-0003]; the verifier does not drive the TUI.
+- **Test a worker-thread async seam with a synchronous worker-analogue executor (learned 0005).**
+  When the core is a pure `handle_event(Event) -> Option<Dispatch>` / `apply_response(...)` seam
+  fronting a real worker thread + `mpsc` (ADR-0006 Model A), put a small synchronous executor in
+  the test harness that mirrors the worker: map each emitted `ClientRequest` through the fake
+  `Client` (the sole external-service mock) to a `ClientResponse`, feed it into `apply_response`,
+  loop on chained follow-ups until the flow settles. No async runtime, no thread, no internal
+  collaborator mocked. See `rust-standards`.
 
 ## Constraints
 
