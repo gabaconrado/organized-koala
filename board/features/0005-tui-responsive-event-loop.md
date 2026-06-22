@@ -1,7 +1,7 @@
 ---
 id: 0005
 title: TUI — responsive (non-blocking) event loop + tui::app submodule reorganization
-status: working     # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review      # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high      # high | medium | low
 parent: null
 depends-on: [0004]
