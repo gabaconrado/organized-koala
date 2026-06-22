@@ -11,31 +11,59 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::app::{App, AuthField, AuthMode, AuthState, Screen, TaskListState};
-use crate::client::Client;
 use contract::TaskStatus;
 
-/// Draws the whole application for the current frame, dispatching on the active screen.
-pub fn draw<C: Client>(frame: &mut Frame, app: &App<C>) {
+/// The frames of the in-flight spinner, cycled by the poll loop's tick counter.
+const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
+
+/// The spinner glyph for the given tick, or empty when not pending. Pure so the spinner cadence
+/// is testable independently of the real loop's timing.
+#[must_use]
+pub fn spinner_frame(tick: u64) -> &'static str {
+    // `SPINNER_FRAMES.len()` is 4; index via the u64 tick without a lossy `as` conversion.
+    let i = usize::try_from(tick % 4).unwrap_or(0);
+    SPINNER_FRAMES.get(i).copied().unwrap_or("|")
+}
+
+/// Draws the whole application for the current frame, dispatching on the active screen. `tick`
+/// drives the in-flight spinner animation; it is ignored when no request is outstanding.
+pub fn draw(frame: &mut Frame, app: &App, tick: u64) {
     match app.screen() {
-        Screen::Auth(auth) => draw_auth(frame, auth),
+        Screen::Auth(auth) => draw_auth(frame, auth, tick),
         Screen::TaskList(list) => {
             let profile = app.session().map_or("", |s| s.profile_name.as_str());
-            draw_task_list(frame, list, profile);
+            draw_task_list(frame, list, profile, tick);
         }
-        Screen::Offline { message } => draw_offline(frame, message),
+        Screen::Offline { message, pending } => {
+            draw_offline(frame, message, pending.is_some(), tick);
+        }
     }
 }
 
-fn draw_auth(frame: &mut Frame, auth: &AuthState) {
+/// The "working…" hint shown while a request is outstanding, with the animated spinner glyph.
+fn working_hint(tick: u64) -> String {
+    format!("{} working… (Esc to cancel)", spinner_frame(tick))
+}
+
+fn draw_auth(frame: &mut Frame, auth: &AuthState, tick: u64) {
     let area = frame.area();
+    let working = working_hint(tick);
     let (title, hint) = match auth.mode {
         AuthMode::Login => (
             "Login",
-            "Enter: submit  Tab: next field  F2: switch to register  Esc/Ctrl+C: quit",
+            if auth.is_pending() {
+                working.as_str()
+            } else {
+                "Enter: submit  Tab: next field  F2: switch to register  Esc/Ctrl+C: quit"
+            },
         ),
         AuthMode::Register => (
             "Register",
-            "Enter: submit  Tab: next field  F2: switch to login  Esc/Ctrl+C: quit",
+            if auth.is_pending() {
+                working.as_str()
+            } else {
+                "Enter: submit  Tab: next field  F2: switch to login  Esc/Ctrl+C: quit"
+            },
         ),
     };
 
@@ -149,7 +177,7 @@ fn draw_field(
     frame.render_widget(Paragraph::new(shown).block(block), area);
 }
 
-fn draw_task_list(frame: &mut Frame, list: &TaskListState, profile: &str) {
+fn draw_task_list(frame: &mut Frame, list: &TaskListState, profile: &str, tick: u64) {
     let area = frame.area();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -211,7 +239,10 @@ fn draw_task_list(frame: &mut Frame, list: &TaskListState, profile: &str) {
     }
 
     if let Some(slot) = chunks.get(3) {
-        let hint = if list.adding.is_some() {
+        let working = working_hint(tick);
+        let hint = if list.is_pending() {
+            working.as_str()
+        } else if list.adding.is_some() {
             "Enter: save  Tab: switch field  Esc: cancel"
         } else {
             "a: add  c: mark done  Up/Down: move  r: refresh  q: quit"
@@ -223,15 +254,20 @@ fn draw_task_list(frame: &mut Frame, list: &TaskListState, profile: &str) {
     }
 }
 
-fn draw_offline(frame: &mut Frame, message: &str) {
+fn draw_offline(frame: &mut Frame, message: &str, pending: bool, tick: u64) {
     let area = frame.area();
     let block = Block::default()
         .borders(Borders::ALL)
         .title("Server unreachable");
+    let action = if pending {
+        working_hint(tick)
+    } else {
+        "Press r to retry, or Esc/Ctrl+C to quit.".to_owned()
+    };
     let lines = vec![
         Line::from(Span::raw(message.to_owned())),
         Line::from(""),
-        Line::from(Span::raw("Press r to retry, or Esc/Ctrl+C to quit.")),
+        Line::from(Span::raw(action)),
     ];
     frame.render_widget(
         Paragraph::new(lines).block(block).wrap(Wrap { trim: true }),

@@ -6,6 +6,8 @@
 //! [`contract`] DTOs, and every failure is a typed [`ClientError`] that preserves the
 //! server's machine-matchable [`ErrorCode`](contract::ErrorCode).
 
+pub mod worker;
+
 use contract::{
     CreateTaskRequest, ErrorBody, ErrorCode, LoginRequest, Profile, RegisterRequest,
     SessionResponse, Task,
@@ -127,6 +129,11 @@ pub struct HttpClient {
     http: reqwest::blocking::Client,
 }
 
+/// Client-side request timeout. Bounds how long an abandoned (user-cancelled) request occupies
+/// the worker thread before its connection is torn down (ADR-0006 §4); a cancelled request's
+/// response is dropped by `RequestId` mismatch regardless, this just frees the worker.
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 impl HttpClient {
     /// Builds a client targeting `base_url` (scheme + host + port, no trailing slash).
     ///
@@ -134,7 +141,9 @@ impl HttpClient {
     ///
     /// Returns an error if the underlying `reqwest` client cannot be constructed.
     pub fn new(base_url: impl Into<String>) -> anyhow::Result<Self> {
-        let http = reqwest::blocking::Client::builder().build()?;
+        let http = reqwest::blocking::Client::builder()
+            .timeout(REQUEST_TIMEOUT)
+            .build()?;
         Ok(Self {
             base_url: base_url.into(),
             http,

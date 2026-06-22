@@ -158,6 +158,18 @@ The pure core + synchronous `Client` trait keep the ADR-0003 `TestBackend` seam 
   refresh as follow-up dispatches). Dropped the `App<C>` generic — the core holds no client.
   In-flight marker is `pending: Option<RequestId>` per screen state; error-code branching
   preserved unchanged.
+- 2026-06-22 [tui-dev] slice 2 — edge: worker thread + poll loop. Added `client/worker.rs`: a
+  single thread owning the real `HttpClient`, mapping `ClientRequest`→`Outcome` over two
+  `std::sync::mpsc` channels (no new dep, no async). Rewrote `terminal::run` as a poll loop
+  (`event::poll(80ms)` for input + `try_recv` drain of responses + per-tick redraw) so the UI
+  never blocks on IO; the spinner animates and `Esc` (cancel) / `Ctrl+C`,`q` (quit) stay live in
+  flight. At most one request in flight (enforced in the pure core); a stale `RequestId`-mismatch
+  response is dropped in `apply_response`. `map_key` now maps `Esc` to `Cancel` while pending.
+  Added a 30s `reqwest` client-side timeout to bound abandoned requests (trait unchanged). Added
+  spinner glyph + "working… (Esc to cancel)" hint rendering in `ui/`; `ui::draw` takes a tick.
+  Wired `main.rs` to spawn the worker and pass the channels to `terminal::run`. `./ok.sh build`
+  green; lint/test failures remaining are solely in `crates/tui/tests/**` (old `App<C>` API) —
+  slice 3 (tester) adapts them.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary

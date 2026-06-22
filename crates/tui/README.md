@@ -16,15 +16,23 @@ path can be exercised against a real server:
   probe), implemented by [`HttpClient`](crate::client::HttpClient) on `reqwest`. The standard
   error body `{ code, message }` is mapped to a typed
   [`ClientError`](crate::client::ClientError) that preserves the machine-matchable `code`.
-- [`app`](src/app) — the app core. A screen state machine
-  ([`App`](crate::app::App)) advanced by **pure update functions** over
-  [`Event`](crate::app::Event)s, with the [`Client`](crate::client::Client) injected. It
-  holds no terminal or transport types and performs no I/O of its own, so it is exhaustively
-  unit-testable.
+- [`app`](src/app) — the app core. A screen state machine ([`App`](crate::app::App)) advanced
+  by **two pure functions**: [`handle_event`](crate::app::App::handle_event) folds an
+  [`Event`](crate::app::Event) into the next state and returns an optional
+  [`ClientRequest`](crate::app::ClientRequest) to run, and
+  [`apply_response`](crate::app::App::apply_response) folds a completed server
+  [`ClientResponse`](crate::app::ClientResponse) back into state. The core holds **no** client
+  and performs no I/O, so it is exhaustively unit-testable with no threads. Per-feature
+  submodules (`auth`, `task_add`, `task_list`) own their screen state; `app/mod.rs` keeps the
+  `App`/`Screen` wiring and the request/response protocol.
 - [`ui`](src/ui) — rendering. Pure draw functions from an [`App`](crate::app::App) onto a
-  `ratatui` frame; no state lives here.
+  `ratatui` frame, including the in-flight spinner; no state lives here.
 - [`terminal`](src/terminal) — the crossterm driver. Owns raw-mode setup/teardown and the
-  blocking input loop that pumps key events into the app core and renders each frame.
+  **non-blocking poll loop** (ADR-0006): it polls input with a tick timeout, drains the worker's
+  response channel, and redraws every tick, so the UI stays live and a spinner animates while a
+  request is outstanding. The [`worker`](crate::client::worker) thread owns the real
+  [`HttpClient`](crate::client::HttpClient) and executes requests off the UI thread; at most one
+  request is in flight, and a cancelled request's late response is dropped by id.
 
 ## Statelessness
 
