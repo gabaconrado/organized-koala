@@ -221,6 +221,13 @@ reqwest path against the live 0003 stack (layer 1).
     twice under the soon-to-be-replaced synchronous model. Resolved-by-routing so 0004
     (verified, closes 0001) stays mergeable; not implemented on this branch by design.
     Board-only edit — review/verify verdicts unaffected.
+- 2026-06-22 [orchestrator] freshened onto `main`@548d56c (the code-tree-hash pinning
+  hardening + its step-7 gotcha note — all non-code: `ok.sh`/`CLAUDE.md`/drive skill).
+  **First application of the new step-7 gate:** `./ok.sh code-hash` is unchanged at
+  `d7088844…` = the attested verdict hash, so the approved+verified verdicts **carry forward
+  with no relabelling**. The sha citations above (`6d09213`) are now stale human-readable
+  pointers, not the binding key — the binding key is the code-tree hash (CLAUDE.md
+  "Verdict pinning"). Gates re-run green (`fmt --check`/`lint`/`test`); ff-mergeable.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
