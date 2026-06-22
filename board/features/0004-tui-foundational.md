@@ -212,6 +212,9 @@ reqwest path against the live 0003 stack (layer 1).
   `docs/` + `.claude/` + this Board file), so the approved+verified attestation carries forward
   unchanged — no re-review needed (DoD clause 7, code-identical branch). Gates re-run green on
   the rebased tree (`test`/`lint`/`fmt --check`); no code commit follows `53da791`.
+- [ ] 2026-06-22 [human] suggestion: in `tui::app`, organize the methods/structs by
+  submodule based on the feature (`auth`, `task_add`, `task_list`), leaving in `mod.rs`
+  only the wiring/infrastructure code.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
