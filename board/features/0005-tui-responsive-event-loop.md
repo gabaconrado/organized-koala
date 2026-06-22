@@ -217,6 +217,13 @@ The pure core + synchronous `Client` trait keep the ADR-0003 `TestBackend` seam 
   the rebased head is unchanged at `bc89672d4be5cdecd0bb54b340a24a5b8741cf21` (= OLD_HASH), so the
   code is byte-identical and the `approved`/`verified` verdicts **carry forward untouched** — no
   relabelling. Re-ran gates on the rebased tree: test/lint/fmt all green. `working`→`awaiting-merge`.
+- 2026-06-22 [orchestrator] step-7 re-freshen: rebased branch onto `main` (`8402ef2`; the `chore`
+  Board-item-type governance change + `docs/manual-smoke.md` in-flight check + handoff
+  annotations — all docs/`.claude`/Board, no `crates/` touch). Clean rebase, no conflict.
+  `./ok.sh code-hash` at the rebased head is unchanged at
+  `bc89672d4be5cdecd0bb54b340a24a5b8741cf21` (= OLD_HASH), so the code is byte-identical and the
+  `approved`/`verified` verdicts **carry forward untouched** — no relabelling. Re-ran gates on the
+  rebased tree: test/lint/fmt all green. Stays `awaiting-merge`.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
