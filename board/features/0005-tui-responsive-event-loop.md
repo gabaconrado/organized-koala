@@ -215,5 +215,70 @@ The pure core + synchronous `Client` trait keep the ADR-0003 `TestBackend` seam 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
 
+The `organized-koala` TUI no longer freezes while a server request is outstanding. It keeps
+rendering, animates a spinner with a "working… (Esc to cancel)" hint, and stays interactive
+(Esc cancels, Ctrl+C/`q` quit) for the whole in-flight window. Folded in: `tui::app` is
+reorganized into per-feature submodules. **TUI-only change — `crates/contract` and
+`crates/server` are byte-identical to base `f0204fd` (no wire change, no ADR beyond 0006).**
+
+**Design — [ADR-0006][adr-0006] Model A (synchronous client on a worker thread; no async).**
+All concurrency is confined to the edge. The `App` core is now **client-free** and built from
+two pure seams: `handle_event(Event) -> Option<Dispatch>` (a state machine over a
+transport-agnostic `Event`, doing no IO) and `apply_response(ClientResponse) -> Option<Dispatch>`
+(folds an arriving response into state, chaining follow-ups — post-auth profile→task load,
+post-create refresh — as further dispatches). The `App<C>` generic is gone; the core holds no
+`Client`. The effectful shell is a single worker thread (`client/worker.rs`) owning the real
+`HttpClient`, mapping a `ClientRequest` to an `Outcome` over two `std::sync::mpsc` channels
+(no new dependency, no `tokio`/async). `terminal::run` is now a poll loop: `event::poll(80ms)`
+for input + `try_recv` drain of responses + a per-tick redraw, so the UI thread never blocks on
+IO. A 30s `reqwest` client-side timeout bounds an abandoned request (the `Client` trait is
+unchanged). `main.rs` spawns the worker and hands the channels to `terminal::run`.
+
+**One-in-flight invariant + cancel.** Each screen state carries a transient `pending:
+Option<RequestId>`. While set, request-triggering events are no-ops (the pure core
+short-circuits); `Cancel`/`Quit` stay live. Cancel is **user-perceived**: the screen leaves
+the in-flight state immediately and a later, now-superseded response is dropped by
+`RequestId`-mismatch in `apply_response` — the worker is not force-killed. Error-code branching
+(`unauthenticated`→login, `validation_failed`/`invalid_credentials`→inline, offline→blocking
+retry, coded-less→generic) is preserved unchanged and routes asynchronously-arriving responses
+through the same handlers.
+
+**Module layout.** `crates/tui/src/app/` is now: `mod.rs` (the `App` struct, `Screen`,
+`Session`, `Event`, and the `handle_event`/`apply_response` wiring + shared infrastructure);
+`protocol.rs` (the pure `ClientRequest`/`ClientResponse`/`Outcome`/`RequestId`/`Dispatch`
+types); and feature submodules `auth.rs`, `task_add.rs`, `task_list.rs` (each owning its screen
+state and handlers).
+
+**Test executor pattern.** `tester` added a synchronous request executor to
+`tests/common/mod.rs` (`execute`/`drive`/`submit`) — the test-side analogue of the worker
+thread: it maps a `Dispatch`'s `ClientRequest` through the `FakeClient` (the sole
+external-service mock) to a `ClientResponse` and feeds it back into `apply_response`, looping on
+chained follow-ups until the flow settles. This exercises the pure two-step seam end-to-end
+with no async and no internal collaborator mocked. The `TestBackend` suite (ADR-0003 layer 2)
+is green and extended: in-flight render (spinner glyph + hint, `spinner_glyph_advances_with_the_tick`),
+in-flight no-op, `Cancel` clears in-flight + restores interactivity, stale/superseded
+`RequestId`-drop, at-most-one-chained-request, and Esc→Cancel / Ctrl+C→Quit while pending —
+tui totals: flows 9, error_branches 10, in_flight 5, keybindings 13, rendering 11.
+
+**Verified vs. inferred.** Reviewer **approved** and verifier **verified**, both pinned to
+code-hash `bc89672d4be5cdecd0bb54b340a24a5b8741cf21`. Gates green: `./ok.sh test`/`lint`/`fmt
+--check` all exit 0. The verifier confirmed (per ADR-0003) `crates/server`+`crates/contract`
+are unchanged vs base and ran the live reqwest client path against `./ok.sh up` (register/login,
+profiles, task create/list/close, the `{code,message}` error contract with correct statuses,
+two-user profile-scoping isolation with no existence leak, OTel server spans), and confirmed the
+extended `TestBackend` suites green. **Inferred (code-read):** that `HttpClient` issues exactly
+those requests — the standard ADR-0003 split, since interactive TUI behaviour (spinner,
+in-flight no-op, cancel, error-code branching) is owned by the green `TestBackend` suite, not
+the verifier. Spinner repaint and terminal raw-mode teardown remain invisible to `TestBackend`
+(accepted residual risk, covered by `docs/manual-smoke.md`, not gated here).
+
+**Hard constraints.** **#1 (statelessness) holds:** the only new state is the transient
+in-flight marker + spinner tick — process-lifetime UI state, never persisted, never cached
+server data; JWT + active profile id remain in memory only; every view still derives from a
+server response. **#2 (contract is the single source of truth) holds:** `crates/contract` is
+unchanged; the TUI defines no wire types. The new protocol types (`ClientRequest`/
+`ClientResponse`/`Dispatch`/`RequestId`) are **internal TUI control messages**, not wire shapes
+— they cross the in-process `mpsc` boundary, never the network.
+
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0006]: ../../docs/adr/0006-tui-concurrency-and-responsiveness.md
