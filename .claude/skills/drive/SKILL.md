@@ -117,7 +117,9 @@ Recompute first: is `main` already an ancestor of the branch head
 - **Already current** → nothing to do; go to step 8.
 - **Behind** → the worktree must be clean (the per-slice commits in step 3 ensure this; if not,
   abort and surface). **Record the attested verdict hash** as `OLD_HASH = ./ok.sh code-hash`
-  (at the approved head, before rebasing), then `git rebase main` in the worktree. The
+  (at the approved head, before rebasing) — run the **worktree's own** `./ok.sh` so `HEAD`
+  resolves the worktree head (`ok.sh` cd's to its own checkout; from a different checkout pass
+  an explicit sha, e.g. `code-hash <branch-sha>`). Then `git rebase main` in the worktree. The
   expected-and-only conflict is the feature-local Board file (`main`'s frozen-pointer note vs.
   the branch's authoritative copy) — resolve in favour of the **branch** (drop the pointer
   note). Then classify by the **decision gate** below:
