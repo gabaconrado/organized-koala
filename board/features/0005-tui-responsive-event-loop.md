@@ -187,6 +187,17 @@ The pure core + synchronous `Client` trait keep the ADR-0003 `TestBackend` seam 
   at-most-one-chained-request, `other_api_error_after_auth`, and Esc→Cancel / Ctrl+C→Quit
   keybindings while pending. `./ok.sh test` green (tui: error_branches 10, flows 9, in_flight 5,
   keybindings 13, rendering 11); `./ok.sh lint` clean; `./ok.sh fmt --check` clean.
+- 2026-06-22 [reviewer] cold review of `f0204fd..HEAD` (code commits 804849a/2630d03/a4f99fd).
+  Gates green (test/lint/fmt). Confirmed: `handle_event`/`apply_response` pure, `App<C>` generic
+  gone; one-in-flight invariant holds (pending short-circuit + same-screen re-dispatch on chains);
+  stale/superseded `RequestId`-mismatch drop correct (`in_flight.rs:118,157`); error-code branching
+  preserved through the shared handlers; `contract` diff empty; no tokio/async (reqwest::blocking +
+  std::thread + std::mpsc only); 30s timeout bounds abandoned requests; worker teardown clean; no
+  secret-leak path; tests are public-API with only the `Client` trait mocked. One non-blocking,
+  **pre-existing** nit (stale doc comment `main.rs:4` about an initial health probe — already stale
+  at base `f0204fd`, out of scope). **REVIEW-STATUS: approved** — pinned to code-hash
+  `bc89672d4be5cdecd0bb54b340a24a5b8741cf21` (last code commit `a4f99fd`; reported by reviewer,
+  committed here by orchestrator on-branch).
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
