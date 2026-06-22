@@ -1,10 +1,21 @@
 //! Shared test scaffolding for the `TestBackend` suite: a scripted fake [`Client`] (the
 //! sanctioned external-service mock — the HTTP server), DTO builders that parse the canonical
-//! wire JSON through the `contract` derives, and a `TestBackend` render helper.
+//! wire JSON through the `contract` derives, a synchronous request executor that is the test-side
+//! analogue of the worker thread, and a `TestBackend` render helper.
 //!
 //! The fake records the calls it received and returns scripted responses, so a test can both
 //! drive the app's update path and assert what crossed the (mocked) wire — proving every view
 //! derives from a server response (hard-constraint #1) with no internal collaborator mocked.
+//!
+//! The app core is two pure steps (ADR-0006): [`App::handle_event`] turns an [`Event`] into an
+//! optional [`Dispatch`], and [`App::apply_response`] folds a completed [`ClientResponse`] back
+//! into state (possibly returning a chained follow-up [`Dispatch`]). The effectful worker thread
+//! that maps a [`ClientRequest`] through the real client and ships back a [`ClientResponse`] is
+//! edge code, untestable in-process; [`execute`] / [`drive`] / [`submit`] below are its
+//! **synchronous test-side analogue** — they run a `ClientRequest` through the `FakeClient` (the
+//! sanctioned external-service mock) and feed the response back into `apply_response`, looping on
+//! follow-ups until none. This is *not* mocking an internal collaborator: the only mock is the
+//! `Client` trait (the server), exactly as the worker uses it.
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 // This module is `mod`-included by several integration-test binaries; not every one exercises
@@ -19,7 +30,10 @@ use contract::{CreateTaskRequest, LoginRequest, Profile, RegisterRequest, Sessio
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
-use tui::app::{AddTaskState, App, AuthField, AuthMode, AuthState, Screen, TaskListState};
+use tui::app::{
+    AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, Dispatch,
+    Event, Outcome, RequestId, Screen, TaskListState,
+};
 use tui::client::{Client, ClientError, ClientResult};
 
 /// One recorded call against the fake client, for asserting what crossed the wire.
@@ -62,7 +76,7 @@ pub enum Call {
 
 /// The shared interior of a [`FakeClient`]: scripted response queues plus the recorded call
 /// log. Held behind `Rc` so a test can keep a handle to script later responses and inspect
-/// recorded calls while the `App` owns its own clone of the same client.
+/// recorded calls while the executor borrows the same client.
 #[derive(Debug, Default)]
 struct Inner {
     calls: RefCell<Vec<Call>>,
@@ -78,8 +92,8 @@ struct Inner {
 /// A scripted, recording fake [`Client`] — the only mock in the suite, standing in for the
 /// external HTTP server (ADR-0003 layer 2). Each endpoint pops its next scripted response from a
 /// queue and records the call. Cloning yields another handle to the *same* shared state, so a
-/// test holds one handle (to script responses and read back recorded calls) while the `App`
-/// owns another.
+/// test holds one handle (to script responses and read back recorded calls) while the executor
+/// runs requests through another.
 #[derive(Debug, Clone, Default)]
 pub struct FakeClient {
     inner: Rc<Inner>,
@@ -188,6 +202,73 @@ impl Client for FakeClient {
     }
 }
 
+// ---- Synchronous request executor: the test-side analogue of the worker thread ----
+
+/// Run one [`ClientRequest`] through the (mocked) `client`, producing its [`Outcome`]. This
+/// mirrors the worker thread's request→outcome dispatch exactly, so the response the core sees in
+/// tests is identical to what the real edge would feed it — the only "mock" is the `Client` trait
+/// itself (the external HTTP server), never an internal collaborator.
+fn run_request(client: &FakeClient, request: ClientRequest) -> Outcome {
+    match request {
+        ClientRequest::Health => Outcome::Health(client.health()),
+        ClientRequest::Register(req) => Outcome::Register(client.register(&req)),
+        ClientRequest::Login(req) => Outcome::Login(client.login(&req)),
+        ClientRequest::ListProfiles { token } => {
+            let result = client.list_profiles(&token);
+            Outcome::ListProfiles { token, result }
+        }
+        ClientRequest::ListTasks { token, profile_id } => {
+            Outcome::ListTasks(client.list_tasks(&token, &profile_id))
+        }
+        ClientRequest::CreateTask {
+            token,
+            profile_id,
+            req,
+        } => Outcome::CreateTask(client.create_task(&token, &profile_id, &req)),
+        ClientRequest::CloseTask {
+            token,
+            profile_id,
+            task_id,
+        } => Outcome::CloseTask(client.close_task(&token, &profile_id, &task_id)),
+    }
+}
+
+/// Execute one [`Dispatch`] against the fake client and return the [`ClientResponse`] the edge
+/// would ship back (echoing the dispatch's [`RequestId`]). Does **not** feed it to the app — use
+/// this when a test wants to inspect or delay the response (e.g. the stale-response-after-cancel
+/// case).
+#[must_use]
+pub fn execute(client: &FakeClient, dispatch: Dispatch) -> ClientResponse {
+    let outcome = run_request(client, dispatch.request);
+    ClientResponse {
+        id: dispatch.id,
+        outcome,
+    }
+}
+
+/// Drive a [`Dispatch`] to completion through the two-step seam: execute it against the fake,
+/// apply the response to `app`, and loop on any chained follow-up dispatch until the flow settles
+/// with no request in flight. This is what the real poll loop does across ticks, collapsed to a
+/// synchronous call for tests.
+pub fn drive(app: &mut App, client: &FakeClient, mut dispatch: Dispatch) {
+    loop {
+        let response = execute(client, dispatch);
+        match app.apply_response(response) {
+            Some(next) => dispatch = next,
+            None => break,
+        }
+    }
+}
+
+/// Feed an [`Event`] to the app and, if it triggers a [`Dispatch`], drive that to completion. The
+/// common path for tests that don't care about observing the in-flight state. Returns nothing —
+/// assert against `app.screen()` / `app.session()` / the fake's recorded calls afterwards.
+pub fn submit(app: &mut App, client: &FakeClient, event: Event) {
+    if let Some(dispatch) = app.handle_event(event) {
+        drive(app, client, dispatch);
+    }
+}
+
 /// A session-token response.
 pub fn session(token: &str) -> SessionResponse {
     SessionResponse {
@@ -254,15 +335,21 @@ pub fn offline_err(message: &str) -> ClientError {
     ClientError::Offline(message.to_owned())
 }
 
-/// Render the app onto a `TestBackend` of the given size and return the flattened buffer text
-/// (one string with `\n` between rows, trailing spaces trimmed per row).
-pub fn render<C: Client>(app: &App<C>, width: u16, height: u16) -> String {
+/// Render the app onto a `TestBackend` of the given size at the given spinner `tick`, returning
+/// the flattened buffer text (one string with `\n` between rows, trailing spaces trimmed per
+/// row). `tick` drives the in-flight spinner; it is ignored when no request is outstanding.
+pub fn render_at(app: &App, width: u16, height: u16, tick: u64) -> String {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).expect("test terminal");
     let _completed = terminal
-        .draw(|frame| tui::ui::draw(frame, app))
+        .draw(|frame| tui::ui::draw(frame, app, tick))
         .expect("draw");
     buffer_text(terminal.backend().buffer())
+}
+
+/// Render at tick 0 (the common case for non-spinner assertions).
+pub fn render(app: &App, width: u16, height: u16) -> String {
+    render_at(app, width, height, 0)
 }
 
 /// Flatten a `ratatui` buffer into newline-joined, right-trimmed rows of text.
@@ -280,8 +367,8 @@ fn buffer_text(buffer: &Buffer) -> String {
     out
 }
 
-/// Convenience: assert the app is on the auth screen and return its name for diagnostics.
-pub fn screen_name<C: Client>(app: &App<C>) -> &'static str {
+/// Convenience: the active screen's name, for diagnostics.
+pub fn screen_name(app: &App) -> &'static str {
     match app.screen() {
         Screen::Auth(_) => "auth",
         Screen::TaskList(_) => "task_list",
@@ -292,9 +379,11 @@ pub fn screen_name<C: Client>(app: &App<C>) -> &'static str {
 // ---- Screen builders (for the pure `map_key` keybinding tests) ----
 //
 // `map_key` takes only `&Screen`, so these construct representative screens directly via the
-// public struct literals — no client or driven flow needed to pin the keybinding contract.
+// public struct literals — no client or driven flow needed to pin the keybinding contract. Each
+// carries its in-flight marker (`pending`) so the same builders cover the idle and in-flight
+// keybinding contexts.
 
-/// The auth (login) screen.
+/// The auth (login) screen, idle (no request in flight).
 pub fn auth_screen() -> Screen {
     Screen::Auth(AuthState {
         mode: AuthMode::Login,
@@ -305,10 +394,22 @@ pub fn auth_screen() -> Screen {
         password: String::new(),
         profile_name: String::new(),
         error: None,
+        pending: None,
     })
 }
 
-/// A task-list screen with one open task and no add-task sub-flow open.
+/// The auth (login) screen with a request outstanding.
+pub fn auth_screen_pending() -> Screen {
+    match auth_screen() {
+        Screen::Auth(mut auth) => {
+            auth.pending = Some(RequestId(0));
+            Screen::Auth(auth)
+        }
+        other => other,
+    }
+}
+
+/// A task-list screen with one open task and no add-task sub-flow open, idle.
 pub fn task_list_screen() -> Screen {
     Screen::TaskList(TaskListState {
         tasks: vec![open_task(
@@ -319,7 +420,19 @@ pub fn task_list_screen() -> Screen {
         selected: Some(0),
         adding: None,
         message: None,
+        pending: None,
     })
+}
+
+/// A task-list screen with a request outstanding (no add-task sub-flow open).
+pub fn task_list_screen_pending() -> Screen {
+    match task_list_screen() {
+        Screen::TaskList(mut list) => {
+            list.pending = Some(RequestId(0));
+            Screen::TaskList(list)
+        }
+        other => other,
+    }
 }
 
 /// A task-list screen with the add-task sub-flow open (a text-entry context).
@@ -334,12 +447,22 @@ pub fn task_list_screen_adding() -> Screen {
             error: None,
         }),
         message: None,
+        pending: None,
     })
 }
 
-/// The blocking offline screen.
+/// The blocking offline screen, idle.
 pub fn offline_screen() -> Screen {
     Screen::Offline {
         message: "the server is unreachable: connection refused".to_owned(),
+        pending: None,
+    }
+}
+
+/// The blocking offline screen with a retry probe outstanding.
+pub fn offline_screen_pending() -> Screen {
+    Screen::Offline {
+        message: "the server is unreachable: connection refused".to_owned(),
+        pending: Some(RequestId(0)),
     }
 }

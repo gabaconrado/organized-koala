@@ -170,6 +170,23 @@ The pure core + synchronous `Client` trait keep the ADR-0003 `TestBackend` seam 
   Wired `main.rs` to spawn the worker and pass the channels to `terminal::run`. `./ok.sh build`
   green; lint/test failures remaining are solely in `crates/tui/tests/**` (old `App<C>` API) —
   slice 3 (tester) adapts them.
+- 2026-06-22 [tester] slice 3 — adapted + extended the `TestBackend` suite to the two-step
+  seam. Added a synchronous request executor in `tests/common/mod.rs` (`execute`/`drive`/
+  `submit`) — the test-side analogue of the worker thread: it maps a `Dispatch`'s
+  `ClientRequest` through the `FakeClient` (the sole external-service mock) to a
+  `ClientResponse` and feeds it back into `apply_response`, looping on chained follow-ups until
+  the flow settles. No internal collaborator is mocked. Dropped all `App<C>`/`App::new(client)`;
+  the core is built clientless and `ui::draw` now takes a tick (`render`/`render_at` helpers).
+  **Adapted:** `flows.rs` (auth/register/add-task/mark-done/statelessness), `error_branches.rs`
+  (`unauthenticated`→login, `validation_failed`/`invalid_credentials`→inline, offline→blocking
+  retry, coded-less→generic), `rendering.rs`, `keybindings.rs` (pending screen builders).
+  **Added:** in-flight render (spinner glyph + "working… (Esc to cancel)" hint on auth/task-list/
+  offline; `spinner_glyph_advances_with_the_tick`), in-flight no-op (`refresh`/`submit` while
+  pending dispatch nothing — `in_flight.rs`), `Cancel` clears in-flight + restores
+  interactivity, stale/superseded `RequestId`-mismatch response dropped by `apply_response`,
+  at-most-one-chained-request, `other_api_error_after_auth`, and Esc→Cancel / Ctrl+C→Quit
+  keybindings while pending. `./ok.sh test` green (tui: error_branches 10, flows 9, in_flight 5,
+  keybindings 13, rendering 11); `./ok.sh lint` clean; `./ok.sh fmt --check` clean.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary

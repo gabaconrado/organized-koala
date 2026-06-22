@@ -1,5 +1,5 @@
-//! End-to-end app-core flows (slice-3 acceptance 4 and 5) driven through the public `App` API
-//! against the held fake client:
+//! End-to-end app-core flows driven through the public two-step `App` API
+//! (`handle_event` → executor → `apply_response`) against the held fake client:
 //!
 //! - register and login flows reach the auto-selected profile's task list;
 //! - the add-task flow (Title + Description) posts a `CreateTaskRequest` and re-renders from the
@@ -13,17 +13,17 @@
 
 mod common;
 
-use common::{Call, FakeClient, done_task, open_task, profile, render, session};
+use common::{Call, FakeClient, done_task, drive, open_task, profile, render, session, submit};
 use contract::TaskStatus;
 use tui::app::{App, AuthMode, Event, Screen};
 
 const W: u16 = 80;
 const H: u16 = 24;
 
-/// Type a string into the focused field.
-fn type_str(app: &mut App<FakeClient>, s: &str) {
+/// Type a string into the focused field (local edits never dispatch).
+fn type_str(app: &mut App, s: &str) {
     for c in s.chars() {
-        app.handle_event(Event::Char(c));
+        let _ = app.handle_event(Event::Char(c));
     }
 }
 
@@ -35,13 +35,13 @@ fn login_flow_fetches_profiles_and_enters_task_list() {
     client.push_login(Ok(session("jwt-abc")));
     client.push_profiles(Ok(vec![profile("p1", "work")]));
     client.push_tasks(Ok(vec![open_task("t1", "first", "2026-06-18T10:00:00Z")]));
-    let mut app = App::new(client.clone());
+    let mut app = App::new();
 
     // Fill the login form, then submit.
     type_str(&mut app, "ada@example.com");
-    app.handle_event(Event::Next); // -> Password
+    let _ = app.handle_event(Event::Next); // -> Password
     type_str(&mut app, "hunter2");
-    app.handle_event(Event::Submit);
+    submit(&mut app, &client, Event::Submit);
 
     // Landed on the task list of the auto-selected profile.
     assert!(matches!(app.screen(), Screen::TaskList(_)));
@@ -72,9 +72,9 @@ fn register_flow_carries_all_fields_and_enters_task_list() {
     client.push_register(Ok(session("jwt-reg")));
     client.push_profiles(Ok(vec![profile("pX", "personal")]));
     client.push_tasks(Ok(vec![]));
-    let mut app = App::new(client.clone());
+    let mut app = App::new();
 
-    app.handle_event(Event::ToggleAuthMode); // switch to register
+    let _ = app.handle_event(Event::ToggleAuthMode); // switch to register
     let Screen::Auth(auth) = app.screen() else {
         panic!("auth screen");
     };
@@ -82,13 +82,13 @@ fn register_flow_carries_all_fields_and_enters_task_list() {
 
     // Fields are Username, Email, Password, Profile name in nav order.
     type_str(&mut app, "ada");
-    app.handle_event(Event::Next);
+    let _ = app.handle_event(Event::Next);
     type_str(&mut app, "ada@example.com");
-    app.handle_event(Event::Next);
+    let _ = app.handle_event(Event::Next);
     type_str(&mut app, "hunter2");
-    app.handle_event(Event::Next);
+    let _ = app.handle_event(Event::Next);
     type_str(&mut app, "personal");
-    app.handle_event(Event::Submit);
+    submit(&mut app, &client, Event::Submit);
 
     assert!(matches!(app.screen(), Screen::TaskList(_)));
     let calls = client.calls();
@@ -110,8 +110,8 @@ fn add_task_posts_request_then_refreshes_from_server() {
     client.push_login(Ok(session("jwt")));
     client.push_profiles(Ok(vec![profile("p1", "work")]));
     client.push_tasks(Ok(vec![])); // initial empty list
-    let mut app = App::new(client.clone());
-    app.handle_event(Event::Submit);
+    let mut app = App::new();
+    submit(&mut app, &client, Event::Submit);
     assert!(matches!(app.screen(), Screen::TaskList(_)));
 
     // Script the create response and the post-create refresh list.
@@ -119,12 +119,12 @@ fn add_task_posts_request_then_refreshes_from_server() {
     client.push_create(Ok(created.clone()));
     client.push_tasks(Ok(vec![created]));
 
-    // Drive the add-task sub-flow: title, switch field, description, submit.
-    app.handle_event(Event::BeginAddTask);
+    // Drive the add-task sub-flow: open, title, switch field, description, submit.
+    let _ = app.handle_event(Event::BeginAddTask);
     type_str(&mut app, "Buy milk");
-    app.handle_event(Event::Next); // -> description field
+    let _ = app.handle_event(Event::Next); // -> description field
     type_str(&mut app, "2% organic");
-    app.handle_event(Event::Submit);
+    submit(&mut app, &client, Event::Submit);
 
     // The add flow closed and the list now shows the server's task.
     let Screen::TaskList(list) = app.screen() else {
@@ -168,8 +168,8 @@ fn mark_done_sends_close_and_rerenders_from_returned_task() {
     client.push_login(Ok(session("jwt")));
     client.push_profiles(Ok(vec![profile("p1", "work")]));
     client.push_tasks(Ok(vec![open]));
-    let mut app = App::new(client.clone());
-    app.handle_event(Event::Submit);
+    let mut app = App::new();
+    submit(&mut app, &client, Event::Submit);
 
     // Before: rendered as undone.
     let before = render(&app, W, H);
@@ -187,7 +187,7 @@ fn mark_done_sends_close_and_rerenders_from_returned_task() {
     );
     client.push_close(Ok(closed));
 
-    app.handle_event(Event::CloseSelected);
+    submit(&mut app, &client, Event::CloseSelected);
 
     // The row was replaced in place from the server's returned Task.
     let Screen::TaskList(list) = app.screen() else {
@@ -228,8 +228,8 @@ fn task_list_view_mirrors_exactly_the_server_response() {
     client.push_login(Ok(session("jwt")));
     client.push_profiles(Ok(vec![profile("p1", "work")]));
     client.push_tasks(Ok(server_tasks.clone()));
-    let mut app = App::new(client);
-    app.handle_event(Event::Submit);
+    let mut app = App::new();
+    submit(&mut app, &client, Event::Submit);
 
     let Screen::TaskList(list) = app.screen() else {
         panic!("task list");
@@ -246,8 +246,8 @@ fn refresh_replaces_the_list_with_the_servers_new_response() {
     client.push_login(Ok(session("jwt")));
     client.push_profiles(Ok(vec![profile("p1", "work")]));
     client.push_tasks(Ok(vec![open_task("old", "stale", "2026-06-18T09:00:00Z")]));
-    let mut app = App::new(client.clone());
-    app.handle_event(Event::Submit);
+    let mut app = App::new();
+    submit(&mut app, &client, Event::Submit);
 
     // Server's state changed; a refresh must show the new list, dropping the stale entry.
     client.push_tasks(Ok(vec![open_task(
@@ -255,7 +255,7 @@ fn refresh_replaces_the_list_with_the_servers_new_response() {
         "current",
         "2026-06-18T15:00:00Z",
     )]));
-    app.handle_event(Event::Refresh);
+    submit(&mut app, &client, Event::Refresh);
 
     let Screen::TaskList(list) = app.screen() else {
         panic!("task list");
@@ -270,20 +270,49 @@ fn refresh_replaces_the_list_with_the_servers_new_response() {
 
 #[test]
 fn new_app_holds_no_session_and_starts_on_login() {
-    // No on-disk/cross-run state: a fresh app is unauthenticated on the login screen.
-    let app = App::new(FakeClient::new());
+    // No on-disk/cross-run state: a fresh app is unauthenticated on the login screen, and no
+    // request is dispatched before any user action.
+    let app = App::new();
     assert!(app.session().is_none());
     let Screen::Auth(auth) = app.screen() else {
         panic!("starts on auth");
     };
     assert_eq!(auth.mode, AuthMode::Login);
-    // No server calls happen before any user action.
+    assert!(!app.is_pending(), "no in-flight request before any action");
 }
 
 #[test]
 fn quit_event_sets_should_quit() {
-    let mut app = App::new(FakeClient::new());
+    let mut app = App::new();
     assert!(!app.should_quit());
-    app.handle_event(Event::Quit);
+    let dispatch = app.handle_event(Event::Quit);
+    assert!(dispatch.is_none(), "quit dispatches no request");
     assert!(app.should_quit());
+}
+
+#[test]
+fn at_most_one_request_chains_at_a_time_through_apply_response() {
+    // The auth flow fans out to three server calls (login -> profiles -> tasks) but only ever as
+    // a *chain*: each completes before the next is dispatched. Driving the single login dispatch
+    // to completion yields exactly that ordered sequence with nothing concurrent.
+    let client = FakeClient::new();
+    client.push_login(Ok(session("jwt")));
+    client.push_profiles(Ok(vec![profile("p1", "work")]));
+    client.push_tasks(Ok(vec![]));
+    let mut app = App::new();
+
+    let dispatch = app
+        .handle_event(Event::Submit)
+        .expect("login submit dispatches");
+    drive(&mut app, &client, dispatch);
+
+    let calls = client.calls();
+    assert!(
+        matches!(calls.first(), Some(Call::Login { .. }))
+            && matches!(calls.get(1), Some(Call::ListProfiles { .. }))
+            && matches!(calls.get(2), Some(Call::ListTasks { .. }))
+            && calls.len() == 3,
+        "exactly the chained login->profiles->tasks sequence: {calls:?}",
+    );
+    assert!(!app.is_pending(), "settled with no request in flight");
 }

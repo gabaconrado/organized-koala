@@ -10,7 +10,10 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui::app::Event;
 use tui::terminal::map_key;
 
-use common::{auth_screen, offline_screen, task_list_screen, task_list_screen_adding};
+use common::{
+    auth_screen, auth_screen_pending, offline_screen, offline_screen_pending, task_list_screen,
+    task_list_screen_adding, task_list_screen_pending,
+};
 
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
@@ -57,6 +60,40 @@ fn esc_quits_except_in_add_task_where_it_cancels() {
         map_key(&task_list_screen_adding(), key(KeyCode::Esc)),
         Some(Event::Cancel),
     );
+}
+
+#[test]
+fn esc_cancels_while_a_request_is_in_flight() {
+    // While a request is outstanding, Esc must map to Cancel (abandon the request), not Quit, so
+    // the cancel affordance stays live in flight (0005 acceptance). This holds on every screen
+    // that can be pending.
+    for screen in [
+        auth_screen_pending(),
+        task_list_screen_pending(),
+        offline_screen_pending(),
+    ] {
+        assert_eq!(
+            map_key(&screen, key(KeyCode::Esc)),
+            Some(Event::Cancel),
+            "Esc must cancel (not quit) while pending on {screen:?}",
+        );
+    }
+}
+
+#[test]
+fn ctrl_c_still_quits_while_pending() {
+    // Ctrl+C is the hard quit and stays Quit even while a request is in flight.
+    for screen in [
+        auth_screen_pending(),
+        task_list_screen_pending(),
+        offline_screen_pending(),
+    ] {
+        assert_eq!(
+            map_key(&screen, ctrl('c')),
+            Some(Event::Quit),
+            "Ctrl+C must quit even while pending on {screen:?}",
+        );
+    }
 }
 
 #[test]
