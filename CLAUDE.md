@@ -60,6 +60,7 @@ not invoke `cargo`/`docker`/`sqlx` ad-hoc when a verb exists; extend `ok.sh` ins
 | `./ok.sh up` / `./ok.sh down` | bring the docker stack (server + Postgres + OTel) up/down; `up` runs migrations automatically (a one-shot `organized-koalad migrate` compose service that the server gates on) |
 | `./ok.sh run-server` | run `organized-koalad run` (the long-running HTTP server; the binary's default no-arg behaviour) |
 | `./ok.sh run-tui` | run the `organized-koala` TUI |
+| `./ok.sh code-hash [REF]` | print the stable code-paths digest (`crates/` + Cargo manifests) of `REF` (default HEAD); review/verify verdicts pin to it, not the commit sha (see "Verdict pinning") |
 
 `platform-dev` owns `ok.sh`. New verbs are added there, not improvised at call sites. The
 `migrate`/`rollback` verbs are **dev-only delegating conveniences** and are never load-bearing
@@ -214,14 +215,19 @@ A feature reaches `awaiting-merge` only when **all** hold:
    `tester`'s `ratatui` `TestBackend` suite, not the verifier; for a TUI-touching feature the
    verifier confirms that suite exists and is green (see [ADR-0003][adr-0003]).
 5. Any contract change carries an ADR; any new gotcha is recorded in this file.
-6. **`reviewer` posted `REVIEW-STATUS: approved`** on the reviewed commit sha.
+6. **`reviewer` posted `REVIEW-STATUS: approved`** pinned to the reviewed **code-tree hash**
+   (`./ok.sh code-hash`), recorded with the commit sha for human reference. The verdict attests
+   the **content of the code paths**, not the commit — so it survives a tree-preserving rebase
+   unchanged (see "Verdict pinning" below).
 7. **The branch is rebased current on `main`** (the `drive` step-7 freshen, so the human
-   reviews exactly what will merge). A rebase rewrites shas: if it left the **code tree
-   byte-identical** (`git diff <old-code-sha> <new-code-sha> -- crates/ Cargo.toml Cargo.lock`
-   empty — `main` moved only in `docs/`/`.claude/`/the Board file), the verdict shas are
-   **relabelled** with a provenance note and the approval carries forward; if the rebase
-   **changed code**, the `approved`/`verified` verdicts are void and the item **re-enters
-   review+verify** (it does not reach `awaiting-merge` on a stale approval).
+   reviews exactly what will merge). Because verdicts pin to the **code-tree hash**, not the
+   commit sha, a rebase is classified by whether that digest still matches — never by chasing
+   shas: if `./ok.sh code-hash` at the rebased head **equals** the attested verdict hash, the
+   code is byte-identical (`main` moved only in `docs/`/`.claude/`/the Board file) and the
+   approved+verified attestation **carries forward untouched — no relabelling** (a one-line
+   freshen note in the Log suffices); if it **differs**, the rebase changed code, the
+   `approved`/`verified` verdicts are void, and the item **re-enters review+verify** (it does
+   not reach `awaiting-merge` on a stale approval).
 
 ## The Board
 
@@ -286,8 +292,19 @@ uncommitted in the working tree is **invisible** inside the worktree and code ci
 verdict back to the orchestrator, which commits the verdict onto the item **on the branch**;
 they never edit or commit the Board and leave no scratch (`*.tmp`) files behind. A Board-only
 commit on the branch (status flip / verdict) does **not** trigger re-review — only a new
-code/test commit does; the approved `<sha>` names the last code sha and the orchestrator
-verifies no code commit follows it.
+code/test commit does.
+
+**Verdict pinning — verdicts attest a code-tree hash, not a commit sha (learned 0004).** A
+reviewer/verifier verdict is bound to `./ok.sh code-hash <sha>` — a stable digest of the code
+paths (`crates/` + `Cargo.toml` + `Cargo.lock`), the same paths as the DoD code-identity
+check. Two commits with byte-identical code share the digest, so the attestation is valid at
+any later head **iff** `./ok.sh code-hash HEAD` equals the recorded hash — a content check that
+is **independent of the commit sha**. This is why the step-7 freshen needs no sha relabelling:
+a docs-/board-only `main` advance + rebase rewrites every sha but preserves the digest, so the
+verdict still attests the live code with **zero Board churn** (the earlier sha-relabel-on-every-
+rebase treadmill is gone). The verdict line records both the digest (the binding key) and the
+commit sha (a human-readable pointer, allowed to go stale across a rebase); "is the verdict
+still valid?" is answered by the digest, never by "no code commit follows the sha".
 
 **Feedback re-entry:** human feedback is an authored `- [ ] <ts> [human] …` line in an
 item's `## Log / comments`. The **unchecked box is the only re-entry signal**; `architect`

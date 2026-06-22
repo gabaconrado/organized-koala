@@ -53,6 +53,8 @@ ok.sh — workspace operations
   ./ok.sh run-tui          run the TUI (organized-koala)
   ./ok.sh secret-scan      scan staged diff + board for secrets
   ./ok.sh check            test + lint + fmt --check (the local gate)
+  ./ok.sh code-hash [REF]  print the stable code-paths digest (crates/ + Cargo manifests) of
+                           REF (default HEAD); review/verify verdicts pin to it, not the sha
 EOF
 }
 
@@ -161,6 +163,18 @@ cmd_check() {
   cmd_fmt --check
 }
 
+# Stable content digest of the code paths (crates/ + the Cargo manifests), independent of the
+# commit sha. Two commits with byte-identical code yield the SAME digest, so review/verify
+# verdicts pin to this instead of a sha: a docs-/board-only `main` advance + rebase rewrites
+# shas but preserves the digest, so the attestation carries forward with NO relabelling (see
+# CLAUDE.md "Verdict pinning" and drive step 7). The digest differs iff `crates/`, `Cargo.toml`,
+# or `Cargo.lock` changed — the same paths as the DoD code-identity check. Arg: git ref
+# (default HEAD).
+cmd_code_hash() {
+  local ref="${1:-HEAD}"
+  git ls-tree "${ref}" crates Cargo.toml Cargo.lock | git hash-object --stdin
+}
+
 require_compose() {
   if [[ ! -f "${COMPOSE_FILE}" ]]; then
     echo "ok.sh: ${COMPOSE_FILE} not found." >&2
@@ -199,6 +213,7 @@ main() {
     run-tui)     cmd_run_tui "$@" ;;
     secret-scan) cmd_secret_scan "$@" ;;
     check)       cmd_check "$@" ;;
+    code-hash)   cmd_code_hash "$@" ;;
     ""|-h|--help|help) usage ;;
     *) echo "ok.sh: unknown verb '${verb}'" >&2; usage; exit 1 ;;
   esac

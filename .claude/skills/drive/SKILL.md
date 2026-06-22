@@ -79,14 +79,17 @@ reviewer is **read-only on everything** (code AND Board): it **reports** its fin
 the branch** (feature-local). Fix-now findings go back to the owning dev agent on the same
 branch. Set `status: review` (committed on the branch). Re-review until `approved` at head — a
 Board-only commit (status flip / verdict) does **not** require re-review; only a new code/test
-commit does. The approved `<sha>` names the last **code** sha; verify no code commit follows it.
+commit does. The verdict **pins to the code-tree hash** (`./ok.sh code-hash`), recorded with
+the last code sha for reference; it stays valid as long as `./ok.sh code-hash HEAD` equals the
+attested hash (CLAUDE.md "Verdict pinning") — this is what survives the step-7 rebase untouched.
 
 ### 5. Verify (run it)
 
 Dispatch `verifier`: boots the stack, exercises the affected flows live, quotes what ran vs.
 inferred, reports verified / verified-with-gaps / not-verified. The verifier is **read-only on
 everything** (code AND Board): as with review, the verdict is **reported back** and the
-orchestrator commits it onto the item **on the branch**. (Learned 0002: reviewer/verifier
+orchestrator commits it onto the item **on the branch**, pinned to the same **code-tree hash**
+(`./ok.sh code-hash`) as the review verdict. (Learned 0002: reviewer/verifier
 running in the worktree must never edit/commit the Board copy and must leave no stray `*.tmp` —
 both are read-only and report; the orchestrator does the branch-side Board commit.)
 
@@ -104,33 +107,37 @@ from item frontmatter + active branch heads (home #3).
 `main` has just advanced in step 6 (eng-manager's shared learnings + the regenerated
 dashboard), and other cycles may have merged since the worktree was cut. Before stopping,
 bring the branch up to date so the human reviews **exactly what will merge**. A rebase rewrites
-shas, so the move is gated on its effect on **code**, not done blindly.
+shas, so the move is gated on its effect on **code content**, not done blindly — and since
+verdicts pin to the **code-tree hash** (not the sha), the gate is a hash comparison and the
+code-identical case needs **no relabelling**.
 
 Recompute first: is `main` already an ancestor of the branch head
 (`git merge-base --is-ancestor main feature/NNNN-<slug>`)?
 
 - **Already current** → nothing to do; go to step 8.
 - **Behind** → the worktree must be clean (the per-slice commits in step 3 ensure this; if not,
-  abort and surface). **Record the pre-rebase approved code sha** as `OLD`, then `git rebase
-  main` in the worktree. The expected-and-only conflict is the feature-local Board file
-  (`main`'s frozen-pointer note vs. the branch's authoritative copy) — resolve in favour of the
-  **branch** (drop the pointer note). Then classify by the **decision gate** below, with `NEW` =
-  the rebased last code sha and the code paths = `crates/ Cargo.toml Cargo.lock`:
+  abort and surface). **Record the attested verdict hash** as `OLD_HASH = ./ok.sh code-hash`
+  (at the approved head, before rebasing), then `git rebase main` in the worktree. The
+  expected-and-only conflict is the feature-local Board file (`main`'s frozen-pointer note vs.
+  the branch's authoritative copy) — resolve in favour of the **branch** (drop the pointer
+  note). Then classify by the **decision gate** below:
 
-  **Did the rebase change the code tree? — `git diff OLD NEW -- <code paths>`**
+  **Did the rebase change the code? — `./ok.sh code-hash` (rebased head) vs. `OLD_HASH`**
 
-  - **Empty (code byte-identical)** — `main` moved only where the branch doesn't (`docs/`,
-    `.claude/`, the Board file). The approved+verified attestation carries forward unchanged.
-    Re-run the gates on the rebased tree (`./ok.sh test|lint|fmt --check`), then **relabel** the
-    verdict shas in the Board (`OLD` → `NEW`, plus the reviewer's review range) and append a
-    provenance Log line **quoting the empty-diff proof**. This is a Board-only commit — it does
-    **not** retrigger review (CLAUDE.md: only a new code/test commit does). Item stays
-    `awaiting-merge`.
-  - **Non-empty (rebase touched code)** — real code conflicts were resolved, or a `main` change
+  - **Equal (code byte-identical)** — `main` moved only where the branch doesn't (`docs/`,
+    `.claude/`, the Board file). The approved+verified attestation **carries forward untouched**:
+    the verdict already pins to this exact hash, so there is **nothing to relabel**. Re-run the
+    gates on the rebased tree (`./ok.sh test|lint|fmt --check`) and append a **one-line freshen
+    Log note** (the rebase happened; the code-hash is unchanged at `<hash>`, so verdicts hold).
+    Do **not** rewrite the verdict lines. This is a Board-only commit — it does **not** retrigger
+    review (CLAUDE.md: only a new code/test commit does). Item stays `awaiting-merge`. (The
+    commit-sha pointer in the verdict line may now be stale; that is fine — the binding key is
+    the hash, not the sha.)
+  - **Differ (rebase changed code)** — real code conflicts were resolved, or a `main` change
     to a shared crate altered this branch's compiled code. **The `approved`/`verified` verdicts
-    are now void** — they attest code the reviewer never saw. Do **not** relabel and do **not**
-    stay at `awaiting-merge`: set the item back to `review` (or `working` if gates now fail and
-    code must change) and **re-enter at step 4** (review) → step 5 (verify) on the rebased head.
+    are now void** — they attest a code-hash the live tree no longer has. Do **not** stay at
+    `awaiting-merge`: set the item back to `review` (or `working` if gates now fail and code must
+    change) and **re-enter at step 4** (review) → step 5 (verify) on the rebased head.
     Carrying a stale `approved` onto rebased-changed code is the exact failure this gate prevents.
 
 > This freezes drift only at the instant you stop: a parallel cycle may merge to `main`
