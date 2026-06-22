@@ -1,13 +1,13 @@
 ---
 id: 0001
 title: Foundational vertical slice (auth + profile + minimal TODO)
-status: planned      # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged       # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 children: [0002, 0003, 0004]
 branch: null         # umbrella — work happens on the children's branches
 worktree: null
 created: 2026-06-10
-updated: 2026-06-11
+updated: 2026-06-22
 ---
 
 ## Feature request
@@ -20,18 +20,18 @@ Postgres, plus local auth and profile-namespacing. It de-risks every later featu
 
 **Acceptance criteria:**
 
-- [ ] `./ok.sh up` brings up the server + Postgres;
-- [ ] It is not necessary to run any command in the host (like `./ok.sh migrate`) for the system to
+- [x] `./ok.sh up` brings up the server + Postgres;
+- [x] It is not necessary to run any command in the host (like `./ok.sh migrate`) for the system to
       run correctly; Migrations should be handled internally by the application
-- [ ] A user can register and log in with username/email + password (argon2 + JWT).
-- [ ] On first login the user has a default profile with a name chosen by the user; TODOs are scoped
+- [x] A user can register and log in with username/email + password (argon2 + JWT).
+- [x] On first login the user has a default profile with a name chosen by the user; TODOs are scoped
       to it.
-- [ ] In the TUI: add a task (Title + Description), list tasks with a done/undone marker,
+- [x] In the TUI: add a task (Title + Description), list tasks with a done/undone marker,
       and mark a task done (sets Status + Closed-at).
-- [ ] All wire shapes (auth, profile, task DTOs, error payload) live in the `contract` crate.
-- [ ] Basic traces for audit/debugging, all endpoints instrumented with spans and events for mutations
+- [x] All wire shapes (auth, profile, task DTOs, error payload) live in the `contract` crate.
+- [x] Basic traces for audit/debugging, all endpoints instrumented with spans and events for mutations
       in INFO level + errors
-- [ ] Errors return HTTP status + `{ code?, message }`.
+- [x] Errors return HTTP status + `{ code?, message }`.
 
 **Out of scope:** Pomodoro, Notes, multiple-profile UX, deletion/editing of tasks, on-disk TUI
 state, SSO. (Pomodoro is also blocked on ADR-0002.)
@@ -117,6 +117,15 @@ out of scope here.
   **umbrella** — it carries no directly-workable code slice; it advances when 0004 does
   and its criteria are checked at 0004's end-to-end verification. `board/README.md`
   regeneration is left to `eng-manager`.
+- 2026-06-22 [orchestrator] all three children are now **merged** (0002 contract, 0003 server,
+  0004 TUI). The umbrella's end-to-end acceptance is satisfied collectively, as planned: the
+  stack comes up via `./ok.sh up` with migrations run internally (no host command — ADR-0004),
+  register/login is argon2 + JWT, the named default profile is created at registration with
+  profile-scoped TODOs, the TUI does add/list/close with done markers, every wire shape lives
+  in `contract`, endpoints are span-instrumented with OTel export, and errors carry
+  `{ code?, message }` — all exercised live during 0004's verification (and 0003's before it).
+  All acceptance boxes checked; `planned` → `merged`. The foundational tracer bullet is closed.
+  (Responsive-UI work is the separate follow-up 0005 — not in this slice's scope.)
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0004]: ../../docs/adr/0004-migration-authority-and-binary-cli.md
@@ -127,3 +136,23 @@ out of scope here.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
+
+**The foundational vertical slice is complete and on `main`.** Built as a tracer bullet across
+three dependency-ordered children, each reviewed and (where live) verified on its own:
+
+- **[0002][feat-0002]** — the `contract` crate froze every wire shape (auth, profile, task DTOs,
+  the `{ code?, message }` error payload), the single source of truth both other crates consume.
+- **[0003][feat-0003]** — the `organized-koalad` server: argon2 + JWT auth, register-bootstraps-a-
+  named-default-profile, profile-scoped tasks (404-for-unowned, no existence leak), migrations
+  owned by the binary and run as a compose one-shot (no host command), OTel span instrumentation,
+  and the `./ok.sh up` docker stack.
+- **[0004][feat-0004]** — the `organized-koala` TUI: register/login → auto-selected profile →
+  task add/list/close with done markers, stateless (server-online required), error-code branching
+  per ADR-0005, with an ADR-0003 layer-2 `TestBackend` suite.
+
+End-to-end acceptance was asserted collectively at 0004's live verification (full reqwest path,
+exact error wire strings, profile-scoping, persistence across restart, OTel spans received).
+Governed by [ADR-0005][adr-0005] (wire contract), with [ADR-0003][adr-0003] (verification
+layering) and [ADR-0004][adr-0004] (migration authority). Follow-on work — responsive TUI
+([0005](./0005-tui-responsive-event-loop.md)), Notes, Pomodoro (gated on ADR-0002), multi-profile
+UX — is tracked as separate items.
