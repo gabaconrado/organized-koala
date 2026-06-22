@@ -198,6 +198,19 @@ The pure core + synchronous `Client` trait keep the ADR-0003 `TestBackend` seam 
   at base `f0204fd`, out of scope). **REVIEW-STATUS: approved** — pinned to code-hash
   `bc89672d4be5cdecd0bb54b340a24a5b8741cf21` (last code commit `a4f99fd`; reported by reviewer,
   committed here by orchestrator on-branch).
+- 2026-06-22 [verifier] live verify against `./ok.sh up` (docker 29.5.3 + compose; full stack:
+  postgres → migrate one-shot → server → otel-collector). Confirmed `crates/server`+`crates/contract`
+  diff vs `f0204fd` is empty (TUI-only change). **Live:** register/login (`201`/`200`, SessionResponse),
+  `GET /api/profiles` (Profile shape), task create/list/close (Task shape, lowercase status, idempotent
+  close); error contract `{code,message}` for `unauthenticated`/`invalid_credentials`/`validation_failed`/
+  `username_taken`/`not_found` with correct statuses; profile-scoping isolation across two users (no
+  cross-profile read/write, `404` no existence leak); OTel server spans observed for every client call.
+  ADR-0003 delegation handshake: TestBackend suites present + green (flows 9, error_branches 10,
+  in_flight 5, keybindings 13, rendering 11). Gates: test/lint/fmt all exit 0. **Inferred (code-read):**
+  that `HttpClient` issues exactly these requests — drove equivalent endpoints over HTTP per the
+  standard ADR-0003 verifier split (interactive TUI owned by the green TestBackend suites). Stack torn
+  down clean. **VERIFY-STATUS: verified** — pinned to code-hash
+  `bc89672d4be5cdecd0bb54b340a24a5b8741cf21` (reported by verifier, committed here by orchestrator).
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
