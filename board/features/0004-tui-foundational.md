@@ -1,14 +1,14 @@
 ---
 id: 0004
 title: TUI — register/login, default profile, task add/list/close (slice 3 of 0001)
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high       # high | medium | low
 parent: 0001
 depends-on: [0003]
 branch: feature/0004-tui-foundational
 worktree: .claude/worktrees/0004-tui-foundational
 created: 2026-06-11
-updated: 2026-06-18
+updated: 2026-06-22
 ---
 
 ## Feature request
@@ -228,6 +228,10 @@ reqwest path against the live 0003 stack (layer 1).
   with no relabelling**. The sha citations above (`6d09213`) are now stale human-readable
   pointers, not the binding key — the binding key is the code-tree hash (CLAUDE.md
   "Verdict pinning"). Gates re-run green (`fmt --check`/`lint`/`test`); ff-mergeable.
+- 2026-06-22 [human→orchestrator] operator approved 0004 and directed the merge; fast-forward
+  merged into `main`@d348d39 (linear, no merge commit, no squash); `awaiting-merge` → `merged`.
+  Feature branch `feature/0004-tui-foundational` and its worktree removed. This is slice 3/3 of
+  0001 — the TUI ↔ `contract` ↔ server ↔ Postgres tracer bullet is now wholly on `main`.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
