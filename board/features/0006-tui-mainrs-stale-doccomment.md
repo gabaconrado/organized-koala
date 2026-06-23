@@ -55,6 +55,16 @@ the deferred TUI backlog (profile-switch UX, task edit/delete, Notes, Pomodoro, 
   entrypoint per ADR-0006). Comment-only — no code/behaviour/contract/domain change. Gates
   green: `fmt --check` clean, `lint` clean, `test` all pass (tui TestBackend 11/0). Commit
   e218f73. → `review`.
+- 2026-06-23 [reviewer] cold review. Diff vs `main` = the `//!` doc comment in
+  `crates/tui/src/main.rs` only (+ feature-local Board state); new comment verified accurate
+  against `main()` line-by-line (no health probe; worker-spawn/pure-`App`/`terminal::run`/anyhow).
+  Gates green (`fmt --check`, `lint`, `test` all pass). **Chore invariant attested.**
+  `REVIEW-STATUS: approved 401ad3de59c4cc7e33c3ebf8308c171d80659e4e (sha 5b5c788) — chore
+  invariant attested: no behaviour, no contract/wire (#2), no domain-structure (#3) change;
+  comment-only.`
+- 2026-06-23 [orchestrator] chore track: live `verifier` pass SKIPPED (clause 4 N/A — no
+  behaviour/wire to exercise; the cold reviewer above is the safety net). Dispatching
+  `eng-manager` for handoff + summary, then step-7 freshen.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
