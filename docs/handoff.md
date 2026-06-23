@@ -691,8 +691,7 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   tested (ADR-0003 layer 2). Reviewed + live-verified over the full reqwest path.
 - **The foundational slice 0001 is CLOSED.** With 0002/0003/0004 all on `main`, the umbrella
   0001 merged too — the end-to-end tracer bullet TUI ↔ contract ↔ server ↔ Postgres is complete.
-- **The TUI responsive event loop is written, reviewed, live-verified, and `awaiting-merge`**
-  (0005, branch-owned on `feature/0005-tui-responsive-event-loop`): the TUI no longer freezes
+- **The TUI responsive event loop is MERGED on `main`** (0005): the TUI no longer freezes
   during an HTTP request — it keeps rendering, animates a spinner with a "working… (Esc to
   cancel)" hint, and stays interactive in flight. Per [ADR-0006][adr-0006] Model A: a synchronous
   `Client` on a worker thread, `std::sync::mpsc` request/response, a polled (`event::poll`) render
@@ -700,9 +699,14 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   (`handle_event`/`apply_response`); one request in flight at a time (transient `pending:
   Option<RequestId>`), cancel is user-perceived (stale-`RequestId` response dropped). `tui::app`
   was reorganized into `auth`/`task_add`/`task_list` submodules + `protocol.rs`. TUI-only —
-  `contract`/`server` unchanged. Reviewer **approved** + verifier **verified**, both pinned to
-  code-hash `bc89672d4be5cdecd0bb54b340a24a5b8741cf21`. **0005 is `awaiting-merge` on its
-  branch**; `main`'s snapshot stays frozen until the human's merge.
+  `contract`/`server` unchanged. Reviewed + live-verified (code-hash
+  `bc89672d4be5cdecd0bb54b340a24a5b8741cf21`); fast-forwarded to `main` at `6f9a80a`, worktree +
+  branch removed.
+- **The `chore` Board item type now exists** (governance, learned-0005 follow-up): a lightweight
+  lane for scope-limited maintenance (refactors, doc fixes, test-only, dep bumps) with no
+  behaviour/`contract`/domain change — orchestrator-mintable, on a lighter DoD (gates + an
+  invariant-attesting cold review; live verifier skipped). See CLAUDE.md "Definition of done" +
+  "The Board". Inaugural use: **`0006`** (`inbox`), the `tui/src/main.rs:4` stale-doc-comment fix.
 - **Pending plan (operator-sanctioned, not yet a Board item):** a reported-only coverage verb —
   `./ok.sh coverage` over `cargo-llvm-cov`, **no hard threshold**, not a DoD gate. `architect` to
   plan it as a new `main`-side item; `platform-dev` owns the verb.

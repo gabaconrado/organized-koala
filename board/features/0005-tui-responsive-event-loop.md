@@ -1,14 +1,14 @@
 ---
 id: 0005
 title: TUI — responsive (non-blocking) event loop + tui::app submodule reorganization
-status: awaiting-merge   # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged   # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high      # high | medium | low
 parent: null
 depends-on: [0004]
-branch: feature/0005-tui-responsive-event-loop
-worktree: .claude/worktrees/0005-tui-responsive-event-loop
+branch: feature/0005-tui-responsive-event-loop   # merged + removed
+worktree: .claude/worktrees/0005-tui-responsive-event-loop   # removed
 created: 2026-06-22
-updated: 2026-06-22
+updated: 2026-06-23
 ---
 
 ## Feature request
@@ -224,6 +224,10 @@ The pure core + synchronous `Client` trait keep the ADR-0003 `TestBackend` seam 
   `bc89672d4be5cdecd0bb54b340a24a5b8741cf21` (= OLD_HASH), so the code is byte-identical and the
   `approved`/`verified` verdicts **carry forward untouched** — no relabelling. Re-ran gates on the
   rebased tree: test/lint/fmt all green. Stays `awaiting-merge`.
+- 2026-06-23 [orchestrator] human reviewed and approved the branch; fast-forwarded `main` to the
+  branch head `6f9a80a` (linear, no merge commit), code-hash `bc89672…` carried onto `main`
+  unchanged. Worktree + branch `feature/0005-tui-responsive-event-loop` removed. `awaiting-merge`
+  → `merged`. The AI cycle for 0005 is complete.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
