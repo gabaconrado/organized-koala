@@ -509,6 +509,25 @@ Dependency edges: **1 → 2 → 3 → 4** (each depends on the contract/protocol
 
   `REVIEW-STATUS: approved   fc894ce   code-hash=708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`
 
+- 2026-06-23 [verifier] live pass against the booted stack (`./ok.sh up`; docker present,
+  migrate one-shot exited 0, both timer tables created). Confirmed `./ok.sh code-hash HEAD` =
+  `708ee8d0…` before booting. **All acceptance areas RAN live** (curl against `:8080`):
+  config default 30, PUT→GET round-trip, `0`/`1441` → `400 validation_failed` with `{code,
+  message}`, boundaries 1/1440 accepted; session idle→start(`ends_at == started_at + dur`,
+  `server_now < ends_at`, all four fields)→stop, idempotent stop. **Completion DIRECTLY
+  OBSERVED** (not inferred): 1-min session polled every 5 s flipped running→`completed` when
+  `server_now >= ends_at`; row kept (`count=1`, re-read still `completed`) until `stop`
+  (`count=0`, `idle`). **Persistence across `docker compose restart server`**: config `77` +
+  running session survived (only `server_now` advanced) → state lives in Postgres. **Account-
+  global**: routes carry no `profile_id`; a second account independent. **Auth**: no-bearer →
+  `401 unauthenticated`. **OTel spans** observed in collector stdout for all five handlers with
+  `code.namespace: server::handlers::timer` + the `user_id` attribute. TestBackend handshake
+  (ADR-0003): `crates/tui/tests/timer.rs` 14 + `keybindings.rs` 17 green. reqwest client path
+  cross-checked against live shapes (no client harness; TUI out of verifier scope per ADR-0003).
+  Stack torn down cleanly. No blocking gaps.
+
+  `VERIFY-STATUS: verified   fc894ce   code-hash=708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`
+
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
