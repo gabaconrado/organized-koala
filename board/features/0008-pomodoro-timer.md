@@ -750,6 +750,31 @@ to code-hash `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`.
   unaffected since the protocol is unchanged). `./ok.sh test` / full-target `./ok.sh lint` go green
   once `tester` adapts the suite to the global-widget model.
 
+- 2026-06-23 [tester] **0008-R1 tests** — adapted the `tui` `TestBackend`/core suite to the
+  global-timer-widget model and extended coverage for the re-entry acceptance criteria. `./ok.sh
+  test` GREEN (full workspace), `./ok.sh lint` (all-targets) clean, `./ok.sh fmt --check` clean.
+  Changes: `crates/tui/tests/common/mod.rs` — dropped the removed `Screen::Timer`/`TimerState`/
+  `DurationEditState` imports and the `screen_name` `Screen::Timer` arm and the `timer_screen*`
+  builders; added `load_timer` / `refresh_timer` helpers that drive the edge hooks
+  (`App::load_timer_if_needed` / `App::refresh_timer`) the way the real poll loop does (the timer
+  no longer loads off an `Event`). `crates/tui/tests/keybindings.rs` — moved every call to the new
+  `map_key(screen, editing_duration, key)` signature (`map`/`map_editing` shims); pinned the global
+  `p`→`ToggleTimer` / `d`→`BeginEditDuration` bindings on the post-auth screen, their inactivity off
+  it (auth: literal text; offline: unbound), `p` suppression in add-task + duration-edit text-entry
+  (B4), and the duration-edit overlay as a global text-entry context; added the `t`-opens-nothing
+  regression guard (no dedicated timer page). `crates/tui/tests/timer.rs` — rewritten to drive the
+  global widget: `p` start-when-idle / stop-when-running / start-when-completed, second-`p`-while-
+  pending no-op, append-spinner-no-flicker regression guard, idle-vs-pending caption contrast, the
+  preserved set-duration sub-flow (success + validation-error inline), `p` suppressed-while-editing
+  end-to-end, running countdown via `countdown_label`, superseded-RequestId drop on the timer's own
+  marker, coarse refresh picking up the server verdict, and the account-global call-shape sweep (no
+  `profile_id`, #4 / ADR-0002 §5). `crates/tui/tests/rendering.rs` — flipped the three in-flight
+  tests from the old caption-replacement (`working…`) assertion to the ADR-0006 §8.3 append-spinner
+  contract (caption text stays present, `working…` gone, trailing spinner + "Esc to cancel"
+  appended). Counts: tui — keybindings 19, rendering 11, timer 17, error_branches 10, flows 9,
+  in_flight 5; full workspace all green. Maps re-entry criteria 1–7 + criterion 8 (the new `map_key`
+  signature). No source touched.
+
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md

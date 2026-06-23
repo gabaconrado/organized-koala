@@ -35,7 +35,7 @@ use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use tui::app::{
     AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, Dispatch,
-    DurationEditState, Event, Outcome, RequestId, Screen, TaskListState, TimerState,
+    Event, Outcome, RequestId, Screen, TaskListState,
 };
 use tui::client::{Client, ClientError, ClientResult};
 
@@ -508,8 +508,27 @@ pub fn screen_name(app: &App) -> &'static str {
     match app.screen() {
         Screen::Auth(_) => "auth",
         Screen::TaskList(_) => "task_list",
-        Screen::Timer(_) => "timer",
         Screen::Offline { .. } => "offline",
+    }
+}
+
+/// Drive the edge's "initial timer load" hook to completion: the real poll loop calls
+/// [`App::load_timer_if_needed`] every frame, so a logged-in app issues its `GetTimerConfig` →
+/// `GetTimerSession` chain off that hook, not off an [`Event`]. This is the test-side analogue —
+/// it runs that hook once and drives the resulting chain through the fake. A no-op if the timer
+/// already loaded (or no post-auth session exists yet).
+pub fn load_timer(app: &mut App, client: &FakeClient) {
+    if let Some(dispatch) = app.load_timer_if_needed() {
+        drive(app, client, dispatch);
+    }
+}
+
+/// Drive the edge's coarse timer-session refresh hook ([`App::refresh_timer`]) to completion — the
+/// test-side analogue of the loop firing on the `TIMER_REFRESH_TICKS` boundary. A no-op when the
+/// timer surface declines (in flight, editing, or not post-auth).
+pub fn refresh_timer(app: &mut App, client: &FakeClient) {
+    if let Some(dispatch) = app.refresh_timer() {
+        drive(app, client, dispatch);
     }
 }
 
@@ -586,45 +605,6 @@ pub fn task_list_screen_adding() -> Screen {
         message: None,
         pending: None,
     })
-}
-
-/// A timer screen, idle (no request in flight, no duration-edit sub-flow open). Constructed via
-/// the public `TimerState` literal so the keybinding tests can pin the timer bindings without a
-/// driven flow.
-pub fn timer_screen() -> Screen {
-    Screen::Timer(TimerState {
-        config: timer_config(30),
-        session: TimerSession::Idle,
-        applied_at: None,
-        editing: None,
-        message: None,
-        pending: None,
-    })
-}
-
-/// A timer screen with a request outstanding (no duration-edit sub-flow open).
-pub fn timer_screen_pending() -> Screen {
-    match timer_screen() {
-        Screen::Timer(mut timer) => {
-            timer.pending = Some(RequestId(0));
-            Screen::Timer(timer)
-        }
-        other => other,
-    }
-}
-
-/// A timer screen with the duration-edit sub-flow open (a text-entry context).
-pub fn timer_screen_editing() -> Screen {
-    match timer_screen() {
-        Screen::Timer(mut timer) => {
-            timer.editing = Some(DurationEditState {
-                buffer: "30".to_owned(),
-                error: None,
-            });
-            Screen::Timer(timer)
-        }
-        other => other,
-    }
 }
 
 /// The blocking offline screen, idle.

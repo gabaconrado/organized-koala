@@ -1,7 +1,8 @@
 //! Buffer-snapshot rendering via `ratatui`'s `TestBackend`: renders each screen into an
 //! in-memory buffer and asserts the observable text — the login/register field labels, the
 //! password mask, the newest-first task ordering, the done/undone markers, and the in-flight
-//! spinner + "working… (Esc to cancel)" hint (0005 acceptance: in-flight render). The app core is
+//! append-spinner indicator (ADR-0006 §8.3 / Board 0008-R1: a trailing spinner + "(Esc to cancel)"
+//! is APPENDED to the stable caption, never replacing it — the flicker fix). The app core is
 //! driven through the public two-step `App` API (`handle_event` → executor → `apply_response`)
 //! with the fake client; nothing internal is mocked.
 
@@ -163,13 +164,14 @@ fn empty_task_list_still_renders_chrome() {
     assert!(text.contains("Tasks"), "list block title:\n{text}");
 }
 
-// ---- In-flight render (spinner / loading indicator + cancel hint) ----
+// ---- In-flight render (append-spinner indicator + cancel hint, ADR-0006 §8.3) ----
 
 #[test]
-fn auth_in_flight_renders_spinner_and_cancel_hint() {
-    // After a submit, before the response is applied, the auth screen is pending: the working
-    // hint replaces the normal key hints. We hold the dispatch (do NOT drive it) so the app sits
-    // in the in-flight state, and render it.
+fn auth_in_flight_appends_spinner_without_replacing_the_caption() {
+    // After a submit, before the response is applied, the auth screen is pending. The flicker fix
+    // (0008-R1): the stable caption is KEPT and a trailing spinner + "(Esc to cancel)" is appended,
+    // rather than the old behaviour where the caption was substituted with a "working…" string. We
+    // hold the dispatch (do NOT drive it) so the app sits in the in-flight state, and render it.
     let client = FakeClient::new();
     let mut app = App::new();
     let dispatch = app
@@ -178,18 +180,20 @@ fn auth_in_flight_renders_spinner_and_cancel_hint() {
     assert!(app.is_pending(), "app is in-flight while awaiting login");
 
     let text = render(&app, W, H);
+    // The caption text is STILL present (no flicker / no replacement) — the regression guard.
     assert!(
-        text.contains("working…"),
-        "in-flight loading indicator shows:\n{text}",
+        text.contains("F2: switch to register"),
+        "the stable caption is NOT replaced while pending:\n{text}",
     );
+    // The old "working…" replacement string is gone.
+    assert!(
+        !text.contains("working…"),
+        "the caption is no longer replaced by a working… string:\n{text}",
+    );
+    // The cancel affordance is appended alongside the spinner.
     assert!(
         text.contains("Esc to cancel"),
-        "cancel affordance shown while pending:\n{text}",
-    );
-    // The idle key hint is replaced while pending.
-    assert!(
-        !text.contains("F2: switch to register"),
-        "idle hint hidden while pending:\n{text}",
+        "cancel affordance appended while pending:\n{text}",
     );
 
     // Sanity: the request was a real login the executor can complete (keeps the fake honest).
@@ -220,9 +224,9 @@ fn spinner_glyph_advances_with_the_tick() {
 }
 
 #[test]
-fn task_list_in_flight_renders_working_hint() {
-    // A close/refresh on the task list puts it in-flight; the working hint replaces the command
-    // hint while the response is outstanding.
+fn task_list_in_flight_appends_spinner_without_replacing_the_caption() {
+    // A close/refresh on the task list puts it in-flight; the command caption is KEPT and a
+    // trailing spinner + cancel affordance is appended (ADR-0006 §8.3 — no flicker).
     let mut app = logged_in_with(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
     let _dispatch = app
         .handle_event(Event::CloseSelected)
@@ -230,21 +234,25 @@ fn task_list_in_flight_renders_working_hint() {
     assert!(app.is_pending(), "task list in-flight after close");
 
     let text = render(&app, W, H);
+    // The command caption stays present (not replaced) — the regression guard.
     assert!(
-        text.contains("working…"),
-        "working hint on task list:\n{text}"
+        text.contains("a: add") && text.contains("p: start/stop timer"),
+        "the command caption is NOT replaced while pending:\n{text}",
     );
-    assert!(text.contains("Esc to cancel"), "cancel hint:\n{text}");
     assert!(
-        !text.contains("a: add"),
-        "idle command hint hidden while pending:\n{text}",
+        !text.contains("working…"),
+        "the caption is no longer replaced by a working… string:\n{text}",
+    );
+    assert!(
+        text.contains("Esc to cancel"),
+        "cancel affordance appended while pending:\n{text}",
     );
 }
 
 #[test]
-fn offline_retry_in_flight_renders_working_hint() {
+fn offline_retry_in_flight_appends_spinner_without_replacing_the_caption() {
     // On the offline screen, pressing retry ('r') fires a health probe; while it is outstanding
-    // the working hint replaces "Press r to retry".
+    // the retry caption is KEPT and a trailing spinner + cancel affordance is appended.
     let client = FakeClient::new();
     client.push_login(Err(common::offline_err("connection refused")));
     let mut app = App::new();
@@ -258,11 +266,15 @@ fn offline_retry_in_flight_renders_working_hint() {
 
     let text = render(&app, W, H);
     assert!(
-        text.contains("working…"),
-        "working hint while probing:\n{text}"
+        text.contains("Press r to retry"),
+        "the retry caption is NOT replaced while probing:\n{text}",
     );
     assert!(
-        !text.contains("Press r to retry"),
-        "idle retry hint hidden while probing:\n{text}",
+        !text.contains("working…"),
+        "the caption is no longer replaced by a working… string:\n{text}",
+    );
+    assert!(
+        text.contains("Esc to cancel"),
+        "cancel affordance appended while probing:\n{text}",
     );
 }

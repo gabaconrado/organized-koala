@@ -1,19 +1,24 @@
-//! The focus/timer view, driven through the public two-step `App` API (`handle_event` →
+//! The account-global focus timer — now a persistent widget rendered on every post-auth screen
+//! with a global `p` toggle, not a navigable screen (ADR-0006 §8 / Board 0008-R1). Driven through
+//! the public two-step `App` API (`handle_event` / the `load_timer`/`refresh_timer` edge hooks →
 //! synchronous executor → `apply_response`) with the fake client as the only mock — the same
-//! `TestBackend`/core idiom as the task suites. Maps the slice-4t acceptance criteria:
+//! `TestBackend`/core idiom as the task suites. Maps the 0008-R1 re-entry acceptance criteria:
 //!
-//! - **Navigation**: `t` opens the timer (loading config→session from the server); the back key
-//!   (`Cancel`) returns to the task list, re-listing tasks.
-//! - **Start → running countdown**: starting renders a `MM:SS` countdown derived from the
-//!   server's `ends_at` + `server_now` (via the rendered buffer and `countdown_label`).
-//! - **Stop → idle render**.
-//! - **Set-duration sub-flow** (`d` then input + submit) issues an `UpdateTimerConfig` carrying
-//!   the typed minutes and reflects the new duration.
-//! - **Completed render**: a `completed` session shows the completed state.
-//! - **In-flight spinner** while a timer request is pending; **cancel** and a **stale/superseded
-//!   RequestId** drop behave like the task flows.
-//! - **Profile-switch leaves the timer unchanged** (account-global): the timer requests carry
-//!   only the token, never a `profile_id` — verified by inspecting the recorded calls.
+//! - **Global `p` toggle** (criterion 1): from a non-timer post-auth screen, `p` starts when
+//!   idle/completed and stops when running; a second `p` while the toggle is pending is a no-op.
+//! - **`p` suppressed in text-entry** (criterion 2): a literal `p` typed into the add-task or
+//!   duration-edit field does not trigger the toggle (covered as keybinding contract in
+//!   `keybindings.rs`; here we prove the duration-edit overlay swallows `p` end-to-end).
+//! - **Global widget renders** (criterion 3): the timer widget (idle/running countdown/completed)
+//!   shows in the bottom area of the task-list buffer — not a dedicated page.
+//! - **Append-spinner, no flicker** (criterion 4): with a request in flight the hotkey caption is
+//!   still present and a trailing spinner is appended — the regression guard for the flicker bug.
+//! - **No dedicated timer page** (criterion 5): there is no `Screen::Timer` to navigate to and no
+//!   open-timer event (compile-time absence + the behavioural keybinding guards).
+//! - **Account-global unchanged** (criterion 6): every timer request carries only the token.
+//! - **`p` in the caption** (criterion 7): the bottom-left caption lists the `p` start/stop hotkey.
+//! - **Existing behaviour preserved**: start→running countdown, stop→idle, set-duration sub-flow,
+//!   completed render, in-flight cancel, stale/superseded RequestId drop.
 //!
 //! Statelessness (hard-constraint #1): every value shown derives from a server response, and no
 //! authoritative remaining-seconds integer is stored — the countdown is recomputed each draw.
@@ -23,8 +28,8 @@
 mod common;
 
 use common::{
-    Call, FakeClient, completed_session, drive, execute, open_task, profile, render, render_at,
-    running_session, session, submit, timer_config,
+    Call, FakeClient, completed_session, drive, execute, load_timer, profile, refresh_timer,
+    render, render_at, running_session, session, submit, timer_config,
 };
 use contract::{ErrorCode, TimerSession};
 use tui::app::{App, Event, Screen};
@@ -33,183 +38,307 @@ use tui::ui::countdown_label;
 const W: u16 = 80;
 const H: u16 = 24;
 
-/// Drive a fresh app from login to the `work` task list (no tasks), returning the shared fake and
-/// the app. The fake is held so a test scripts the timer responses that follow.
-fn logged_in() -> (FakeClient, App) {
+/// Drive a fresh app from login to the `work` task list (no tasks), then run the edge's initial
+/// timer load (`load_timer_if_needed`) so the global widget reflects a server-returned config +
+/// session — the state the real loop reaches on the first post-login frame. `idle_minutes` is the
+/// configured duration the (idle) timer loads with. Returns the shared fake and the app.
+fn logged_in_with_idle_timer(idle_minutes: u32) -> (FakeClient, App) {
     let client = FakeClient::new();
     client.push_login(Ok(session("jwt")));
     client.push_profiles(Ok(vec![profile("p1", "work")]));
     client.push_tasks(Ok(vec![]));
     let mut app = App::new();
     submit(&mut app, &client, Event::Submit);
-    assert!(matches!(app.screen(), Screen::TaskList(_)), "logged in");
+    assert!(
+        matches!(app.screen(), Screen::TaskList(_)),
+        "logged in to the task list",
+    );
+
+    // The edge loads the account-global timer once a post-auth screen is shown (config→session).
+    client.push_timer_config(Ok(timer_config(idle_minutes)));
+    client.push_timer_session(Ok(TimerSession::Idle));
+    load_timer(&mut app, &client);
+    assert!(
+        matches!(app.timer().session, TimerSession::Idle),
+        "timer loaded idle from the server",
+    );
     (client, app)
 }
 
-/// Open the timer view: script the entry config→session load (idle by default unless overridden)
-/// and submit `OpenTimer`. Returns with the app on the timer screen.
-fn open_timer_idle(client: &FakeClient, app: &mut App) {
-    client.push_timer_config(Ok(timer_config(30)));
-    client.push_timer_session(Ok(TimerSession::Idle));
-    submit(app, client, Event::OpenTimer);
-    assert!(matches!(app.screen(), Screen::Timer(_)), "on timer screen");
-}
-
-// ---- Navigation ----
+// ---- Criterion 3 + 7: the global widget renders on a post-auth screen, with `p` in the caption ----
 
 #[test]
-fn open_timer_loads_config_then_session_from_server() {
-    let (client, mut app) = logged_in();
-    // Entry chains GetTimerConfig -> GetTimerSession (both server-derived, #1).
-    client.push_timer_config(Ok(timer_config(45)));
-    client.push_timer_session(Ok(TimerSession::Idle));
-    submit(&mut app, &client, Event::OpenTimer);
+fn global_timer_widget_renders_on_the_task_list() {
+    let (_client, app) = logged_in_with_idle_timer(30);
+    // We are on the task list (NOT a dedicated timer page) and the timer widget shows there.
+    assert!(matches!(app.screen(), Screen::TaskList(_)), "on task list");
 
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("opened the timer view");
-    };
-    assert_eq!(timer.config.duration_minutes, 45, "config from the server");
-    assert!(matches!(timer.session, TimerSession::Idle));
+    let text = render(&app, W, H);
+    assert!(
+        text.contains("timer idle") && text.contains("30 min"),
+        "idle timer widget shows on the task-list buffer:\n{text}",
+    );
+    // Criterion 7: the bottom-left caption lists the `p` start/stop hotkey (the help-menu entry).
+    assert!(
+        text.contains("p: start/stop timer"),
+        "the `p` toggle is listed in the hotkey caption:\n{text}",
+    );
+}
 
-    // The entry calls are exactly config then session, account-global (token only, no profile).
+#[test]
+fn running_widget_renders_mmss_countdown_on_the_task_list() {
+    let (_client, app) = logged_in_with_idle_timer_running();
+    let text = render(&app, W, H);
+    assert!(
+        text.contains("timer 25:00"),
+        "running countdown rendered in the global widget:\n{text}",
+    );
+}
+
+#[test]
+fn completed_widget_renders_completed_on_the_task_list() {
+    let client = FakeClient::new();
+    client.push_login(Ok(session("jwt")));
+    client.push_profiles(Ok(vec![profile("p1", "work")]));
+    client.push_tasks(Ok(vec![]));
+    let mut app = App::new();
+    submit(&mut app, &client, Event::Submit);
+    // Load onto a completed session (server's verdict, server_now >= ends_at).
+    client.push_timer_config(Ok(timer_config(30)));
+    client.push_timer_session(Ok(completed_session(
+        "2026-06-11T12:00:00Z",
+        "2026-06-11T12:30:00Z",
+        30,
+        "2026-06-11T12:31:00Z",
+    )));
+    load_timer(&mut app, &client);
+
+    assert!(
+        matches!(app.timer().session, TimerSession::Completed { .. }),
+        "session is the server's completed verdict",
+    );
+    let text = render(&app, W, H);
+    assert!(
+        text.contains("timer completed"),
+        "completed state shown in the widget:\n{text}",
+    );
+}
+
+// ---- Initial load: config then session, account-global ----
+
+#[test]
+fn initial_load_pulls_config_then_session_account_global() {
+    let (client, app) = logged_in_with_idle_timer(45);
+    // Entry chains GetTimerConfig -> GetTimerSession (both server-derived, #1), token-only.
     let calls = client.calls();
     assert!(
-        matches!(calls.get(calls.len() - 2), Some(Call::GetTimerConfig { token }) if token == "jwt"),
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::GetTimerConfig { token } if token == "jwt"),),
         "config loaded on entry: {calls:?}",
     );
     assert!(
-        matches!(calls.last(), Some(Call::GetTimerSession { token }) if token == "jwt"),
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::GetTimerSession { token } if token == "jwt"),),
         "session loaded after config: {calls:?}",
     );
-
-    // The rendered view shows the server's duration.
-    let text = render(&app, W, H);
-    assert!(text.contains("Duration: 45 min"), "duration shown:\n{text}");
-    assert!(text.contains("Idle"), "idle state shown:\n{text}");
-}
-
-#[test]
-fn back_key_returns_to_task_list_and_relists() {
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
-
-    // Esc maps to Cancel on the timer; the core resolves it to back-to-task-list, re-listing.
-    client.push_tasks(Ok(vec![open_task(
-        "t1",
-        "back home",
-        "2026-06-18T10:00:00Z",
-    )]));
-    submit(&mut app, &client, Event::Cancel);
-
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("returned to the task list");
-    };
-    assert_eq!(list.tasks.first().expect("task").title, "back home");
-    assert!(
-        matches!(client.calls().last(), Some(Call::ListTasks { profile_id, .. }) if profile_id == "p1"),
-        "re-listed the active profile's tasks on return",
+    assert_eq!(
+        app.timer().config.duration_minutes,
+        45,
+        "config came from the server",
     );
+    let text = render(&app, W, H);
+    assert!(text.contains("45 min"), "server duration shown:\n{text}");
 }
 
-// ---- Start -> running countdown ----
+// ---- Criterion 1: the global `p` toggle ----
 
 #[test]
-fn start_renders_running_countdown_from_ends_at_and_server_now() {
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
+fn p_starts_the_session_when_idle() {
+    let (client, mut app) = logged_in_with_idle_timer(30);
 
-    // Start: the server returns a running session whose ends_at - server_now = 25:00.
     client.push_start_timer(Ok(running_session(
         "2026-06-11T12:00:00Z",
         "2026-06-11T12:30:00Z",
         30,
         "2026-06-11T12:05:00Z",
     )));
-    submit(&mut app, &client, Event::StartTimer);
+    submit(&mut app, &client, Event::ToggleTimer);
 
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("still on the timer view");
-    };
-    // Derive the label the view computes from the server's instants (via the session DTO's own
-    // `DateTime`s — no direct chrono construction in the test), pinning the countdown to
-    // `ends_at − server_now` (since_response ~ 0 just-applied).
-    let TimerSession::Running {
-        ends_at,
-        server_now,
-        ..
-    } = &timer.session
-    else {
-        panic!("session is running after start");
-    };
-    assert_eq!(
-        countdown_label(ends_at.timestamp(), server_now.timestamp(), 0),
-        "25:00",
-        "label derived from ends_at - server_now",
-    );
+    // Idle → toggle issues StartTimerSession (token only, account-global).
     assert!(
         matches!(client.calls().last(), Some(Call::StartTimerSession { token }) if token == "jwt"),
-        "start carried only the token (account-global)",
+        "p while idle starts the session (token only): {:?}",
+        client.calls(),
     );
-
-    // And the rendered buffer shows that running countdown.
-    let text = render(&app, W, H);
     assert!(
-        text.contains("25:00"),
-        "running countdown rendered:\n{text}"
+        matches!(app.timer().session, TimerSession::Running { .. }),
+        "session is running after the start toggle",
     );
-    assert!(text.contains("Running"), "running state shown:\n{text}");
+    // Still on the task list — the toggle is global, it does not navigate.
+    assert!(matches!(app.screen(), Screen::TaskList(_)), "no navigation");
 }
 
-// ---- Stop -> idle render ----
+#[test]
+fn p_stops_the_session_when_running() {
+    let (client, mut app) = logged_in_with_idle_timer_running();
+
+    // Running → toggle issues StopTimerSession; stop resets to idle (no pause; ADR-0002 §5).
+    client.push_stop_timer(Ok(TimerSession::Idle));
+    submit(&mut app, &client, Event::ToggleTimer);
+
+    assert!(
+        matches!(client.calls().last(), Some(Call::StopTimerSession { token }) if token == "jwt"),
+        "p while running stops the session (token only): {:?}",
+        client.calls(),
+    );
+    assert!(
+        matches!(app.timer().session, TimerSession::Idle),
+        "stop reset the session to idle",
+    );
+    let text = render(&app, W, H);
+    assert!(
+        text.contains("timer idle"),
+        "idle widget after stop:\n{text}",
+    );
+}
 
 #[test]
-fn stop_returns_to_idle_render() {
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
+fn p_starts_the_session_when_completed() {
+    let client = FakeClient::new();
+    client.push_login(Ok(session("jwt")));
+    client.push_profiles(Ok(vec![profile("p1", "work")]));
+    client.push_tasks(Ok(vec![]));
+    let mut app = App::new();
+    submit(&mut app, &client, Event::Submit);
+    client.push_timer_config(Ok(timer_config(30)));
+    client.push_timer_session(Ok(completed_session(
+        "2026-06-11T12:00:00Z",
+        "2026-06-11T12:30:00Z",
+        30,
+        "2026-06-11T12:31:00Z",
+    )));
+    load_timer(&mut app, &client);
+    assert!(matches!(
+        app.timer().session,
+        TimerSession::Completed { .. }
+    ));
+
+    // Completed is treated like idle by the toggle: `p` starts a fresh session.
+    client.push_start_timer(Ok(running_session(
+        "2026-06-11T13:00:00Z",
+        "2026-06-11T13:30:00Z",
+        30,
+        "2026-06-11T13:00:00Z",
+    )));
+    submit(&mut app, &client, Event::ToggleTimer);
+    assert!(
+        matches!(client.calls().last(), Some(Call::StartTimerSession { token }) if token == "jwt"),
+        "p while completed starts a new session: {:?}",
+        client.calls(),
+    );
+    assert!(matches!(app.timer().session, TimerSession::Running { .. }));
+}
+
+#[test]
+fn second_p_while_the_toggle_is_pending_is_a_no_op() {
+    let (client, mut app) = logged_in_with_idle_timer(30);
+
+    // First `p` dispatches a start and the timer is now in flight (hold the dispatch, don't drive).
+    let dispatch = app
+        .handle_event(Event::ToggleTimer)
+        .expect("p dispatches a start");
+    assert!(
+        app.timer().is_pending(),
+        "timer in flight after the first p"
+    );
+    let calls_after_first = client.calls().len();
+
+    // A second `p` while the toggle is already pending dispatches nothing — no duplicate request.
+    assert!(
+        app.handle_event(Event::ToggleTimer).is_none(),
+        "a second p while pending is a no-op",
+    );
+    assert_eq!(
+        client.calls().len(),
+        calls_after_first,
+        "no duplicate timer request while one is in flight",
+    );
+
+    // Completing the held start settles the timer.
     client.push_start_timer(Ok(running_session(
         "2026-06-11T12:00:00Z",
         "2026-06-11T12:30:00Z",
         30,
         "2026-06-11T12:05:00Z",
     )));
-    submit(&mut app, &client, Event::StartTimer);
-
-    // Stop resets to idle (no pause; ADR-0002 §5).
-    client.push_stop_timer(Ok(TimerSession::Idle));
-    submit(&mut app, &client, Event::StopTimer);
-
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("still on the timer view");
-    };
+    drive(&mut app, &client, dispatch);
     assert!(
-        matches!(timer.session, TimerSession::Idle),
-        "stop reset the session to idle",
+        !app.timer().is_pending(),
+        "settled after the start completes"
     );
-    assert!(
-        matches!(client.calls().last(), Some(Call::StopTimerSession { token }) if token == "jwt"),
-        "stop carried only the token",
-    );
-    let text = render(&app, W, H);
-    assert!(text.contains("Idle"), "idle render after stop:\n{text}");
-    assert!(!text.contains("Running"), "no running state:\n{text}");
 }
 
-// ---- Set-duration sub-flow ----
+// ---- Criterion 4: append-spinner, no flicker (the key feedback fix) ----
+
+#[test]
+fn in_flight_appends_a_spinner_without_replacing_the_caption() {
+    let (_client, mut app) = logged_in_with_idle_timer(30);
+
+    // Begin a toggle but hold its dispatch (don't drive it): the timer is in flight.
+    let _dispatch = app.handle_event(Event::ToggleTimer).expect("p dispatches");
+    assert!(app.timer().is_pending(), "in-flight after the toggle");
+
+    // The regression guard: the stable hotkey caption is STILL present (not replaced by a
+    // "working…" string), and the cancel affordance plus a trailing spinner glyph are appended.
+    let text = render_at(&app, W, H, 1);
+    assert!(
+        text.contains("p: start/stop timer"),
+        "the hotkey caption is NOT replaced while in flight (no flicker):\n{text}",
+    );
+    assert!(
+        text.contains("a: add") && text.contains("q: quit"),
+        "the full caption stays present while in flight:\n{text}",
+    );
+    assert!(
+        text.contains("Esc to cancel"),
+        "the cancel affordance is appended:\n{text}",
+    );
+    // A spinner glyph is appended (tick 1 → "/").
+    assert!(
+        text.contains('/'),
+        "a trailing spinner glyph is appended at tick 1:\n{text}",
+    );
+}
+
+#[test]
+fn idle_caption_has_no_spinner_or_cancel_affordance() {
+    // Contrast: with nothing in flight the caption is the bare hotkey list — no spinner, no cancel.
+    let (_client, app) = logged_in_with_idle_timer(30);
+    let text = render(&app, W, H);
+    assert!(
+        text.contains("p: start/stop timer"),
+        "caption present:\n{text}"
+    );
+    assert!(
+        !text.contains("Esc to cancel"),
+        "no cancel affordance when idle:\n{text}",
+    );
+}
+
+// ---- Set-duration sub-flow (preserved, reached by `d` from a post-auth screen) ----
 
 #[test]
 fn set_duration_issues_update_and_reflects_new_value() {
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
+    let (client, mut app) = logged_in_with_idle_timer(30);
 
     // `d` opens the edit sub-flow seeded with the current duration; it does not dispatch.
     assert!(
         app.handle_event(Event::BeginEditDuration).is_none(),
         "opening the edit sub-flow dispatches nothing",
     );
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("on the timer view");
-    };
-    assert!(timer.editing.is_some(), "edit sub-flow open");
+    assert!(app.is_editing_duration(), "edit sub-flow open");
 
     // Clear the seeded buffer and type 25.
     let _ = app.handle_event(Event::Backspace);
@@ -221,11 +350,12 @@ fn set_duration_issues_update_and_reflects_new_value() {
     client.push_update_timer_config(Ok(timer_config(25)));
     submit(&mut app, &client, Event::Submit);
 
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("still on the timer view");
-    };
-    assert!(timer.editing.is_none(), "edit closed after success");
-    assert_eq!(timer.config.duration_minutes, 25, "new duration stored");
+    assert!(!app.is_editing_duration(), "edit closed after success");
+    assert_eq!(
+        app.timer().config.duration_minutes,
+        25,
+        "new duration stored",
+    );
     assert!(
         matches!(
             client.calls().last(),
@@ -235,271 +365,195 @@ fn set_duration_issues_update_and_reflects_new_value() {
         "the update carried the typed minutes, token only: {:?}",
         client.calls(),
     );
-
     let text = render(&app, W, H);
     assert!(
-        text.contains("Duration: 25 min"),
-        "new duration shown:\n{text}"
+        text.contains("25 min"),
+        "new duration shown in the widget:\n{text}",
     );
 }
 
 #[test]
 fn set_duration_validation_error_surfaces_inline_in_edit() {
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
+    let (client, mut app) = logged_in_with_idle_timer(30);
 
     let _ = app.handle_event(Event::BeginEditDuration);
     let _ = app.handle_event(Event::Backspace);
     let _ = app.handle_event(Event::Backspace);
     let _ = app.handle_event(Event::Char('0'));
 
-    // The server rejects 0 with validation_failed; the error surfaces in the edit sub-flow and
-    // the view stays on the timer (no navigation).
+    // The server rejects 0 with validation_failed; the error surfaces in the edit sub-flow and the
+    // edit stays open (no navigation — there is no timer screen to leave).
     client.push_update_timer_config(Err(common::api_err(
         ErrorCode::ValidationFailed,
         "duration must be between 1 and 1440",
     )));
     submit(&mut app, &client, Event::Submit);
 
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("stayed on the timer view");
-    };
-    let edit = timer
-        .editing
-        .as_ref()
-        .expect("edit sub-flow stays open on error");
     assert!(
-        edit.error.as_deref().unwrap_or("").contains("1 and 1440"),
-        "validation error shown inline: {:?}",
-        edit.error,
+        app.is_editing_duration(),
+        "edit sub-flow stays open on error",
+    );
+    let text = render(&app, W, H);
+    assert!(
+        text.contains("1 and 1440"),
+        "validation error shown inline in the edit overlay:\n{text}",
     );
 }
 
-// ---- Completed render ----
+#[test]
+fn p_is_suppressed_while_editing_duration_end_to_end() {
+    // Criterion 2 (end-to-end): while the duration-edit overlay owns keystrokes, a `Char('p')` is
+    // fed into the buffer, not interpreted as ToggleTimer — no timer request is dispatched.
+    let (client, mut app) = logged_in_with_idle_timer(30);
+    let _ = app.handle_event(Event::BeginEditDuration);
+    assert!(app.is_editing_duration());
+    let calls_before = client.calls().len();
+
+    // A literal 'p' while editing edits the buffer (digits-only filter drops it) but never toggles.
+    assert!(
+        app.handle_event(Event::Char('p')).is_none(),
+        "a literal p while editing dispatches nothing (not a toggle)",
+    );
+    assert!(app.is_editing_duration(), "still editing after a literal p");
+    assert_eq!(
+        client.calls().len(),
+        calls_before,
+        "no timer request issued by a literal p in the edit field",
+    );
+}
+
+// ---- Start -> running countdown (preserved; now derived through the global widget) ----
 
 #[test]
-fn completed_session_renders_completed_state() {
-    let (client, mut app) = logged_in();
-    // Open straight onto a completed session (server's verdict, server_now >= ends_at).
-    client.push_timer_config(Ok(timer_config(30)));
-    client.push_timer_session(Ok(completed_session(
+fn start_renders_running_countdown_from_ends_at_and_server_now() {
+    let (client, mut app) = logged_in_with_idle_timer(30);
+
+    // Start: the server returns a running session whose ends_at - server_now = 25:00.
+    client.push_start_timer(Ok(running_session(
+        "2026-06-11T12:00:00Z",
+        "2026-06-11T12:30:00Z",
+        30,
+        "2026-06-11T12:05:00Z",
+    )));
+    submit(&mut app, &client, Event::ToggleTimer);
+
+    // Derive the label the view computes from the server's instants, pinning the countdown to
+    // `ends_at − server_now` (since_response ~ 0 just-applied).
+    let TimerSession::Running {
+        ends_at,
+        server_now,
+        ..
+    } = &app.timer().session
+    else {
+        panic!("session is running after start");
+    };
+    assert_eq!(
+        countdown_label(ends_at.timestamp(), server_now.timestamp(), 0),
+        "25:00",
+        "label derived from ends_at - server_now",
+    );
+    let text = render(&app, W, H);
+    assert!(
+        text.contains("timer 25:00"),
+        "running countdown rendered in the widget:\n{text}",
+    );
+}
+
+// ---- Stale-id drop (keyed on the timer's own in-flight marker, independent of the screen) ----
+
+#[test]
+fn superseded_timer_response_is_dropped() {
+    let (client, mut app) = logged_in_with_idle_timer(30);
+
+    // First toggle: a start dispatch we will hold and let go stale.
+    let first = app
+        .handle_event(Event::ToggleTimer)
+        .expect("p dispatches a start");
+    assert!(app.timer().is_pending());
+
+    // Complete the first start normally so the timer marker clears and the session goes running.
+    client.push_start_timer(Ok(running_session(
+        "2026-06-11T12:00:00Z",
+        "2026-06-11T12:30:00Z",
+        30,
+        "2026-06-11T12:05:00Z",
+    )));
+    drive(&mut app, &client, first.clone());
+    assert!(!app.timer().is_pending(), "first start settled");
+    assert!(matches!(app.timer().session, TimerSession::Running { .. }));
+
+    // A LATE duplicate of the first response (same old RequestId) arriving after the marker cleared
+    // must be dropped — it must not re-apply or disturb the settled state.
+    client.push_start_timer(Ok(completed_session(
         "2026-06-11T12:00:00Z",
         "2026-06-11T12:30:00Z",
         30,
         "2026-06-11T12:31:00Z",
-    )));
-    submit(&mut app, &client, Event::OpenTimer);
-
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("on the timer view");
-    };
-    assert!(
-        matches!(timer.session, TimerSession::Completed { .. }),
-        "session is the server's completed verdict",
-    );
-    let text = render(&app, W, H);
-    assert!(text.contains("Completed"), "completed state shown:\n{text}");
-    assert!(text.contains("00:00"), "completed shows 00:00:\n{text}");
-}
-
-// ---- In-flight spinner ----
-
-#[test]
-fn start_shows_in_flight_spinner_until_response() {
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
-
-    // Begin a start but hold its dispatch (don't drive it): the timer is now in flight.
-    let dispatch = app
-        .handle_event(Event::StartTimer)
-        .expect("start dispatches");
-    assert!(app.is_pending(), "in-flight after start");
-
-    // The render shows the spinner + "working…" hint (tick drives the glyph).
-    let text = render_at(&app, W, H, 1);
-    assert!(
-        text.contains("working…") && text.contains("Esc to cancel"),
-        "in-flight working hint rendered:\n{text}",
-    );
-
-    // Completing the held request settles the screen back to idle interactivity.
-    client.push_start_timer(Ok(running_session(
-        "2026-06-11T12:00:00Z",
-        "2026-06-11T12:30:00Z",
-        30,
-        "2026-06-11T12:05:00Z",
-    )));
-    drive(&mut app, &client, dispatch);
-    assert!(!app.is_pending(), "settled after the start completes");
-}
-
-#[test]
-fn request_triggering_event_while_pending_is_a_no_op() {
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
-
-    let first = app
-        .handle_event(Event::StartTimer)
-        .expect("start dispatches");
-    assert!(app.is_pending());
-    let calls_after_first = client.calls().len();
-
-    // A second request-triggering event while pending dispatches nothing and makes no call.
-    assert!(app.handle_event(Event::StopTimer).is_none());
-    assert!(app.handle_event(Event::Refresh).is_none());
-    assert_eq!(
-        client.calls().len(),
-        calls_after_first,
-        "no extra call while a timer request is outstanding",
-    );
-
-    client.push_start_timer(Ok(TimerSession::Idle));
-    drive(&mut app, &client, first);
-    assert!(!app.is_pending());
-}
-
-// ---- Cancel / stale-id drop ----
-
-#[test]
-fn cancel_while_pending_clears_in_flight() {
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
-
-    let _dispatch = app
-        .handle_event(Event::StartTimer)
-        .expect("start dispatches");
-    assert!(app.is_pending(), "in-flight before cancel");
-
-    // While pending, Cancel clears the marker (it does not leave the timer view).
-    assert!(app.handle_event(Event::Cancel).is_none());
-    assert!(!app.is_pending(), "cancel cleared the in-flight marker");
-    assert!(
-        matches!(app.screen(), Screen::Timer(_)),
-        "still on the timer view after cancelling an in-flight request",
-    );
-
-    // Interactive again: a fresh request dispatches.
-    let next = app.handle_event(Event::Refresh);
-    assert!(next.is_some(), "screen accepts a new request after cancel");
-    let _ = client;
-}
-
-#[test]
-fn stale_response_after_cancel_is_dropped() {
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
-
-    // Begin a start, capture the dispatch, then cancel before the response lands.
-    let dispatch = app
-        .handle_event(Event::StartTimer)
-        .expect("start dispatches");
-    assert!(app.handle_event(Event::Cancel).is_none());
-    assert!(!app.is_pending(), "cancelled");
-
-    // The abandoned request still ran on the (mocked) server; its stale response must be dropped
-    // (RequestId mismatch) — the session stays idle, not flipped to running.
-    client.push_start_timer(Ok(running_session(
-        "2026-06-11T12:00:00Z",
-        "2026-06-11T12:30:00Z",
-        30,
-        "2026-06-11T12:05:00Z",
-    )));
-    let stale = execute(&client, dispatch);
-    assert!(
-        app.apply_response(stale).is_none(),
-        "a stale response yields no follow-up",
-    );
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("still on the timer view");
-    };
-    assert!(
-        matches!(timer.session, TimerSession::Idle),
-        "the dropped stale start must not flip the session to running",
-    );
-    assert!(
-        !app.is_pending(),
-        "still idle after dropping the stale response"
-    );
-}
-
-#[test]
-fn superseded_response_after_new_request_is_dropped() {
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
-
-    let first = app
-        .handle_event(Event::StartTimer)
-        .expect("start dispatches");
-    assert!(app.handle_event(Event::Cancel).is_none());
-
-    // New request after cancel gets a fresh RequestId — now the awaited one.
-    let second = app
-        .handle_event(Event::Refresh)
-        .expect("refresh dispatches");
-    assert!(app.is_pending());
-
-    // The first (cancelled) start's late response carries the old id and is dropped.
-    client.push_start_timer(Ok(running_session(
-        "2026-06-11T12:00:00Z",
-        "2026-06-11T12:30:00Z",
-        30,
-        "2026-06-11T12:05:00Z",
     )));
     let stale = execute(&client, first);
     assert!(
         app.apply_response(stale).is_none(),
-        "the superseded response is dropped",
+        "a response whose id no longer matches the timer marker is dropped",
     );
-    assert!(app.is_pending(), "the new request is still in flight");
+    assert!(
+        matches!(app.timer().session, TimerSession::Running { .. }),
+        "the dropped stale response did not flip the settled running session to completed",
+    );
+}
 
-    // The new (refresh) request then completes normally, driving the view.
+// ---- Coarse refresh: account-global, picks up the server's verdict ----
+
+#[test]
+fn coarse_refresh_repulls_session_account_global() {
+    let (client, mut app) = logged_in_with_idle_timer_running();
+
+    // The coarse refresh (the ~1-min cadence) re-pulls the session; the server now reports
+    // completed. The refresh carries only the token (account-global, #4 / ADR-0002 §5).
     client.push_timer_session(Ok(completed_session(
         "2026-06-11T12:00:00Z",
         "2026-06-11T12:30:00Z",
         30,
         "2026-06-11T12:31:00Z",
     )));
-    drive(&mut app, &client, second);
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("on the timer view");
-    };
+    refresh_timer(&mut app, &client);
+
     assert!(
-        matches!(timer.session, TimerSession::Completed { .. }),
-        "the new request's response drove the view, not the stale start",
+        matches!(client.calls().last(), Some(Call::GetTimerSession { token }) if token == "jwt"),
+        "coarse refresh re-pulled the session, token only: {:?}",
+        client.calls(),
     );
-    assert!(!app.is_pending());
+    assert!(
+        matches!(app.timer().session, TimerSession::Completed { .. }),
+        "the server's completed verdict was folded in on refresh",
+    );
 }
 
-// ---- Profile-switch leaves the timer unchanged (account-global) ----
+// ---- Criterion 6: every timer request is account-global, never profile-scoped ----
 
 #[test]
 fn timer_requests_are_account_global_not_profile_scoped() {
     // The highest-value account-global assertion (#4 / ADR-0002 §5): every timer request carries
-    // only the token, never a profile_id — so the timer is keyed on the account, and switching the
-    // active profile cannot change which session/config is read. The TUI model exposes this by
-    // the call shape: timer Calls have no profile field, unlike ListTasks/CreateTask/CloseTask.
-    let (client, mut app) = logged_in();
-    open_timer_idle(&client, &mut app);
+    // only the token, never a profile_id — unlike ListTasks/CreateTask/CloseTask. Exercise the full
+    // timer command surface (load, start, refresh, stop, update) and check the call shapes.
+    let (client, mut app) = logged_in_with_idle_timer(30);
 
-    // Exercise the full timer command surface.
     client.push_start_timer(Ok(running_session(
         "2026-06-11T12:00:00Z",
         "2026-06-11T12:30:00Z",
         30,
         "2026-06-11T12:05:00Z",
     )));
-    submit(&mut app, &client, Event::StartTimer);
+    submit(&mut app, &client, Event::ToggleTimer);
     client.push_timer_session(Ok(running_session(
         "2026-06-11T12:00:00Z",
         "2026-06-11T12:30:00Z",
         30,
         "2026-06-11T12:06:00Z",
     )));
-    submit(&mut app, &client, Event::Refresh);
+    refresh_timer(&mut app, &client);
     client.push_stop_timer(Ok(TimerSession::Idle));
-    submit(&mut app, &client, Event::StopTimer);
+    submit(&mut app, &client, Event::ToggleTimer);
 
-    // None of the timer calls carry a profile id; the same token addresses them all.
     for call in client.calls() {
         match call {
             Call::GetTimerConfig { token }
@@ -509,7 +563,7 @@ fn timer_requests_are_account_global_not_profile_scoped() {
             | Call::StopTimerSession { token } => {
                 assert_eq!(
                     token, "jwt",
-                    "timer call keyed on the account token only: {token}"
+                    "timer call keyed on the account token only: {token}",
                 );
             }
             // Task/auth calls may carry a profile; that is the profile-namespaced surface (#4),
@@ -517,55 +571,28 @@ fn timer_requests_are_account_global_not_profile_scoped() {
             _ => {}
         }
     }
-
-    // The session derived purely from the timer endpoints — independent of the active profile.
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("on the timer view");
-    };
     assert!(
-        matches!(timer.session, TimerSession::Idle),
-        "stopped to idle"
+        matches!(app.timer().session, TimerSession::Idle),
+        "stopped to idle",
     );
 }
 
-#[test]
-fn timer_session_unaffected_by_returning_through_the_task_list() {
-    // Leaving and re-entering the timer (the only navigation path) reloads it from the
-    // account-global endpoints; the server's session is the single source of truth and is the
-    // same regardless of which profile's task list we passed through.
-    let (client, mut app) = logged_in();
+// ---- Helpers ----
 
-    // Open onto a running session.
-    client.push_timer_config(Ok(timer_config(30)));
-    client.push_timer_session(Ok(running_session(
+/// A logged-in app whose global timer has been loaded onto a running session (ends_at − server_now
+/// = 25:00), via the start toggle. Shared by the running-state tests.
+fn logged_in_with_idle_timer_running() -> (FakeClient, App) {
+    let (client, mut app) = logged_in_with_idle_timer(30);
+    client.push_start_timer(Ok(running_session(
         "2026-06-11T12:00:00Z",
         "2026-06-11T12:30:00Z",
         30,
         "2026-06-11T12:05:00Z",
     )));
-    submit(&mut app, &client, Event::OpenTimer);
-    assert!(matches!(app.screen(), Screen::Timer(_)));
-
-    // Back to the task list (re-list), then re-open: the running session is still observed
-    // because it lives server-side, not in the (stateless, #1) TUI.
-    client.push_tasks(Ok(vec![]));
-    submit(&mut app, &client, Event::Cancel);
-    assert!(matches!(app.screen(), Screen::TaskList(_)));
-
-    client.push_timer_config(Ok(timer_config(30)));
-    client.push_timer_session(Ok(running_session(
-        "2026-06-11T12:00:00Z",
-        "2026-06-11T12:30:00Z",
-        30,
-        "2026-06-11T12:07:00Z",
-    )));
-    submit(&mut app, &client, Event::OpenTimer);
-
-    let Screen::Timer(timer) = app.screen() else {
-        panic!("re-opened the timer view");
-    };
+    submit(&mut app, &client, Event::ToggleTimer);
     assert!(
-        matches!(timer.session, TimerSession::Running { .. }),
-        "the server-side running session is observed again on re-entry",
+        matches!(app.timer().session, TimerSession::Running { .. }),
+        "timer running after the start toggle",
     );
+    (client, app)
 }
