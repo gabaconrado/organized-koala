@@ -10,9 +10,9 @@ Board state machine.
 | 0003 | Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001) | Foundation | merged | full ADR-0005 HTTP API on Postgres; docker stack; reviewed + live-verified |
 | 0004 | TUI — register/login, default profile, task add/list/close (slice 3 of 0001) | Foundation | merged | completes the foundational tracer bullet; reviewed + live-verified |
 | 0005 | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | Foundation | merged | ADR-0006 Model A (worker thread + mpsc + polled loop, no async); TUI-only; reviewed + live-verified |
-| 0006 | Fix stale doc comment in `tui/src/main.rs` | Foundation | in-flight (branch-owned) | inaugural `chore` (comment-only); corrects the stale health-probe doc to the ADR-0006 worker/pure-`App` entrypoint; lighter chore DoD (gates + invariant-attesting cold review; live verifier skipped); live status on `feature/0006-tui-mainrs-stale-doccomment` |
+| 0006 | Fix stale doc comment in `tui/src/main.rs` | Foundation | merged | inaugural `chore` (comment-only); corrected the stale health-probe doc to the ADR-0006 worker/pure-`App` entrypoint; lighter chore DoD (gates + invariant-attesting cold review; live verifier skipped) |
 | 0007 | `./ok.sh coverage` verb (cargo-llvm-cov, report-only) | Platform | inbox | `chore`; reported-only, no threshold, not a DoD gate |
-| 0008 | Pomodoro timer | Focus | inbox | unblocked — ADR-0002 (timer authority) accepted; feature card minted, awaiting `architect` plan |
+| 0008 | Pomodoro timer — global duration config + start/stop session | Focus | in-flight (branch-owned) | implements ADR-0002 (timer authority); account-global config + session keyed on `user_id`; five `/api/timer/...` endpoints + reversible migration (`ends_at` derived); TUI render-only countdown from absolute `ends_at` + `server_now` (#1-safe, inside ADR-0006); reviewed + live-verified; live status on `feature/0008-pomodoro-timer` |
 | — | Notes | Capture | not-started | flat: Title/Content/Created |
 | — | Multiple profiles UX | Foundation | not-started | profile switch in the TUI |
 | — | Observability wiring | Platform | not-started | OTLP export, spans on key flows |

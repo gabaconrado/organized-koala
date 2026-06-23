@@ -37,7 +37,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0005](./features/0005-tui-responsive-event-loop.md) | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | feature | merged | high | 0004 | — (merged) |
 | [0006](./features/0006-tui-mainrs-stale-doccomment.md) | Fix stale doc comment in `tui/src/main.rs` | chore | merged | low | — | — (merged) |
 | [0007](./features/0007-ok-coverage-verb.md) | Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold) | chore | inbox | low | — | — (unclaimed) |
-| [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | inbox | medium | — | — (unclaimed) |
+| [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | ready (frozen — branch at `awaiting-merge`) | medium | — | `feature/0008-pomodoro-timer` |
 
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
@@ -66,8 +66,18 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > reported-only `./ok.sh coverage` verb over `cargo-llvm-cov` (no hard threshold, not a DoD
 > gate), minted as a `chore` (dev-tooling only). Owner on claim: `platform-dev`.
 >
-> **0008 (inbox) — Pomodoro timer.** The Focus phase is unblocked:
-> [ADR-0002](../docs/adr/0002-pomodoro-timer-authority.md) (timer authority) is accepted — the
-> server owns the timer and the TUI renders a countdown from a server-provided absolute
-> end-instant (no per-second polling, inside ADR-0006). Feature card minted; next it goes to
-> `architect` for the `## Plan(s)` block before code.
+> **0008 — Pomodoro timer (in-flight, branch-owned at `awaiting-merge`).** The first Focus-phase
+> feature, implementing [ADR-0002](../docs/adr/0002-pomodoro-timer-authority.md) (timer authority)
+> with no new/amended ADR. A new `contract` `timer` module (`TimerConfig`,
+> `UpdateTimerConfigRequest`, the tagged `TimerSession` carrying `ends_at` + `server_now`), five
+> **account-global** `/api/timer/...` server endpoints keyed on `user_id` (config get/update,
+> session get/start/stop) + a reversible migration creating `timer_configs` + `timer_sessions`
+> (`ends_at` derived, not stored), and a TUI focus view whose live `MM:SS` countdown is
+> **render-only** — recomputed each ~80 ms draw from the server's absolute `ends_at`, `server_now`,
+> and a monotonic `Instant`, never a stored counter (#1-safe; inside ADR-0006, no per-second
+> polling). Account-global (#4 / ADR-0002 §5), flat (#3, duration the only knob). Reviewer
+> **approved** and verifier **verified** (the running→`completed` transition at `ends_at` and
+> persistence across a `docker compose restart` directly observed), both pinned to code-hash
+> `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`. The `main` snapshot above is frozen at the claim
+> (`ready`); the live `awaiting-merge` status is on `feature/0008-pomodoro-timer` until the human's
+> merge.

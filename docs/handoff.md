@@ -5,6 +5,107 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-23 (0008 — account-global Pomodoro focus timer, end-to-end across all three crates)
+
+Branch: `feature/0008-pomodoro-timer` (last code sha `fc894ce`, code-hash
+`708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`). The **first feature of the Focus phase** — the
+Pomodoro timer end-to-end, implementing [ADR-0002][adr-0002] (timer authority) without reopening
+or amending it. The cycle ran build → cold review → live verify and stopped at the AI-terminal
+`awaiting-merge` on the branch.
+
+What shipped (on the branch):
+
+- **`contract` — a new `timer` module.** `TimerConfig { duration_minutes }`,
+  `UpdateTimerConfigRequest { duration_minutes }`, and a tagged `TimerSession` enum
+  (`#[serde(tag = "state", rename_all = "lowercase")]`) with `Idle` / `Running` / `Completed`;
+  the running/completed variants carry `started_at`, `ends_at`, `duration_minutes`, and
+  `server_now`. Datetimes serialize RFC 3339 `Z` exactly as `Task::created_at`; the established
+  derive/rustdoc/doctest layout is followed; the three items are re-exported from `lib.rs`. No new
+  `ErrorCode`, no secrets, nothing beyond the ADR-0002 shapes (#3 flat).
+- **`server` — five account-global endpoints + a reversible migration.** All keyed on
+  `AuthUser.user_id` with **no `profile_id` in any path** (#4 / ADR-0002 §5): `GET`/`PUT
+  /api/timer/config` (default 30 lazily, upsert, `[1, 1440]` bound → `400 ValidationFailed`
+  outside, reusing the `{ code?, message }` contract, no new `ErrorCode`); `GET
+  /api/timer/session` (idle / running / completed, completion decided read-time when `server_now
+  >= ends_at`); `POST /api/timer/session/start` (snapshots the configured duration;
+  start-while-active replaces — A5); `POST /api/timer/session/stop` (clears the active row,
+  idempotent when idle). Migration `20260612163048_timer.{up,down}.sql` creates `timer_configs` +
+  `timer_sessions`, both `user_id UUID PRIMARY KEY` (schema-enforced at-most-one config / one
+  active session per account); `ends_at` is **derived** (`started_at + duration_minutes`), never
+  stored; the `down` drops both tables. `#[tracing::instrument]` spans on every handler;
+  `i32`↔`u32` at the DB boundary via `try_from`, never `as`. `.sqlx/` refreshed against the
+  sanctioned project test Postgres.
+- **`tui` — a focus/timer view with a render-only countdown.** `Screen::Timer`, reachable with
+  `t` from the task list (`s` start, `x` stop, `d` set duration, `r` refresh, `Esc` back). The
+  live `MM:SS` countdown is **render-only** (#1-safe): **no** authoritative remaining-seconds
+  integer is stored — the label is recomputed every ~80 ms render tick as `ends_at` minus
+  `(server_now + elapsed_since_response)`, where `elapsed_since_response` comes from a monotonic
+  `Instant` captured when the response landed. Coarse session re-reads are ~5 s (A3) — never
+  per-second, no tick stream (stays inside [ADR-0006][adr-0006]). On reaching `00:00` locally it
+  shows "Completed (awaiting server confirmation)" until the server's authoritative `Completed`
+  verdict arrives.
+- **Tests (tester).** `contract` 19 (round-trip, tagged-enum wire shape, `Z` offsets), server 21
+  `#[sqlx::test]` (config default/persist/bounds, start→running with consistent instants, stop,
+  start-replaces-active, account-global with two accounts, auth-required), tui 14 `TestBackend` +
+  5 keybinding (navigation, running countdown rendered via `countdown_label`, stop, set-duration +
+  inline validation, completed render, in-flight spinner, cancel/stale-id drop, account-global /
+  profile-switch-unchanged). The one positive completion-at-`ends_at` transition is deliberately
+  left to the live verifier (forcing `now >= ends_at` would need a real ~60 s sleep the suite
+  avoids — noted inline in `shortest_session_reads_running_not_completed`).
+
+Verdicts (both pinned to code-hash `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`, sha `fc894ce`):
+
+- **Reviewer: REVIEW-STATUS approved.** Gates green (contract 19 / server 21 / tui 14 + 5
+  keybinding, lint `--all-targets` clean, fmt clean). Risk-surface all HOLD: **#1** stateless
+  (countdown recomputed each draw, nothing persisted); **#4 / ADR-0002 §5** account-global (the
+  routes and client methods key on `user_id`, tables `user_id PRIMARY KEY`); **#3** flat
+  (duration the only knob, no pause); **#2 / ADR-0002** contract is single source of truth, no
+  new/amended ADR; reversible migration with `ends_at` derived; `{ code?, message }` reused, no new
+  `ErrorCode`; no `as` at the DB boundary; spans on all five handlers; the three `#[allow]` are the
+  sanctioned test-only exception.
+- **Verifier: VERIFY-STATUS verified.** Live against `./ok.sh up` (docker present, migrate
+  one-shot exited 0, both tables created). **Completion DIRECTLY OBSERVED** (not inferred): a
+  1-min session polled every 5 s flipped running→`completed` when `server_now >= ends_at`; the row
+  was kept (`count=1`, re-read still `completed`) until `stop` (`count=0`, idle). **Persistence
+  across `docker compose restart server`**: config + running session survived (only `server_now`
+  advanced) → state lives in Postgres. Account-global (no `profile_id`; second account
+  independent), auth (no-bearer → `401 unauthenticated`), and OTel spans for all five handlers
+  with `code.namespace: server::handlers::timer` + the `user_id` attribute. ADR-0003 handshake:
+  the `TestBackend` suite present + green. Stack torn down cleanly.
+
+Durable learnings captured this cycle: **none earned a durable `CLAUDE.md`/standards-skill
+edit.** The candidate considered was the **render-only countdown pattern** — a #1-safe
+live-updating-but-server-authoritative value computed each draw from a server-provided absolute
+instant (`ends_at` + `server_now`) plus a monotonic `Instant`, never stored as a counter. It is a
+clean, reusable idiom, but it does **not** generalize beyond what is already written: it is a
+direct specialization of [ADR-0006][adr-0006] §5 (transient process-lifetime render state, the
+same category as the in-flight spinner marker), the #1 statelessness invariant, and the
+pure-core/effectful-shell rule already in `rust-standards` (learned 0004/0005). Manufacturing a
+new skill entry would duplicate those, so the pattern is recorded **here** as the worked example
+rather than promoted into a standard. No new `CLAUDE.md` gotcha (no recurring miss surfaced — the
+three-home model, contract-frozen boundary #2, statelessness #1, and account-global #4 all held
+cleanly), no `docs-/bash-/coding-/git-standards` edit, no new ADR (inside ADR-0002/0003/0006).
+
+**No new crate** → no new dev agent: the timer is a module *inside* the existing crates
+(`crates/contract/src/timer/`, `crates/server/src/handlers/timer.rs`, `crates/tui/src/app/timer.rs`),
+each already owned by `contract-owner` / `server-dev` / `tui-dev`. Confirmed, not skipped.
+
+**Free pickup spotted (mintable `chore` for a future cycle):** the `tui` timer-edit sub-flow
+mirrors the existing `AddTaskState` text-entry pattern closely enough that the two could share a
+small `TextEntryState` helper — a pure refactor with no behaviour / contract / domain change. Not
+filed here (recorded so the orchestrator can mint it directly if desired); low priority.
+
+**Homes.** Cross-cutting/derived on `main` (homes #1/#3): this `docs/handoff.md` entry (+ the
+"What works right now" snapshot refreshed), `docs/build-plan.md`, and the regenerated
+`board/README.md`. **Feature-local on the branch (home #2):** the item's `## Summary` + the
+`[eng-manager]` Log entry. The orchestrator advances the branch status to `awaiting-merge` after
+this; **`main`'s frozen copy of `board/features/0008-pomodoro-timer.md` is left untouched** at the
+claim snapshot until the human's merge.
+
+[adr-0002]: ./adr/0002-pomodoro-timer-authority.md
+
+---
+
 ## Handoff — 2026-06-23 (0006 — inaugural `chore`: stale `tui/src/main.rs` doc comment fixed)
 
 Branch: `feature/0006-tui-mainrs-stale-doccomment` (last code sha `e218f73`, code-hash
@@ -763,10 +864,23 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   lane for scope-limited maintenance (refactors, doc fixes, test-only, dep bumps) with no
   behaviour/`contract`/domain change — orchestrator-mintable, on a lighter DoD (gates + an
   invariant-attesting cold review; live verifier skipped). See CLAUDE.md "Definition of done" +
-  "The Board". **First trip through the pipeline complete — `0006`** (the `tui/src/main.rs`
-  stale-doc-comment fix) ran mint → claim → build → invariant-attesting cold review → verify
-  skipped → `awaiting-merge` on `feature/0006-tui-mainrs-stale-doccomment` (code-hash
+  "The Board". **First trip through the pipeline complete and MERGED — `0006`** (the
+  `tui/src/main.rs` stale-doc-comment fix) ran mint → claim → build → invariant-attesting cold
+  review → verify skipped → `awaiting-merge`, then fast-forwarded to `main` (code-hash
   `401ad3de59c4cc7e33c3ebf8308c171d80659e4e`); the chore lane needed zero process correction.
-- **Pending plan (operator-sanctioned, not yet a Board item):** a reported-only coverage verb —
-  `./ok.sh coverage` over `cargo-llvm-cov`, **no hard threshold**, not a DoD gate. `architect` to
-  plan it as a new `main`-side item; `platform-dev` owns the verb.
+- **The account-global Pomodoro focus timer is at `awaiting-merge` on its branch** (0008, the
+  first Focus-phase feature; live-verified, branch-owned, not yet merged): a new `contract` `timer`
+  module (`TimerConfig`, `UpdateTimerConfigRequest`, the tagged `TimerSession` enum carrying
+  `ends_at` + `server_now`), five account-global `/api/timer/...` server endpoints keyed on
+  `user_id` (config get/update, session get/start/stop) with a reversible migration creating
+  `timer_configs` + `timer_sessions` (`ends_at` derived, not stored), and a TUI focus view whose
+  live `MM:SS` countdown is **render-only** — recomputed each ~80 ms draw from the server's
+  absolute `ends_at` + `server_now` + a monotonic `Instant`, never a stored counter (#1-safe;
+  inside [ADR-0006][adr-0006], no per-second polling). Account-global (#4 / ADR-0002 §5), flat (#3,
+  duration the only knob), no new/amended ADR ([ADR-0002][adr-0002] governs). Reviewed
+  **approved** and live-**verified** (the running→`completed` transition at `ends_at` and
+  persistence across a `docker compose restart` directly observed), both pinned to code-hash
+  `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da` on `feature/0008-pomodoro-timer`.
+- **The operator-sanctioned coverage verb is now Board item `0007`** (`inbox`, `chore`): a
+  reported-only `./ok.sh coverage` over `cargo-llvm-cov`, **no hard threshold**, not a DoD gate.
+  Owner on claim: `platform-dev`.
