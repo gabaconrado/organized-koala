@@ -2,7 +2,7 @@
 id: 0007
 title: Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold)
 type: chore         # feature | chore
-status: review         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches ok.sh + workspace tooling only; no crate source, no contract
@@ -114,3 +114,9 @@ byte-identical to the last-merged head, corroborating tooling-only scope.
   invariant explicitly attested (no behaviour / no `contract`-wire / no domain-structure change).
 - Clause 7 — branch rebased current on `main` (verdict pins to the code-tree hash, unchanged
   across the docs-/board-only `main` advance).
+
+- 2026-06-23 [orchestrator] step-7 freshen — rebased onto `main`@9bc12f9 (eng-manager
+  learnings + dashboard). Only conflict was this feature-local Board file (dropped `main`'s
+  frozen-pointer note in favour of the branch copy). **code-hash unchanged @ `3fa0adef`** →
+  reviewer `approved` verdict carries forward untouched (no relabel). Gates re-run green on the
+  rebased tree (`fmt --check` / `lint` / `test`). Verify correctly skipped (chore).
