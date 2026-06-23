@@ -37,7 +37,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0005](./features/0005-tui-responsive-event-loop.md) | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | feature | merged | high | 0004 | — (merged) |
 | [0006](./features/0006-tui-mainrs-stale-doccomment.md) | Fix stale doc comment in `tui/src/main.rs` | chore | merged | low | — | — (merged) |
 | [0007](./features/0007-ok-coverage-verb.md) | Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold) | chore | inbox | low | — | — (unclaimed) |
-| [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | ready (frozen — branch at `awaiting-merge`) | medium | — | `feature/0008-pomodoro-timer` |
+| [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | merged | medium | — | — (merged) |
 
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
@@ -66,7 +66,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > reported-only `./ok.sh coverage` verb over `cargo-llvm-cov` (no hard threshold, not a DoD
 > gate), minted as a `chore` (dev-tooling only). Owner on claim: `platform-dev`.
 >
-> **0008 — Pomodoro timer (in-flight, branch-owned at `awaiting-merge`).** The first Focus-phase
+> **0008 — Pomodoro timer — MERGED.** The first Focus-phase
 > feature, implementing [ADR-0002](../docs/adr/0002-pomodoro-timer-authority.md) (timer authority)
 > with no new/amended ADR on the contract/domain surface. A new `contract` `timer` module
 > (`TimerConfig`, `UpdateTimerConfigRequest`, the tagged `TimerSession` carrying `ends_at` +
@@ -86,5 +86,5 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > byte-identical). Reviewer **approved** and verifier **verified** at the 0008-R1 end state, both
 > pinned to code-hash `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` (the original 0008 build was
 > approved + verified at `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`, voided when the re-entry moved
-> the tree). The `main` snapshot above is frozen at the claim (`ready`); the live `awaiting-merge`
-> status is on `feature/0008-pomodoro-timer` until the human's merge.
+> the tree). Fast-forwarded to `main` at `c32f0ad` (linear, no merge commit); worktree + branch
+> removed.

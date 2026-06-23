@@ -2,7 +2,7 @@
 id: 0008
 title: Pomodoro focus timer — global duration config + start/stop session
 type: feature      # feature | chore
-status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0002 (timer authority) is on `main`; no in-flight Board item gates this
@@ -872,6 +872,12 @@ code-hash `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`, voided when the re-entry m
   the commit-sha pointers may now be stale — the binding key is the hash). Re-ran the gates on the
   rebased tree: `./ok.sh test` green (exit 0), `./ok.sh lint` clean, `./ok.sh fmt --check` clean.
   Board-only freshen — does not retrigger review. Status → `awaiting-merge`.
+
+- 2026-06-23 [human] closed the item: fast-forward merged `feature/0008-pomodoro-timer`
+  (`a07eba5..c32f0ad`, linear — single-parent, no merge commit) into `main` at the operator's
+  explicit direction, bringing the finished feature (original 0008 build + the 0008-R1 feedback
+  re-entry) onto `main` atomically with its Board item. Verdicts held at code-hash `3fa0adef`.
+  Status → `merged`. Worktree + branch cleaned up.
 
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
