@@ -5,6 +5,57 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-23 (0007 — report-only `./ok.sh coverage` verb; chore, lighter DoD)
+
+The operator-sanctioned coverage follow-up (captured in the 2026-06-12 0003 handoff, item #2,
+and carried on the dashboard as the "sanctioned follow-up" note) shipped as a `chore`. Branch:
+`feature/0007-ok-coverage-verb` (code sha `e65a097`, code-hash
+`3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd`). It ran the **lighter chore DoD** — gates green + a
+cold reviewer approval attesting the chore invariant — and the **live `verifier` pass was
+correctly skipped** (a chore changes no behaviour/wire/API, so there is nothing for a live boot
+to exercise). The cycle stopped at the AI-terminal `awaiting-merge` on the branch.
+
+What shipped (`ok.sh` only, on the branch):
+
+- **A `coverage` verb** — `cmd_coverage` + a `coverage)` case branch + a no-arg usage/help line.
+  It runs `cargo llvm-cov --workspace --summary-only "$@"` (extra ARGS pass through) and
+  **mirrors `cmd_test`'s live-DB wiring verbatim**: honour a caller-supplied `DATABASE_URL`, else
+  boot the throwaway test Postgres via the test compose file and tear it down on a `RETURN` trap.
+- **Report-only, no gate.** Prints a per-file table + a `TOTAL` line and exits 0 regardless of
+  the number; **no threshold**, not wired into any Definition-of-done clause. This was the
+  operator-sanctioned shape: coverage made *visible* without becoming a brittle pass/fail bar.
+- **Coverage baseline at implementation time:** ~66% line / ~66% function / ~61% region
+  (`TOTAL` line reported 61.48% region / 66.36% line). Captured here as a reference point, not a
+  bar — there is no target to hit.
+- **Chore invariant held.** No crate source, no behaviour, no `contract`/wire (#2), no
+  domain-structure (#3) change — the diff is `ok.sh` (+31) plus the Board file. `cargo-llvm-cov`
+  0.8.7 was already present and operator-sanctioned (hard constraint #6) — nothing acquired.
+
+Verdict (chore track): **reviewer REVIEW-STATUS approved** @ code-hash
+`3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` (commit `c4387b7`, for reference). Gates green
+(`fmt --check` / `lint` / `test`); the **chore invariant is explicitly attested** (no behaviour,
+no `contract`/wire, no domain-structure change); the verb is report-only. The code-hash is
+byte-identical to the last-merged head, corroborating the tooling-only scope. No live verifier
+pass (chore clause 4 skipped).
+
+Durable learning: one small `bash-standards` addition (learned 0007) — *a report-only tooling
+verb reuses the shared live-DB wiring (the `cmd_test` `DATABASE_URL`/compose/`RETURN`-trap
+pattern) rather than re-deriving it, and stays honest by exiting 0 regardless of the metric; a
+verb that can fail the build on a value is a gate, not a report.* No new ADR (a chore makes no
+contract/domain decision), no new crate → no new dev agent, no `CLAUDE.md` hard-constraint
+addition beyond documenting the verb in the "How to run" table.
+
+**Homes.** Cross-cutting/derived on `main` (homes #1/#3): the `CLAUDE.md` "How to run" `coverage`
+row, this `docs/handoff.md` entry (+ the "What works right now" snapshot refreshed for the 0007
+state), the `bash-standards` learning, and the regenerated `board/README.md`. **Feature-local on
+the branch (home #2):** only the item's `## Summary` (and its Log entries/verdict, already
+committed on the branch). `main`'s frozen copy of `board/features/0007-ok-coverage-verb.md` stays
+untouched at the claim snapshot (`ready`) until the human's merge.
+
+**Free pickup noted (mintable `chore`):** none this cycle.
+
+---
+
 ## Handoff — 2026-06-23 (0008-R1 — feedback re-entry: Pomodoro becomes a global widget; TUI-only)
 
 **Feedback re-entry, not a fresh feature — the first re-entry on an item that had already reached
@@ -977,6 +1028,13 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   the 0008-R1 end state, both pinned to code-hash `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` on
   `feature/0008-pomodoro-timer` (the original 0008 build was approved + verified at
   `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`, voided when the re-entry moved the tree).
-- **The operator-sanctioned coverage verb is now Board item `0007`** (`inbox`, `chore`): a
-  reported-only `./ok.sh coverage` over `cargo-llvm-cov`, **no hard threshold**, not a DoD gate.
-  Owner on claim: `platform-dev`.
+- **The report-only `./ok.sh coverage` verb is at `awaiting-merge` on its branch** (0007, a
+  `chore`; branch-owned, not yet merged): `cargo llvm-cov --workspace --summary-only`, reusing
+  `cmd_test`'s live-DB wiring (throwaway test Postgres booted + torn down on a `RETURN` trap), in
+  the no-arg usage/help. **No threshold, not a DoD gate** — purely reported (operator-sanctioned
+  shape: coverage visible, not a brittle bar). Baseline at implementation: ~66% line / ~66%
+  function / ~61% region. Tooling-only (no crate source/behaviour/`contract`/domain change), so it
+  ran the lighter chore DoD: gates green + a cold reviewer **approved** attesting the chore
+  invariant, pinned to code-hash `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` on
+  `feature/0007-ok-coverage-verb`; the live verifier pass was correctly **skipped**. The 0003
+  "sanctioned follow-up" is now consumed.

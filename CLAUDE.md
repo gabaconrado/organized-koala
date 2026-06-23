@@ -55,6 +55,7 @@ not invoke `cargo`/`docker`/`sqlx` ad-hoc when a verb exists; extend `ok.sh` ins
 | `./ok.sh test` | run all tests |
 | `./ok.sh lint` | `cargo clippy --all-targets` (lint levels in `Cargo.toml [workspace.lints]`) |
 | `./ok.sh fmt` | format (`./ok.sh fmt --check` to verify) |
+| `./ok.sh coverage` | **dev-facing, report-only** workspace coverage summary via `cargo-llvm-cov` (boots the throwaway test Postgres like `test`); **no threshold, not a DoD gate** — purely reported |
 | `./ok.sh migrate` | **dev-only** convenience; delegates to `organized-koalad migrate` (the binary owns migrations at runtime — see [ADR-0004][adr-0004]) |
 | `./ok.sh rollback` | **dev-only** convenience; delegates to `organized-koalad rollback` (revert the most recent migration; never automated) |
 | `./ok.sh up` / `./ok.sh down` | bring the docker stack (server + Postgres + OTel) up/down; `up` runs migrations automatically (a one-shot `organized-koalad migrate` compose service that the server gates on) |

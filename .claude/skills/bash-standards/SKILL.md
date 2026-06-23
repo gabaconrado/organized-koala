@@ -25,6 +25,14 @@ audience: dev
   and exit non-zero; do not `curl … | sh`, do not pull an embedded/throwaway DB image, do not
   reuse a leftover binary.
 - `readonly` for constants; lowercase for locals, UPPER_CASE for exported/global config.
+- **A report-only tooling verb still reuses the shared live-DB wiring; it is not a gate**
+  (learned 0007). When an `ok.sh` verb needs a live Postgres (e.g. `coverage` over
+  `cargo-llvm-cov`, mirroring `test`), reuse `cmd_test`'s pattern verbatim — honour a
+  caller-supplied `DATABASE_URL`, else boot the throwaway test Postgres via the test compose
+  file and tear it down on a `RETURN` trap — rather than re-deriving connection/teardown logic
+  per verb. Keep "report-only" honest: such a verb prints its metric and **exits 0 regardless of
+  the number** (no threshold, never wired into a DoD clause); a verb that can fail the build on a
+  value is a gate, not a report, and that is a behaviour change requiring its own decision.
 
 ```bash
 #!/usr/bin/env bash

@@ -36,7 +36,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0004](./features/0004-tui-foundational.md) | TUI — register/login, default profile, task add/list/close (slice 3 of 0001) | feature | merged | high | 0003 | — (merged) |
 | [0005](./features/0005-tui-responsive-event-loop.md) | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | feature | merged | high | 0004 | — (merged) |
 | [0006](./features/0006-tui-mainrs-stale-doccomment.md) | Fix stale doc comment in `tui/src/main.rs` | chore | merged | low | — | — (merged) |
-| [0007](./features/0007-ok-coverage-verb.md) | Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold) | chore | inbox | low | — | — (unclaimed) |
+| [0007](./features/0007-ok-coverage-verb.md) | Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold) | chore | ready | low | — | feature/0007-ok-coverage-verb (in-flight; `awaiting-merge` on branch) |
 | [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | merged | medium | — | — (merged) |
 
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
@@ -62,9 +62,16 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > pinned to code-hash `401ad3de59c4cc7e33c3ebf8308c171d80659e4e`; the live verifier pass was
 > correctly **skipped**). Fast-forwarded to `main` at `2b400ab`; worktree + branch removed.
 >
-> **0007 (inbox) — coverage verb.** The sanctioned follow-up is now a Board item: a
-> reported-only `./ok.sh coverage` verb over `cargo-llvm-cov` (no hard threshold, not a DoD
-> gate), minted as a `chore` (dev-tooling only). Owner on claim: `platform-dev`.
+> **0007 — coverage verb — `awaiting-merge` on its branch** (a `chore`; main snapshot frozen at
+> `ready`, live status on `feature/0007-ok-coverage-verb`, not yet merged). The 0003
+> "sanctioned follow-up" is now **consumed**: `./ok.sh coverage` runs `cargo llvm-cov --workspace
+> --summary-only` (reusing `cmd_test`'s live-DB wiring — throwaway test Postgres booted + torn
+> down on a `RETURN` trap) and appears in the no-arg help. **Report-only — no threshold, not a DoD
+> gate**; baseline at implementation ~66% line / ~66% function / ~61% region. Tooling-only (no
+> crate source/behaviour/`contract`/domain change), so it ran the lighter chore DoD: gates green +
+> a cold `reviewer` **approved** attesting the chore invariant, pinned to code-hash
+> `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` (commit `c4387b7`); the live verifier pass was
+> correctly **skipped**.
 >
 > **0008 — Pomodoro timer — MERGED.** The first Focus-phase
 > feature, implementing [ADR-0002](../docs/adr/0002-pomodoro-timer-authority.md) (timer authority)
