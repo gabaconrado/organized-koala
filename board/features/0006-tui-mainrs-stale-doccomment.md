@@ -2,7 +2,7 @@
 id: 0006
 title: Fix stale doc comment in tui/src/main.rs
 type: chore         # feature | chore
-status: working     # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review      # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches main.rs only; not blocked on 0005, but if claimed after 0005
@@ -50,6 +50,11 @@ the deferred TUI backlog (profile-switch UX, task edit/delete, Notes, Pomodoro, 
   `.claude/worktrees/0006-tui-mainrs-stale-doccomment` + branch
   `feature/0006-tui-mainrs-stale-doccomment` from `main` @ 0585bbf (contains 0005's main.rs).
   session: drive-0006-20260623. Dispatching `tui-dev` for the comment-only fix.
+- 2026-06-23 [tui-dev] corrected the stale module doc comment in `crates/tui/src/main.rs`
+  (removed the removed-health-probe clause; now describes the worker-thread/pure-`App`
+  entrypoint per ADR-0006). Comment-only — no code/behaviour/contract/domain change. Gates
+  green: `fmt --check` clean, `lint` clean, `test` all pass (tui TestBackend 11/0). Commit
+  e218f73. → `review`.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
