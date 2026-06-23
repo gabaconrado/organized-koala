@@ -41,6 +41,8 @@ ok.sh — workspace operations
   ./ok.sh test             run all tests (boots a throwaway test Postgres for DB-backed tests)
   ./ok.sh lint             cargo clippy --all-targets (lint levels in Cargo.toml)
   ./ok.sh fmt [--check]    format (or verify formatting)
+  ./ok.sh coverage [ARGS]  report workspace test coverage via cargo-llvm-cov (REPORT-ONLY,
+                           no threshold/gate; extra ARGS pass through)
   ./ok.sh migrate          DEV-ONLY: apply migrations via `organized-koalad migrate`
                            (the binary owns migrations at runtime; never load-bearing — ADR-0004)
   ./ok.sh rollback [N]     DEV-ONLY: revert N migrations via `organized-koalad rollback`
@@ -83,6 +85,34 @@ cmd_test() {
   trap 'OK_TEST_PG_USER="${TEST_PG_USER}" OK_TEST_PG_PW="${TEST_PG_PW}" OK_TEST_PG_DB="${TEST_PG_DB}" OK_TEST_PG_PORT="${TEST_PG_PORT}" docker compose -f "${TEST_COMPOSE_FILE}" down --volumes >/dev/null 2>&1 || true' RETURN
 
   DATABASE_URL="${TEST_DATABASE_URL}" cargo test --workspace
+}
+
+# Report workspace test coverage via cargo-llvm-cov. REPORT-ONLY: this prints a coverage
+# summary and is NEVER a pass/fail gate — there is no threshold, and it is not part of any
+# Definition-of-done clause. (`set -e` still propagates a genuine tooling failure, which is
+# expected; what is forbidden is gating on the coverage number itself.) Coverage instruments
+# and runs the test suite, so it needs the same live-DB wiring as `cmd_test`: honour a
+# caller-provided DATABASE_URL, else boot the throwaway test Postgres and tear it down. Extra
+# args pass through to `cargo llvm-cov` (e.g. `--html`).
+cmd_coverage() {
+  if [[ -n "${DATABASE_URL:-}" ]]; then
+    echo "ok.sh: using caller-provided DATABASE_URL for DB-backed tests" >&2
+    cargo llvm-cov --workspace --summary-only "$@"
+    return
+  fi
+
+  require_docker
+  require_test_compose
+
+  echo "ok.sh: starting throwaway test Postgres..." >&2
+  OK_TEST_PG_USER="${TEST_PG_USER}" OK_TEST_PG_PW="${TEST_PG_PW}" \
+    OK_TEST_PG_DB="${TEST_PG_DB}" OK_TEST_PG_PORT="${TEST_PG_PORT}" \
+    docker compose -f "${TEST_COMPOSE_FILE}" up -d --wait
+
+  # Always tear the test DB down, even if coverage fails.
+  trap 'OK_TEST_PG_USER="${TEST_PG_USER}" OK_TEST_PG_PW="${TEST_PG_PW}" OK_TEST_PG_DB="${TEST_PG_DB}" OK_TEST_PG_PORT="${TEST_PG_PORT}" docker compose -f "${TEST_COMPOSE_FILE}" down --volumes >/dev/null 2>&1 || true' RETURN
+
+  DATABASE_URL="${TEST_DATABASE_URL}" cargo llvm-cov --workspace --summary-only "$@"
 }
 
 # Lint levels (deny warnings) live in Cargo.toml [workspace.lints]; clippy takes no rules here.
@@ -204,6 +234,7 @@ main() {
     test)        cmd_test "$@" ;;
     lint)        cmd_lint "$@" ;;
     fmt)         cmd_fmt "$@" ;;
+    coverage)    cmd_coverage "$@" ;;
     migrate)     cmd_migrate "$@" ;;
     rollback)    cmd_rollback "$@" ;;
     prepare)     cmd_prepare "$@" ;;

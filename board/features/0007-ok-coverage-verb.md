@@ -60,3 +60,14 @@ invariant and re-scope the item to a `feature` via the scope guard.
 - 2026-06-23 [orchestrator] claimed for build; cut worktree on branch
   `feature/0007-ok-coverage-verb` from `main`@09445c6. status → working. Owner: `platform-dev`.
   session: drive-0007.
+
+- 2026-06-23 [platform-dev] added a `coverage` verb to `ok.sh`: a `cmd_coverage` function, a
+  `coverage)` case branch, and a usage/help line. It runs `cargo llvm-cov --workspace
+  --summary-only` (passing through any extra ARGS) and mirrors `cmd_test`'s live-DB wiring —
+  honour a caller-provided `DATABASE_URL`, else boot the throwaway test Postgres via the test
+  compose file and tear it down on `RETURN`. REPORT-ONLY: no threshold, no gate, not wired into
+  any DoD clause. Tooling-only; the chore invariant holds (no crate source, behaviour, contract,
+  or domain change). Verified: `./ok.sh fmt --check` clean, `./ok.sh lint` clean, `./ok.sh test`
+  green, `./ok.sh coverage` exits 0 printing a per-file table + a TOTAL line (61.48% region /
+  66.36% line), and `coverage` appears in the no-arg help. Tool: cargo-llvm-cov 0.8.7
+  (operator-sanctioned, already installed — nothing acquired).
