@@ -790,6 +790,26 @@ to code-hash `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`.
   blocking findings; no out-of-scope nits worth a chore. **REVIEW-STATUS: approved** ·
   CODE-HASH `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` · COMMIT `67e40af`.
 
+- 2026-06-23 [verifier] live verify of the 0008-R1 re-entry (drive step 5), bounded per ADR-0003
+  (TUI render/interaction re-entry; wire surface unchanged). **#2 byte-identity independently
+  confirmed:** `git diff 3f2bcbe..HEAD` over `crates/contract` + `crates/server` + `tui`
+  client/protocol is EMPTY — the full delta is confined to `crates/tui/src/{app,terminal,ui}` +
+  `crates/tui/tests/**` + the Board file. **TestBackend suite green and asserts the re-entry
+  behaviour by name** (`global_timer_widget_renders_on_the_task_list`, `p_starts/_stops/_when_
+  completed`, `second_p_while_the_toggle_is_pending_is_a_no_op`, `p_is_suppressed_while_editing_
+  duration_end_to_end`, `in_flight_appends_a_spinner_without_replacing_the_caption`): tui keybindings
+  19 / rendering 11 / timer 17 / flows 9 / in_flight 5 / error_branches 10; full workspace green.
+  **Docker present + sanctioned (as in the original 0008 pass — installed nothing), so the live
+  wire pass was performed, not deferred:** `./ok.sh up` (postgres healthy → migrate one-shot exit 0
+  → server on :8080); live round-trip of `GET/PUT /api/timer/config` (30→25), `GET/POST
+  …/session{,/start,/stop}` (idle→running with `started_at`/`ends_at`/`duration_minutes`/`server_now`
+  →idle), error contract `{code,message}` (duration 0 → 400 `validation_failed`; unauth → 401
+  `unauthenticated`), OTel spans `get_config`/`update_config`/`get_session`/`start_session`/
+  `stop_session` observed in the collector; `./ok.sh down` clean. `./ok.sh build|lint|fmt --check`
+  all clean. code-hash at HEAD `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` matches the reviewed hash.
+  **VERIFY-STATUS: verified** · CODE-HASH `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` · COMMIT
+  `09470e9`.
+
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
