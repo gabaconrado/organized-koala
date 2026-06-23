@@ -2,7 +2,7 @@
 id: 0008
 title: Pomodoro focus timer — global duration config + start/stop session
 type: feature      # feature | chore
-status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0002 (timer authority) is on `main`; no in-flight Board item gates this
@@ -774,6 +774,21 @@ to code-hash `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`.
   appended). Counts: tui — keybindings 19, rendering 11, timer 17, error_branches 10, flows 9,
   in_flight 5; full workspace all green. Maps re-entry criteria 1–7 + criterion 8 (the new `map_key`
   signature). No source touched.
+
+- 2026-06-23 [reviewer] cold review of the 0008-R1 re-entry (drive step 4), scoped to the two code
+  commits `97b2b32` (source) + `67e40af` (tests) against pre-re-entry base `3f2bcbe`. Gates green:
+  `./ok.sh test` (tui keybindings 19 / rendering 11 / timer 17 + flows/in_flight/error_branches),
+  `./ok.sh lint` clean, `./ok.sh fmt --check` clean. **#1 holds** (app-level `Timer` is transient
+  render state — no stored remaining-seconds; countdown recomputed each draw). **#2 holds and is
+  byte-identical** — `git diff 3f2bcbe..67e40af` over `crates/contract/**` + `crates/server/**` +
+  `tui` protocol/client is empty; the re-entry reuses the existing timer wire/protocol/client/worker
+  shapes verbatim (this bounds the verifier to the TUI surface). **#4 holds** (no `profile_id` on any
+  timer request). ADR-0006 §8 fidelity confirmed (global widget bottom-right post-auth only; `p`
+  toggle + text-entry suppression; append-spinner not caption-replacement; `TIMER_REFRESH_TICKS =
+  750`). Test coverage maps all re-entry acceptance criteria incl. the append-spinner-no-flicker
+  regression guard. No unjustified `#[allow]`, `as`-free conversions, error contract intact. No
+  blocking findings; no out-of-scope nits worth a chore. **REVIEW-STATUS: approved** ·
+  CODE-HASH `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` · COMMIT `67e40af`.
 
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
