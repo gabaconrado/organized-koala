@@ -68,16 +68,23 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 >
 > **0008 — Pomodoro timer (in-flight, branch-owned at `awaiting-merge`).** The first Focus-phase
 > feature, implementing [ADR-0002](../docs/adr/0002-pomodoro-timer-authority.md) (timer authority)
-> with no new/amended ADR. A new `contract` `timer` module (`TimerConfig`,
-> `UpdateTimerConfigRequest`, the tagged `TimerSession` carrying `ends_at` + `server_now`), five
-> **account-global** `/api/timer/...` server endpoints keyed on `user_id` (config get/update,
-> session get/start/stop) + a reversible migration creating `timer_configs` + `timer_sessions`
-> (`ends_at` derived, not stored), and a TUI focus view whose live `MM:SS` countdown is
-> **render-only** — recomputed each ~80 ms draw from the server's absolute `ends_at`, `server_now`,
-> and a monotonic `Instant`, never a stored counter (#1-safe; inside ADR-0006, no per-second
-> polling). Account-global (#4 / ADR-0002 §5), flat (#3, duration the only knob). Reviewer
-> **approved** and verifier **verified** (the running→`completed` transition at `ends_at` and
-> persistence across a `docker compose restart` directly observed), both pinned to code-hash
-> `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`. The `main` snapshot above is frozen at the claim
-> (`ready`); the live `awaiting-merge` status is on `feature/0008-pomodoro-timer` until the human's
-> merge.
+> with no new/amended ADR on the contract/domain surface. A new `contract` `timer` module
+> (`TimerConfig`, `UpdateTimerConfigRequest`, the tagged `TimerSession` carrying `ends_at` +
+> `server_now`), five **account-global** `/api/timer/...` server endpoints keyed on `user_id`
+> (config get/update, session get/start/stop) + a reversible migration creating `timer_configs` +
+> `timer_sessions` (`ends_at` derived, not stored), and a TUI presentation whose live `MM:SS`
+> countdown is **render-only** — recomputed each ~80 ms draw from the server's absolute `ends_at`,
+> `server_now`, and a monotonic `Instant`, never a stored counter (#1-safe; inside ADR-0006, no
+> per-second polling). Account-global (#4 / ADR-0002 §5), flat (#3, duration the only knob).
+> **0008-R1 feedback re-entry (TUI-only, governed by the
+> [ADR-0006](../docs/adr/0006-tui-concurrency-and-responsiveness.md) §8 amendment — authority/render
+> model still ADR-0002):** the timer became an **always-visible bottom-right global widget** on
+> every post-auth screen (no dedicated page), toggled by a global **`p`** (start/stop) listed in the
+> bottom-left help caption; the in-flight indicator now **appends a trailing spinner** to the stable
+> caption instead of replacing it (flicker fix), and the coarse session refresh loosened ~5 s →
+> ~1 min — **no `contract`/server/migration change** (reviewer + verifier confirmed the wire surface
+> byte-identical). Reviewer **approved** and verifier **verified** at the 0008-R1 end state, both
+> pinned to code-hash `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` (the original 0008 build was
+> approved + verified at `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`, voided when the re-entry moved
+> the tree). The `main` snapshot above is frozen at the claim (`ready`); the live `awaiting-merge`
+> status is on `feature/0008-pomodoro-timer` until the human's merge.

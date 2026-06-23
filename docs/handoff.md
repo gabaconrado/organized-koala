@@ -5,6 +5,95 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-23 (0008-R1 — feedback re-entry: Pomodoro becomes a global widget; TUI-only)
+
+**Feedback re-entry, not a fresh feature — the first re-entry on an item that had already reached
+`awaiting-merge`.** 0008 (the account-global Pomodoro timer) was at `awaiting-merge` (verified
+code-hash `708ee8d0…`) when the operator authored two `[human]` UI-feedback lines in its Log. The
+cycle re-entered (drive step 0 feedback sweep), `architect` triaged, the work ran forward TUI-only,
+and the item is back at the AI-terminal state on its branch. Branch: `feature/0008-pomodoro-timer`
+(source `97b2b32`, tests `67e40af`; current HEAD `7ea1292` after this eng-manager step). Both
+`[human]` boxes are now `[x]`.
+
+The two feedback items:
+
+- **suggestion(ui) — no dedicated timer page; make it an always-visible global widget.** The timer
+  is a global concept, so it should be visible across pages (bottom-right), `p` to start/stop, and
+  listed in the bottom-left help caption.
+- **issue(ui) — flicker + over-frequent refresh.** The "(working…)" text replacing the hotkey
+  caption every coarse poll causes flicker; append a spinner to the end instead, and check the
+  session ~1/min rather than ~5 s.
+
+What changed (TUI-only, on the branch):
+
+- **ADR amendment first, on `main`.** Because this is scope/approach feedback, `architect` amended
+  **[ADR-0006][adr-0006] §8** (commit `af582e6` on `main`) before re-implementation — §8.1 global
+  widget (not a `Screen`), §8.2 global `p` toggle + help-caption entry, §8.3 append-spinner (not
+  caption-replacement), §8.4 ~1-min coarse cadence. **ADR-0002 (timer authority/render model) is
+  unchanged** — the server still owns the countdown; the TUI still renders from `ends_at` +
+  `server_now` + a monotonic `Instant`. The branch was rebased onto `af582e6` before `tui-dev`
+  cited §8.
+- **Source (`tui-dev`, `97b2b32`).** Removed `Screen::Timer` and its `t`/`Esc` navigation; promoted
+  the timer's transient render state to an app-level `app::timer::Timer` field rendered bottom-right
+  on every post-auth screen (auth/offline excluded). Added `Event::ToggleTimer` mapped to `p`
+  (resolves to start when idle/completed, stop when running, stamping the timer's own in-flight
+  marker independent of the screen marker); `p` + `d: set duration` added to the bottom-left
+  caption; `p`/`d` suppressed while a text-entry sub-flow owns keystrokes. Replaced `working_hint`
+  (caption substitution) with `caption_with_spinner` that **appends** a trailing spinner + "Esc to
+  cancel" to the stable caption on every screen. Raised `TIMER_REFRESH_TICKS` 63 → **750** (~1 min);
+  the refresh + initial load now fire on any post-auth screen. **No `contract`/protocol/client/
+  worker shape changed** — the existing timer wire/protocol is reused verbatim; account-global
+  preserved (no `profile_id`).
+- **Tests (`tester`, `67e40af`).** Adapted the `TestBackend`/core suite to the global-widget model
+  (`map_key` now takes `editing_duration: bool`; the timer loads off edge hooks, not an `Event`) and
+  extended coverage to the re-entry acceptance criteria by name: global widget render, `p`
+  start/stop/when-completed, second-`p`-while-pending no-op, append-spinner-no-flicker regression
+  guard, `p` suppressed-while-editing, `t`-opens-nothing regression guard, coarse-refresh picks up
+  the server verdict, account-global call-shape sweep. Counts: tui keybindings 19 / rendering 11 /
+  timer 17 / flows 9 / in_flight 5 / error_branches 10; full workspace green.
+
+Verdicts (both pinned to code-hash `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd`; the original 0008
+`708ee8d0…` verdicts were **voided** when the re-entry moved the code-tree):
+
+- **Reviewer: REVIEW-STATUS approved** (`67e40af`). Gates green; **#1** holds (app-level `Timer` is
+  transient render state, no stored remaining-seconds); **#2** holds and is **byte-identical** —
+  `git diff` over `crates/contract` + `crates/server` + the `tui` protocol/client is empty (this
+  bounds the verifier to the TUI surface); **#4** holds (no `profile_id`); ADR-0006 §8 fidelity
+  confirmed. No blocking findings, no out-of-scope nits worth a chore.
+- **Verifier: VERIFY-STATUS verified** (`09470e9`). Independently confirmed the #2 byte-identity
+  (full delta confined to `crates/tui/src/{app,terminal,ui}` + `crates/tui/tests/**` + the Board
+  file). Docker present + sanctioned (installed nothing, as in the original pass), so the live wire
+  pass was re-performed, not deferred: `./ok.sh up`, live `GET/PUT /api/timer/config`, session
+  start/stop, error contract `{code,message}`, OTel spans on all five handlers; `./ok.sh down`
+  clean. The `TestBackend` suite asserts the re-entry behaviour by name.
+
+Durable learnings: **none earned a durable `CLAUDE.md`/standards-skill edit.** The candidate was
+this being **the first feedback re-entry on an already-`awaiting-merge` item** — but the mechanics
+played out *exactly* as the existing CLAUDE.md "Feedback re-entry" + "Verdict pinning" + three-home
+text already prescribes, with no ambiguity to resolve: the unchecked `[human]` box was the only
+re-entry signal; the scope/approach feedback required an ADR amendment, which (as home #1
+cross-cutting state) landed on `main` first; the branch was rebased onto it; the item dropped
+`awaiting-merge` → `working`; the prior `approved`/`verified` verdicts were void **because the
+code-tree hash moved** (`708ee8d0…` → `3fa0adef…`, not because shas changed); and the full feature
+track re-ran (build → review → verify) on the new tree. That is the written rule exercised
+faithfully, not a gap in it — so it is recorded here as the worked example rather than manufactured
+into a new gotcha. One observation worth keeping (not an edit): **an ADR *amendment* is home #1
+just like a new ADR** — it must land on `main` before the branch can cite it, and the code-hash
+movement it implies is what voids the prior verdicts; the re-entry confirmed both halves hold for
+an amendment, not only a fresh ADR. No new `docs-/bash-/coding-/git-standards` edit, no new ADR
+beyond the §8 amendment, no new crate → no new dev agent.
+
+**Homes.** Cross-cutting/derived on `main` (homes #1/#3): this `docs/handoff.md` entry (+ the "What
+works right now" snapshot refreshed for the 0008 end state), and the regenerated `board/README.md`.
+The ADR-0006 §8 amendment + decisions-index row already landed on `main` (`af582e6`, by
+`architect`). **Feature-local on the branch (home #2):** the item's updated `## Summary`, the
+`[eng-manager]` Log entry, and the two `[x]`-checked `[human]` feedback boxes. The orchestrator
+flips the branch status back to `awaiting-merge` after this; **`main`'s frozen copy of
+`board/features/0008-pomodoro-timer.md` stays untouched** at the claim snapshot until the human's
+merge.
+
+---
+
 ## Handoff — 2026-06-23 (0008 — account-global Pomodoro focus timer, end-to-end across all three crates)
 
 Branch: `feature/0008-pomodoro-timer` (last code sha `fc894ce`, code-hash
@@ -873,14 +962,21 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   module (`TimerConfig`, `UpdateTimerConfigRequest`, the tagged `TimerSession` enum carrying
   `ends_at` + `server_now`), five account-global `/api/timer/...` server endpoints keyed on
   `user_id` (config get/update, session get/start/stop) with a reversible migration creating
-  `timer_configs` + `timer_sessions` (`ends_at` derived, not stored), and a TUI focus view whose
+  `timer_configs` + `timer_sessions` (`ends_at` derived, not stored), and a TUI presentation whose
   live `MM:SS` countdown is **render-only** — recomputed each ~80 ms draw from the server's
   absolute `ends_at` + `server_now` + a monotonic `Instant`, never a stored counter (#1-safe;
   inside [ADR-0006][adr-0006], no per-second polling). Account-global (#4 / ADR-0002 §5), flat (#3,
-  duration the only knob), no new/amended ADR ([ADR-0002][adr-0002] governs). Reviewed
-  **approved** and live-**verified** (the running→`completed` transition at `ends_at` and
-  persistence across a `docker compose restart` directly observed), both pinned to code-hash
-  `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da` on `feature/0008-pomodoro-timer`.
+  duration the only knob); the contract/domain surface carries no new/amended ADR
+  ([ADR-0002][adr-0002] governs). **After the 0008-R1 feedback re-entry (TUI-only):** the timer is
+  an **always-visible global widget** in the bottom-right of every post-auth screen (no dedicated
+  page), toggled by a global **`p`** (start/stop) that is listed in the bottom-left help caption;
+  the in-flight indicator **appends a trailing spinner** to the stable caption instead of replacing
+  it (flicker fix), and the coarse session refresh loosened ~5 s → ~1 min — all governed by the
+  [ADR-0006][adr-0006] **§8 amendment** (TUI presentation only; ADR-0002 authority/render model
+  unchanged; no `contract`/server/migration change). Reviewed **approved** and live-**verified** at
+  the 0008-R1 end state, both pinned to code-hash `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` on
+  `feature/0008-pomodoro-timer` (the original 0008 build was approved + verified at
+  `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`, voided when the re-entry moved the tree).
 - **The operator-sanctioned coverage verb is now Board item `0007`** (`inbox`, `chore`): a
   reported-only `./ok.sh coverage` over `cargo-llvm-cov`, **no hard threshold**, not a DoD gate.
   Owner on claim: `platform-dev`.
