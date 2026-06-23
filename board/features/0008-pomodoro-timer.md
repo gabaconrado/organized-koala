@@ -325,6 +325,19 @@ Dependency edges: **1 → 2 → 3 → 4** (each depends on the contract/protocol
   recorded (tagged-enum session DTO, single key to reach the view, ~5 s coarse refresh, 1–1440
   min duration bound, start-replaces-active, completed-row-kept-until-stop). Status → `ready`.
 
+- 2026-06-23 [contract-owner] built **slice 1** — the `contract` timer module
+  (`crates/contract/src/timer/mod.rs`): `TimerConfig { duration_minutes: u32 }`,
+  `UpdateTimerConfigRequest { duration_minutes: u32 }`, and the tagged session enum
+  `TimerSession` (`#[serde(tag = "state", rename_all = "lowercase")]`) with `Idle`,
+  `Running`, and `Completed { started_at, ends_at, duration_minutes, server_now }` — datetimes
+  are `DateTime<Utc>` serializing RFC 3339 `Z` exactly as `Task::created_at`, mirroring the
+  `TaskStatus` lowercase-tag idiom and the established derive/rustdoc/doctest layout. Re-exported
+  the three public items from `crates/contract/src/lib.rs`. No new `ErrorCode`, no secrets, no
+  fields beyond the ADR-0002 / plan shapes (#3 flat). Gates green from the worktree:
+  `./ok.sh build`, `./ok.sh lint`, `./ok.sh fmt --check`, `./ok.sh test` (15 contract doctests
+  pass, incl. the 3 new). Tests for the DTOs (slice 1t, `crates/contract/tests/timer.rs`) are
+  `tester`'s; not written here.
+
 - 2026-06-23 [orchestrator] claimed `ready` → `working`: cut worktree
   `.claude/worktrees/0008-pomodoro-timer` + branch `feature/0008-pomodoro-timer` from `main`
   @ 04926d4 (the commit carrying the plan; ADR-0002 already on `main`, verified present in the
