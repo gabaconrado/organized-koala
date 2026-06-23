@@ -2,7 +2,7 @@
 id: 0006
 title: Fix stale doc comment in tui/src/main.rs
 type: chore         # feature | chore
-status: review      # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches main.rs only; not blocked on 0005, but if claimed after 0005
@@ -65,6 +65,11 @@ the deferred TUI backlog (profile-switch UX, task edit/delete, Notes, Pomodoro, 
 - 2026-06-23 [orchestrator] chore track: live `verifier` pass SKIPPED (clause 4 N/A — no
   behaviour/wire to exercise; the cold reviewer above is the safety net). Dispatching
   `eng-manager` for handoff + summary, then step-7 freshen.
+- 2026-06-23 [orchestrator] step-7 freshen: rebased onto `main` @ b1f6848 (eng-manager's
+  docs/dashboard advance, no `crates/` change). `./ok.sh code-hash HEAD` unchanged at
+  `401ad3de…` = the attested verdict hash, so the reviewer approval carries forward untouched
+  (no relabelling). Gates re-run green on the rebased tree (`fmt --check`, `lint`, `test`).
+  Board-only commit — no re-review. → `awaiting-merge`.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
