@@ -78,3 +78,39 @@ invariant and re-scope the item to a `feature` via the scope guard.
   `crates/` source. **Chore-invariant attested:** no behaviour change, no `contract`/wire
   change (#2), no domain-structure change (#3). Verb is report-only (no threshold/gate, not a
   DoD clause). code-hash byte-identical to last-merged head, corroborating tooling-only scope.
+
+## Summary
+
+**End state:** `./ok.sh` gained a report-only `coverage` verb. The cycle reached the
+AI-terminal `awaiting-merge` on `feature/0007-ok-coverage-verb` via the **lighter chore DoD**;
+the human performs the final merge.
+
+**What was added (`ok.sh` only):** a `cmd_coverage` function, a `coverage)` case branch, and a
+no-arg usage/help line. The verb runs `cargo llvm-cov --workspace --summary-only "$@"` (extra
+ARGS pass through) and **mirrors `cmd_test`'s live-DB wiring**: honour a caller-supplied
+`DATABASE_URL`, else boot the throwaway test Postgres via the test compose file and tear it down
+on a `RETURN` trap. `cargo-llvm-cov` 0.8.7 was already present and operator-sanctioned
+(CLAUDE.md #6) — nothing was acquired.
+
+**Report-only decision:** the verb prints a per-file table + a `TOTAL` line and **exits 0
+regardless of the number** — **no threshold**, not wired into any Definition-of-done clause.
+This is the operator-sanctioned shape (captured in the 0003 handoff follow-up): coverage made
+*visible* without becoming a brittle pass/fail bar. Baseline at implementation: **~66% line /
+~66% function / ~61% region** (`TOTAL` reported 61.48% region / 66.36% line) — a reference
+point, not a target.
+
+**Chore invariant:** the diff is `ok.sh` (+31) plus this Board file — **no crate source, no
+behaviour, no `contract`/wire (#2), no domain-structure (#3) change**. The code-hash is
+byte-identical to the last-merged head, corroborating tooling-only scope.
+
+**Gate results (chore track):**
+
+- Clauses 1–3 — `./ok.sh test` green, `./ok.sh lint` clean, `./ok.sh fmt --check` clean.
+- Clause 4 (live `verifier`) — **correctly SKIPPED.** A chore changes no behaviour/wire/API, so
+  there is nothing for a live boot to exercise; the cold reviewer is the safety net.
+- Clause 5 (ADR) — N/A (a chore makes no contract/domain decision).
+- Clause 6 (`reviewer` approved) — **REVIEW-STATUS: approved** @ code-hash
+  `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` (commit `c4387b7`, for reference), with the chore
+  invariant explicitly attested (no behaviour / no `contract`-wire / no domain-structure change).
+- Clause 7 — branch rebased current on `main` (verdict pins to the code-tree hash, unchanged
+  across the docs-/board-only `main` advance).
