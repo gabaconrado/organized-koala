@@ -2,15 +2,15 @@
 id: 0006
 title: Fix stale doc comment in tui/src/main.rs
 type: chore         # feature | chore
-status: inbox       # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working     # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches main.rs only; not blocked on 0005, but if claimed after 0005
                     # merges the worktree should be cut from a main that contains 0005's main.rs
-branch: null        # feature/0006-tui-mainrs-stale-doccomment once a worktree is cut
-worktree: null      # .claude/worktrees/0006-tui-mainrs-stale-doccomment
+branch: feature/0006-tui-mainrs-stale-doccomment
+worktree: .claude/worktrees/0006-tui-mainrs-stale-doccomment
 created: 2026-06-22
-updated: 2026-06-22
+updated: 2026-06-23
 ---
 
 ## Feature request
@@ -46,6 +46,10 @@ the deferred TUI backlog (profile-switch UX, task edit/delete, Notes, Pomodoro, 
   "free pickup": stale `tui/src/main.rs:4` doc comment. Runs the lighter chore DoD —
   tests/lint/fmt + a cold `reviewer` approval attesting the no-behaviour/no-contract/no-domain
   invariant; live verifier pass skipped (CLAUDE.md "Definition of done", chore track).
+- 2026-06-23 [orchestrator] claimed → `working`. Cut worktree
+  `.claude/worktrees/0006-tui-mainrs-stale-doccomment` + branch
+  `feature/0006-tui-mainrs-stale-doccomment` from `main` @ 0585bbf (contains 0005's main.rs).
+  session: drive-0006-20260623. Dispatching `tui-dev` for the comment-only fix.
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
