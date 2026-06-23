@@ -2,7 +2,7 @@
 id: 0007
 title: Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold)
 type: chore         # feature | chore
-status: working        # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches ok.sh + workspace tooling only; no crate source, no contract
