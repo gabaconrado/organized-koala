@@ -345,6 +345,19 @@ Dependency edges: **1 → 2 → 3 → 4** (each depends on the contract/protocol
   Session: drive cycle, build slices next in plan dependency order (1 contract → 2 server →
   3 TUI client/protocol → 4 TUI view), tests alongside.
 
+- 2026-06-23 [tester] built **slice 1t** — `contract` public-API tests for the new timer DTOs
+  (`crates/contract/tests/timer.rs`, 19 tests), mirroring the established `task.rs` idiom.
+  Covers: JSON round-trip (serialize→deserialize→equal) and exact-shape serialization for
+  `TimerConfig` and `UpdateTimerConfigRequest`; the `TimerSession` tagged-enum wire shape —
+  `{"state":"idle"}` plus `running`/`completed` carrying all four fields (`started_at`,
+  `ends_at`, `duration_minutes`, `server_now`) with round-trip for each variant; RFC 3339 `Z`
+  datetime serialization including offset-normalization to UTC (`+01:00` → `Z`) as
+  `Task::created_at` is tested; deserialization of a known-good JSON literal per variant
+  (wire-compatibility guards); and closure guards (unknown `state` tag rejected, malformed
+  datetime rejected). Mocks nothing — pure DTO crate. Gates green from the worktree:
+  `./ok.sh test` (19 timer tests + all 15 contract doctests, incl. the 3 new), `./ok.sh lint`,
+  `./ok.sh fmt --check`. No source under `crates/*/src/` touched (tests only).
+
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
