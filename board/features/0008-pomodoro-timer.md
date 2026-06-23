@@ -457,6 +457,41 @@ Dependency edges: **1 → 2 → 3 → 4** (each depends on the contract/protocol
   (`crates/tui/tests/timer.rs`) is slice 4t, `tester`'s — not written here; `./ok.sh test` /
   full-target `./ok.sh lint` go green once 4t lands (see the slice-3 test-compile note).
 
+- 2026-06-23 [tester] built **slice 4t** — the TUI `TestBackend`/core timer suite and the
+  `FakeClient` timer impls that make the test build compile. **Fixed the RED test build first**
+  (`crates/tui/tests/common/mod.rs`, tester-owned): added the five `FakeClient` `Client` trait
+  impls (`get_timer_config`/`update_timer_config`/`get_timer_session`/`start_timer_session`/
+  `stop_timer_session`, scripted via per-endpoint `VecDeque` queues + `push_*` exactly as the
+  task methods, recording new `Call` variants), the five `run_request` executor arms (mapping each
+  new `ClientRequest` variant through the fake to its `Outcome` — the synchronous worker-analogue,
+  the only mock being the sanctioned `Client` trait), and the `Screen::Timer` arm in `screen_name`.
+  Added timer test helpers: `timer_config`, `running_session`/`completed_session` (built from
+  canonical wire JSON so `chrono` instants are parsed by the `contract` derive — the suite keeps
+  no direct `chrono` dep), and the `timer_screen`/`timer_screen_pending`/`timer_screen_editing`
+  builders for the pure `map_key` tests. New `crates/tui/tests/timer.rs` (14 tests) driven through
+  the public two-step `App` API + the synchronous executor, mapped to acceptance: **navigation** —
+  `t` opens the view loading config→session, back key (`Cancel`) returns to the task list and
+  re-lists (`open_timer_loads_config_then_session_from_server`, `back_key_returns_to_task_list_and_relists`);
+  **start→running countdown** — the `MM:SS` label is derived from the server's `ends_at`+`server_now`
+  via `countdown_label` and shown in the rendered buffer (`start_renders_running_countdown_from_ends_at_and_server_now`);
+  **stop→idle** (`stop_returns_to_idle_render`); **set-duration** — `d`+input+submit issues
+  `UpdateTimerConfig` with the typed minutes and reflects the new duration, validation error
+  surfaces inline (`set_duration_issues_update_and_reflects_new_value`,
+  `set_duration_validation_error_surfaces_inline_in_edit`); **completed render**
+  (`completed_session_renders_completed_state`); **in-flight spinner**
+  (`start_shows_in_flight_spinner_until_response`, `request_triggering_event_while_pending_is_a_no_op`);
+  **cancel / stale-id drop** (`cancel_while_pending_clears_in_flight`,
+  `stale_response_after_cancel_is_dropped`, `superseded_response_after_new_request_is_dropped`);
+  **account-global #4/ADR-0002 §5** — every timer `Call` carries only the token (no `profile_id`,
+  unlike `ListTasks`/`CreateTask`/`CloseTask`), and a leave-then-re-enter re-reads the same
+  server-side session (`timer_requests_are_account_global_not_profile_scoped`,
+  `timer_session_unaffected_by_returning_through_the_task_list`). Also added 5 timer keybinding
+  tests to `crates/tui/tests/keybindings.rs` pinning `t`/`s`/`x`/`d`/`r`/`Esc` and the
+  duration-edit text-entry context. Mocks only the sanctioned `Client` trait; no source under
+  `crates/*/src/` touched. Gates green from the worktree: `./ok.sh test` (tui timer 14, server
+  timer 21, contract timer 19; full suite 0 failures), `./ok.sh lint` (full `--all-targets`, now
+  green — was red on the test build), `./ok.sh fmt --check`.
+
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md

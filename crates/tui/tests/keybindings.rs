@@ -12,7 +12,8 @@ use tui::terminal::map_key;
 
 use common::{
     auth_screen, auth_screen_pending, offline_screen, offline_screen_pending, task_list_screen,
-    task_list_screen_adding, task_list_screen_pending,
+    task_list_screen_adding, task_list_screen_pending, timer_screen, timer_screen_editing,
+    timer_screen_pending,
 };
 
 fn key(code: KeyCode) -> KeyEvent {
@@ -204,6 +205,80 @@ fn offline_retry_key() {
     // Other command letters are not bound on the offline screen.
     assert_eq!(map_key(&screen, key(KeyCode::Char('a'))), None);
     assert_eq!(map_key(&screen, key(KeyCode::Char('q'))), None);
+}
+
+// ---- Timer screen ----
+
+#[test]
+fn task_list_t_opens_the_timer() {
+    // `t` on the task list (not entering text) opens the focus/timer view.
+    assert_eq!(
+        map_key(&task_list_screen(), key(KeyCode::Char('t'))),
+        Some(Event::OpenTimer),
+    );
+    // `t` is not an OpenTimer command off the task list.
+    assert_eq!(map_key(&offline_screen(), key(KeyCode::Char('t'))), None);
+}
+
+#[test]
+fn timer_command_keys() {
+    let screen = timer_screen();
+    assert_eq!(
+        map_key(&screen, key(KeyCode::Char('s'))),
+        Some(Event::StartTimer),
+    );
+    assert_eq!(
+        map_key(&screen, key(KeyCode::Char('x'))),
+        Some(Event::StopTimer),
+    );
+    assert_eq!(
+        map_key(&screen, key(KeyCode::Char('d'))),
+        Some(Event::BeginEditDuration),
+    );
+    assert_eq!(
+        map_key(&screen, key(KeyCode::Char('r'))),
+        Some(Event::Refresh),
+    );
+    // Esc on the timer is Cancel (the core resolves it to back / abandon-edit / cancel-in-flight).
+    assert_eq!(map_key(&screen, key(KeyCode::Esc)), Some(Event::Cancel));
+    // Ctrl+C still hard-quits from the timer view.
+    assert_eq!(map_key(&screen, ctrl('c')), Some(Event::Quit));
+    // An unbound printable key on the timer view is ignored.
+    assert_eq!(map_key(&screen, key(KeyCode::Char('z'))), None);
+}
+
+#[test]
+fn timer_duration_edit_is_a_text_entry_context() {
+    // While editing the duration the timer is a text-entry context: digit keys (and the command
+    // letters s/x/d/r) are typed literally, not interpreted as commands.
+    let screen = timer_screen_editing();
+    for c in ['2', '5', 's', 'x', 'd', 'r'] {
+        assert_eq!(
+            map_key(&screen, key(KeyCode::Char(c))),
+            Some(Event::Char(c)),
+            "{c:?} must be literal text while editing the duration",
+        );
+    }
+    assert_eq!(
+        map_key(&screen, key(KeyCode::Backspace)),
+        Some(Event::Backspace),
+    );
+    assert_eq!(map_key(&screen, key(KeyCode::Enter)), Some(Event::Submit));
+    // Esc still cancels (the core abandons the edit).
+    assert_eq!(map_key(&screen, key(KeyCode::Esc)), Some(Event::Cancel));
+}
+
+#[test]
+fn timer_esc_cancels_while_pending() {
+    // Esc on the timer maps to Cancel whether idle or in-flight; Ctrl+C stays Quit.
+    assert_eq!(
+        map_key(&timer_screen_pending(), key(KeyCode::Esc)),
+        Some(Event::Cancel),
+    );
+    assert_eq!(
+        map_key(&timer_screen_pending(), ctrl('c')),
+        Some(Event::Quit)
+    );
 }
 
 #[test]

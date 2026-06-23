@@ -26,13 +26,16 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use contract::{CreateTaskRequest, LoginRequest, Profile, RegisterRequest, SessionResponse, Task};
+use contract::{
+    CreateTaskRequest, LoginRequest, Profile, RegisterRequest, SessionResponse, Task, TimerConfig,
+    TimerSession, UpdateTimerConfigRequest,
+};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use tui::app::{
     AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, Dispatch,
-    Event, Outcome, RequestId, Screen, TaskListState,
+    DurationEditState, Event, Outcome, RequestId, Screen, TaskListState, TimerState,
 };
 use tui::client::{Client, ClientError, ClientResult};
 
@@ -72,6 +75,22 @@ pub enum Call {
         profile_id: String,
         task_id: String,
     },
+    GetTimerConfig {
+        token: String,
+    },
+    UpdateTimerConfig {
+        token: String,
+        duration_minutes: u32,
+    },
+    GetTimerSession {
+        token: String,
+    },
+    StartTimerSession {
+        token: String,
+    },
+    StopTimerSession {
+        token: String,
+    },
 }
 
 /// The shared interior of a [`FakeClient`]: scripted response queues plus the recorded call
@@ -87,6 +106,11 @@ struct Inner {
     tasks: RefCell<VecDeque<ClientResult<Vec<Task>>>>,
     create: RefCell<VecDeque<ClientResult<Task>>>,
     close: RefCell<VecDeque<ClientResult<Task>>>,
+    timer_config: RefCell<VecDeque<ClientResult<TimerConfig>>>,
+    update_timer_config: RefCell<VecDeque<ClientResult<TimerConfig>>>,
+    timer_session: RefCell<VecDeque<ClientResult<TimerSession>>>,
+    start_timer: RefCell<VecDeque<ClientResult<TimerSession>>>,
+    stop_timer: RefCell<VecDeque<ClientResult<TimerSession>>>,
 }
 
 /// A scripted, recording fake [`Client`] — the only mock in the suite, standing in for the
@@ -126,6 +150,21 @@ impl FakeClient {
     }
     pub fn push_close(&self, r: ClientResult<Task>) {
         self.inner.close.borrow_mut().push_back(r);
+    }
+    pub fn push_timer_config(&self, r: ClientResult<TimerConfig>) {
+        self.inner.timer_config.borrow_mut().push_back(r);
+    }
+    pub fn push_update_timer_config(&self, r: ClientResult<TimerConfig>) {
+        self.inner.update_timer_config.borrow_mut().push_back(r);
+    }
+    pub fn push_timer_session(&self, r: ClientResult<TimerSession>) {
+        self.inner.timer_session.borrow_mut().push_back(r);
+    }
+    pub fn push_start_timer(&self, r: ClientResult<TimerSession>) {
+        self.inner.start_timer.borrow_mut().push_back(r);
+    }
+    pub fn push_stop_timer(&self, r: ClientResult<TimerSession>) {
+        self.inner.stop_timer.borrow_mut().push_back(r);
     }
 
     /// The calls the app made, in order.
@@ -200,6 +239,46 @@ impl Client for FakeClient {
         });
         pop(&self.inner.close, "close_task")
     }
+
+    fn get_timer_config(&self, token: &str) -> ClientResult<TimerConfig> {
+        self.inner.calls.borrow_mut().push(Call::GetTimerConfig {
+            token: token.to_owned(),
+        });
+        pop(&self.inner.timer_config, "get_timer_config")
+    }
+
+    fn update_timer_config(
+        &self,
+        token: &str,
+        req: &UpdateTimerConfigRequest,
+    ) -> ClientResult<TimerConfig> {
+        self.inner.calls.borrow_mut().push(Call::UpdateTimerConfig {
+            token: token.to_owned(),
+            duration_minutes: req.duration_minutes,
+        });
+        pop(&self.inner.update_timer_config, "update_timer_config")
+    }
+
+    fn get_timer_session(&self, token: &str) -> ClientResult<TimerSession> {
+        self.inner.calls.borrow_mut().push(Call::GetTimerSession {
+            token: token.to_owned(),
+        });
+        pop(&self.inner.timer_session, "get_timer_session")
+    }
+
+    fn start_timer_session(&self, token: &str) -> ClientResult<TimerSession> {
+        self.inner.calls.borrow_mut().push(Call::StartTimerSession {
+            token: token.to_owned(),
+        });
+        pop(&self.inner.start_timer, "start_timer_session")
+    }
+
+    fn stop_timer_session(&self, token: &str) -> ClientResult<TimerSession> {
+        self.inner.calls.borrow_mut().push(Call::StopTimerSession {
+            token: token.to_owned(),
+        });
+        pop(&self.inner.stop_timer, "stop_timer_session")
+    }
 }
 
 // ---- Synchronous request executor: the test-side analogue of the worker thread ----
@@ -230,6 +309,21 @@ fn run_request(client: &FakeClient, request: ClientRequest) -> Outcome {
             profile_id,
             task_id,
         } => Outcome::CloseTask(client.close_task(&token, &profile_id, &task_id)),
+        ClientRequest::GetTimerConfig { token } => {
+            Outcome::GetTimerConfig(client.get_timer_config(&token))
+        }
+        ClientRequest::UpdateTimerConfig { token, req } => {
+            Outcome::UpdateTimerConfig(client.update_timer_config(&token, &req))
+        }
+        ClientRequest::GetTimerSession { token } => {
+            Outcome::GetTimerSession(client.get_timer_session(&token))
+        }
+        ClientRequest::StartTimerSession { token } => {
+            Outcome::StartTimerSession(client.start_timer_session(&token))
+        }
+        ClientRequest::StopTimerSession { token } => {
+            Outcome::StopTimerSession(client.stop_timer_session(&token))
+        }
     }
 }
 
@@ -314,6 +408,48 @@ pub fn done_task(id: &str, title: &str, created_at: &str, closed_at: &str) -> Ta
     serde_json::from_value(json).expect("valid task json")
 }
 
+/// A [`TimerConfig`] with the given duration in minutes.
+pub fn timer_config(duration_minutes: u32) -> TimerConfig {
+    TimerConfig { duration_minutes }
+}
+
+/// Build a running [`TimerSession`] from canonical wire JSON, so its `chrono` timestamps are
+/// parsed by the `contract` derive. `ends_at`/`server_now` are supplied so a test can pin the
+/// `MM:SS` countdown the view derives (`ends_at − server_now`) deterministically.
+pub fn running_session(
+    started_at: &str,
+    ends_at: &str,
+    duration_minutes: u32,
+    server_now: &str,
+) -> TimerSession {
+    let json = serde_json::json!({
+        "state": "running",
+        "started_at": started_at,
+        "ends_at": ends_at,
+        "duration_minutes": duration_minutes,
+        "server_now": server_now,
+    });
+    serde_json::from_value(json).expect("valid running session json")
+}
+
+/// Build a completed [`TimerSession`] from canonical wire JSON (the server's `now >= ends_at`
+/// verdict).
+pub fn completed_session(
+    started_at: &str,
+    ends_at: &str,
+    duration_minutes: u32,
+    server_now: &str,
+) -> TimerSession {
+    let json = serde_json::json!({
+        "state": "completed",
+        "started_at": started_at,
+        "ends_at": ends_at,
+        "duration_minutes": duration_minutes,
+        "server_now": server_now,
+    });
+    serde_json::from_value(json).expect("valid completed session json")
+}
+
 /// An [`ClientError::Api`] with a code.
 pub fn api_err(code: contract::ErrorCode, message: &str) -> ClientError {
     ClientError::Api {
@@ -372,6 +508,7 @@ pub fn screen_name(app: &App) -> &'static str {
     match app.screen() {
         Screen::Auth(_) => "auth",
         Screen::TaskList(_) => "task_list",
+        Screen::Timer(_) => "timer",
         Screen::Offline { .. } => "offline",
     }
 }
@@ -449,6 +586,45 @@ pub fn task_list_screen_adding() -> Screen {
         message: None,
         pending: None,
     })
+}
+
+/// A timer screen, idle (no request in flight, no duration-edit sub-flow open). Constructed via
+/// the public `TimerState` literal so the keybinding tests can pin the timer bindings without a
+/// driven flow.
+pub fn timer_screen() -> Screen {
+    Screen::Timer(TimerState {
+        config: timer_config(30),
+        session: TimerSession::Idle,
+        applied_at: None,
+        editing: None,
+        message: None,
+        pending: None,
+    })
+}
+
+/// A timer screen with a request outstanding (no duration-edit sub-flow open).
+pub fn timer_screen_pending() -> Screen {
+    match timer_screen() {
+        Screen::Timer(mut timer) => {
+            timer.pending = Some(RequestId(0));
+            Screen::Timer(timer)
+        }
+        other => other,
+    }
+}
+
+/// A timer screen with the duration-edit sub-flow open (a text-entry context).
+pub fn timer_screen_editing() -> Screen {
+    match timer_screen() {
+        Screen::Timer(mut timer) => {
+            timer.editing = Some(DurationEditState {
+                buffer: "30".to_owned(),
+                error: None,
+            });
+            Screen::Timer(timer)
+        }
+        other => other,
+    }
 }
 
 /// The blocking offline screen, idle.
