@@ -71,3 +71,10 @@ invariant and re-scope the item to a `feature` via the scope guard.
   green, `./ok.sh coverage` exits 0 printing a per-file table + a TOTAL line (61.48% region /
   66.36% line), and `coverage` appears in the no-arg help. Tool: cargo-llvm-cov 0.8.7
   (operator-sanctioned, already installed — nothing acquired).
+
+- 2026-06-23 [reviewer] cold review — **REVIEW-STATUS: approved** @ code-hash
+  `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` (commit c4387b7, for reference). Gates green
+  (`fmt --check` / `lint` / `test`). Diff is `ok.sh` (+31) + this Board file only — zero
+  `crates/` source. **Chore-invariant attested:** no behaviour change, no `contract`/wire
+  change (#2), no domain-structure change (#3). Verb is report-only (no threshold/gate, not a
+  DoD clause). code-hash byte-identical to last-merged head, corroborating tooling-only scope.
