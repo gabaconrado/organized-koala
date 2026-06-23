@@ -2,7 +2,7 @@
 id: 0008
 title: Pomodoro focus timer — global duration config + start/stop session
 type: feature      # feature | chore
-status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0002 (timer authority) is on `main`; no in-flight Board item gates this
@@ -491,6 +491,23 @@ Dependency edges: **1 → 2 → 3 → 4** (each depends on the contract/protocol
   `crates/*/src/` touched. Gates green from the worktree: `./ok.sh test` (tui timer 14, server
   timer 21, contract timer 19; full suite 0 failures), `./ok.sh lint` (full `--all-targets`, now
   green — was red on the test build), `./ok.sh fmt --check`.
+
+- 2026-06-23 [reviewer] cold pre-merge review at HEAD `fc894ce`, code-hash
+  `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`. Mechanical gates green (`./ok.sh test` — contract
+  19 / server 21 / tui 14 + 5 keybinding, 0 failures; `./ok.sh lint --all-targets` clean;
+  `./ok.sh fmt --check` clean). Risk-surface checks all HOLD: **#1** stateless TUI (no stored
+  remaining-seconds counter; countdown recomputed each draw from `ends_at` + `server_now` + a
+  monotonic `Instant`, nothing persisted); **#4 / ADR-0002 §5** account-global (every route +
+  client method keys on `user_id`, no `profile_id`; tables `user_id PRIMARY KEY`); **#3** flat
+  (duration the only knob, no pause); **#2 / ADR-0002** contract is single source of truth, no
+  new/amended ADR needed; reversible migration (paired up/down, `ends_at` derived not stored);
+  `{ code?, message }` reused, bad duration → `400 ValidationFailed`, no new ErrorCode; no `as`
+  at the DB boundary; `#[tracing::instrument]` spans on all five handlers; no secret leak; the
+  three `#[allow]` are the sanctioned test-only exception. Deferred positive completion-at-
+  `ends_at` verdict confirmed genuinely live-only (left to the verifier). No blocking/fix-now
+  findings; no nits requiring change.
+
+  `REVIEW-STATUS: approved   fc894ce   code-hash=708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`
 
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
