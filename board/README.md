@@ -36,6 +36,8 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0004](./features/0004-tui-foundational.md) | TUI — register/login, default profile, task add/list/close (slice 3 of 0001) | feature | merged | high | 0003 | — (merged) |
 | [0005](./features/0005-tui-responsive-event-loop.md) | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | feature | merged | high | 0004 | — (merged) |
 | [0006](./features/0006-tui-mainrs-stale-doccomment.md) | Fix stale doc comment in `tui/src/main.rs` | chore | merged | low | — | — (merged) |
+| [0007](./features/0007-ok-coverage-verb.md) | Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold) | chore | inbox | low | — | — (unclaimed) |
+| [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | inbox | medium | — | — (unclaimed) |
 
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
@@ -60,5 +62,12 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > pinned to code-hash `401ad3de59c4cc7e33c3ebf8308c171d80659e4e`; the live verifier pass was
 > correctly **skipped**). Fast-forwarded to `main` at `2b400ab`; worktree + branch removed.
 >
-> **Sanctioned follow-up (not yet a Board item):** a reported-only `./ok.sh coverage` verb over
-> `cargo-llvm-cov` (no hard threshold, not a DoD gate) — `architect` to plan it as a new item.
+> **0007 (inbox) — coverage verb.** The sanctioned follow-up is now a Board item: a
+> reported-only `./ok.sh coverage` verb over `cargo-llvm-cov` (no hard threshold, not a DoD
+> gate), minted as a `chore` (dev-tooling only). Owner on claim: `platform-dev`.
+>
+> **0008 (inbox) — Pomodoro timer.** The Focus phase is unblocked:
+> [ADR-0002](../docs/adr/0002-pomodoro-timer-authority.md) (timer authority) is accepted — the
+> server owns the timer and the TUI renders a countdown from a server-provided absolute
+> end-instant (no per-second polling, inside ADR-0006). Feature card minted; next it goes to
+> `architect` for the `## Plan(s)` block before code.

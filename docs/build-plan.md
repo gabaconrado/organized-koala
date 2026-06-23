@@ -11,7 +11,8 @@ Board state machine.
 | 0004 | TUI — register/login, default profile, task add/list/close (slice 3 of 0001) | Foundation | merged | completes the foundational tracer bullet; reviewed + live-verified |
 | 0005 | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | Foundation | merged | ADR-0006 Model A (worker thread + mpsc + polled loop, no async); TUI-only; reviewed + live-verified |
 | 0006 | Fix stale doc comment in `tui/src/main.rs` | Foundation | in-flight (branch-owned) | inaugural `chore` (comment-only); corrects the stale health-probe doc to the ADR-0006 worker/pure-`App` entrypoint; lighter chore DoD (gates + invariant-attesting cold review; live verifier skipped); live status on `feature/0006-tui-mainrs-stale-doccomment` |
-| — | Pomodoro timer | Focus | not-started | blocked on ADR-0002 (timer authority) |
+| 0007 | `./ok.sh coverage` verb (cargo-llvm-cov, report-only) | Platform | inbox | `chore`; reported-only, no threshold, not a DoD gate |
+| 0008 | Pomodoro timer | Focus | inbox | unblocked — ADR-0002 (timer authority) accepted; feature card minted, awaiting `architect` plan |
 | — | Notes | Capture | not-started | flat: Title/Content/Created |
 | — | Multiple profiles UX | Foundation | not-started | profile switch in the TUI |
 | — | Observability wiring | Platform | not-started | OTLP export, spans on key flows |
@@ -20,6 +21,6 @@ Board state machine.
 ## Phases
 
 - **Foundation** — auth, profiles, the contract seam, the first TODO slice.
-- **Focus** — Pomodoro timer (needs ADR-0002).
+- **Focus** — Pomodoro timer (ADR-0002 accepted; see Board item 0008).
 - **Capture** — notes.
 - **Platform** — observability + deployment.
