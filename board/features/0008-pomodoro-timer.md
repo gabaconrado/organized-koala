@@ -383,6 +383,35 @@ Dependency edges: **1 → 2 → 3 → 4** (each depends on the contract/protocol
   contract + server-integration + tui suites). Integration tests (`crates/server/tests/timer.rs`,
   slice 2t) are `tester`'s; not written here.
 
+- 2026-06-23 [tester] built **slice 2t** — server HTTP integration tests for the
+  account-global timer surface (`crates/server/tests/timer.rs`, 21 `#[sqlx::test]` tests),
+  mirroring the existing `tasks.rs`/`auth.rs` in-process `oneshot`-over-per-test-DB harness (no
+  new boot path). Added four shared request helpers to `tests/common/mod.rs` (`put_json_auth`,
+  `post_auth`, `post`, `put_json`) since the timer surface uses PUT and bodyless POST. Coverage
+  by acceptance case: **config** — default 30 with no row (`config_defaults_to_30`), PUT→GET
+  persistence round-trip + overwrite (`config_put_then_get_round_trips`, `config_put_overwrites`),
+  `0` and `1441` → `400 ValidationFailed` (`config_put_zero_is_400`, `config_put_over_cap_is_400`),
+  boundaries `1` and `1440` accepted (`config_put_lower_bound_1_accepted`,
+  `config_put_upper_bound_1440_accepted`); **session** — idle from cold (`session_starts_idle`),
+  start→running carrying all four fields with `ends_at == started_at + duration` and
+  `server_now < ends_at` (`start_returns_running_with_consistent_instants`), duration snapshot
+  (`start_snapshots_configured_duration`), running re-read (`get_session_after_start_is_running`),
+  stop→idle clears the row (`stop_clears_running_session`), idempotent stop-when-idle
+  (`stop_when_idle_is_idempotent`), start-replaces-active A5 (`start_while_active_replaces`);
+  **account-global #4/ADR-0002 §5** — `timer_is_account_global_not_profile_scoped` (highest
+  value): asserts the routes carry no profile segment, the same token observes the same session,
+  and a second account has an independent (default/idle) timer; **auth** — each of the five
+  routes without a bearer token → `401 unauthenticated` (`*_requires_auth`). **Partial coverage
+  (noted inline in `shortest_session_reads_running_not_completed`):** the read-time `completed`
+  verdict (`server_now >= ends_at`, A5/A6) is **not** positively driven here — the min duration
+  is 1 minute and the public API exposes no clock/`started_at` control, so forcing
+  `now >= ends_at` would need a real ~60 s sleep, which this suite deliberately avoids. The
+  reachable assertion is the negative: a just-started 1-minute session reads `running`, not
+  `completed`. The positive transition at `ends_at` is for the live `verifier` (DoD clause 4).
+  Gates green from the worktree against the sanctioned test Postgres: `./ok.sh test` (21 timer
+  integration tests pass, full suite 0 failures), `./ok.sh lint` clean, `./ok.sh fmt --check`
+  clean. No source under `crates/*/src/` touched (tests only).
+
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md

@@ -153,6 +153,47 @@ pub fn post_json_auth(path: &str, token: &str, body: &Value) -> Request<Body> {
         .expect("request should build")
 }
 
+/// Build a JSON PUT request to `path` carrying a `Bearer` token.
+pub fn put_json_auth(path: &str, token: &str, body: &Value) -> Request<Body> {
+    Request::builder()
+        .method("PUT")
+        .uri(path)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::from(body.to_string()))
+        .expect("request should build")
+}
+
+/// Build a bodyless POST request to `path` carrying a `Bearer` token (for action endpoints
+/// that take no request body, e.g. session start/stop).
+pub fn post_auth(path: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(path)
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .expect("request should build")
+}
+
+/// Build a bodyless POST request to `path` with no Authorization header.
+pub fn post(path: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(path)
+        .body(Body::empty())
+        .expect("request should build")
+}
+
+/// Build a JSON PUT request to `path` with no Authorization header.
+pub fn put_json(path: &str, body: &Value) -> Request<Body> {
+    Request::builder()
+        .method("PUT")
+        .uri(path)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .expect("request should build")
+}
+
 /// Build a GET request to `path` carrying a `Bearer` token.
 pub fn get_auth(path: &str, token: &str) -> Request<Body> {
     Request::builder()
