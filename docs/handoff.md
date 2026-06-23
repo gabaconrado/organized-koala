@@ -5,6 +5,62 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-23 (0006 — inaugural `chore`: stale `tui/src/main.rs` doc comment fixed)
+
+Branch: `feature/0006-tui-mainrs-stale-doccomment` (last code sha `e218f73`, code-hash
+`401ad3de59c4cc7e33c3ebf8308c171d80659e4e`). **The first `chore` through the pipeline** — the
+new lightweight item type (introduced as a learned-0005 governance follow-up) made its first
+real trip end-to-end. The cycle ran mint → claim → build → cold review → (verify skipped) and
+stopped at the AI-terminal `awaiting-merge` on the branch.
+
+What shipped (on the branch):
+
+- **Comment-only fix.** The module doc comment at `crates/tui/src/main.rs:1` described an
+  *"initial health probe so an unreachable server is reported up front"* — behaviour 0005
+  removed when it reshaped the entrypoint to ADR-0006 Model A. The comment was rewritten to
+  describe the actual entrypoint: resolve base URL → build the `reqwest` client → **spawn the
+  worker thread that owns it** → hand control to the interactive loop, where the UI thread
+  drives the pure `tui::app::App` core and never blocks on I/O. The `anyhow`
+  error-propagation note was kept. The diff vs `main` is the `//!` block only.
+- **Chore invariant held.** No code path, signature, behaviour, `contract`/wire (#2), or
+  domain-structure (#3) change.
+
+Verdict (chore track):
+
+- **Reviewer: REVIEW-STATUS approved** pinned to code-hash
+  `401ad3de59c4cc7e33c3ebf8308c171d80659e4e` (sha `5b5c788`). The cold pass verified the new
+  comment line-by-line against `main()` (no health probe; worker-spawn / pure-`App` /
+  `terminal::run` / `anyhow`), gates green, and — as the strengthened chore-DoD clause 6
+  requires — **explicitly attested the chore invariant** (no behaviour, no contract/wire, no
+  domain-structure change; comment-only).
+- **Verifier: SKIPPED (clause 4 N/A).** Per the chore track, the live boot was not run — a
+  comment-only change has nothing new to exercise, and the cold reviewer is the safety net in
+  its place.
+
+The chore lane worked exactly as designed: mint-without-`architect`-plan → claim →
+single-agent build → invariant-attesting cold review → live verify skipped → `awaiting-merge`.
+The 0005 handoff's **"free pickup" prose is now resolved** — it was tracked as `0006` and has
+flowed to terminal.
+
+Durable learnings: **none earned a durable edit.** The chore machinery (DoD, scope guard,
+three-home model, verdict pinning) was freshly exercised and behaved as written — no clause
+was ambiguous, the mint-without-plan path was unambiguous, and verdict pinning to the
+code-tree hash held (the branch was already current on `main`, code-hash unchanged, so
+step-7 was a no-op freshen). No `CLAUDE.md` gotcha, no standards-skill edit, no agent edit,
+no new ADR, no new crate. Recording explicitly rather than inventing churn: **the first chore
+needed zero process correction.** One observation worth keeping (not an edit): the chore lane's
+value is precisely that a one-line doc fix no longer has to masquerade as a full `feature`
+cycle — the thing it was created to fix.
+
+**Homes.** Cross-cutting/derived on `main` (homes #1/#3): this `docs/handoff.md` entry (+ the
+"What works right now" snapshot refreshed), `docs/build-plan.md`, and the regenerated
+`board/README.md`. **Feature-local on the branch (home #2):** the item's `## Summary`. The
+orchestrator advances the branch status to `awaiting-merge` after this; **`main`'s frozen copy
+of `board/features/0006-tui-mainrs-stale-doccomment.md` is left untouched** at the claim
+snapshot until the human's merge.
+
+---
+
 ## Handoff — 2026-06-22 (0005 — TUI responsive (non-blocking) event loop + `tui::app` reorg)
 
 Branch: `feature/0005-tui-responsive-event-loop` (last code sha `a4f99fd`, code-hash
@@ -94,8 +150,9 @@ Next cycle should know:
   trigger were added to `docs/manual-smoke.md` directly (docs-only, main-side, no cycle).
 - The **`main.rs:4` stale doc comment** (pre-existing health-probe nit) is a free pickup for the
   next `tui-dev` touch.
-  **✓ Tracked** — filed as Board chore `0006` (`board/features/0006-tui-mainrs-stale-doccomment.md`,
-  `inbox`), the inaugural use of the new `chore` item type; the next `/drive` will claim it.
+  **✓ Resolved** — filed and run as Board chore `0006` (the inaugural `chore`); the comment now
+  describes the ADR-0006 worker/pure-`App` entrypoint. Reviewed (chore invariant attested) at
+  `awaiting-merge`; see the 0006 handoff entry above.
 - Still pending from earlier cycles (not lost): the operator-sanctioned reported-only `./ok.sh
   coverage` verb over `cargo-llvm-cov` (no hard threshold) — `architect` to plan as a `main`-side
   item; and the deferred TUI backlog (profile-switch UX, task edit/delete, Notes, Pomodoro gated
@@ -706,7 +763,10 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   lane for scope-limited maintenance (refactors, doc fixes, test-only, dep bumps) with no
   behaviour/`contract`/domain change — orchestrator-mintable, on a lighter DoD (gates + an
   invariant-attesting cold review; live verifier skipped). See CLAUDE.md "Definition of done" +
-  "The Board". Inaugural use: **`0006`** (`inbox`), the `tui/src/main.rs:4` stale-doc-comment fix.
+  "The Board". **First trip through the pipeline complete — `0006`** (the `tui/src/main.rs`
+  stale-doc-comment fix) ran mint → claim → build → invariant-attesting cold review → verify
+  skipped → `awaiting-merge` on `feature/0006-tui-mainrs-stale-doccomment` (code-hash
+  `401ad3de59c4cc7e33c3ebf8308c171d80659e4e`); the chore lane needed zero process correction.
 - **Pending plan (operator-sanctioned, not yet a Board item):** a reported-only coverage verb —
   `./ok.sh coverage` over `cargo-llvm-cov`, **no hard threshold**, not a DoD gate. `architect` to
   plan it as a new `main`-side item; `platform-dev` owns the verb.
