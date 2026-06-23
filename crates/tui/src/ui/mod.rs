@@ -10,8 +10,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
-use crate::app::{App, AuthField, AuthMode, AuthState, Screen, TaskListState};
-use contract::TaskStatus;
+use crate::app::{App, AuthField, AuthMode, AuthState, Screen, TaskListState, TimerState};
+use contract::{TaskStatus, TimerSession};
 
 /// The frames of the in-flight spinner, cycled by the poll loop's tick counter.
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
@@ -34,6 +34,7 @@ pub fn draw(frame: &mut Frame, app: &App, tick: u64) {
             let profile = app.session().map_or("", |s| s.profile_name.as_str());
             draw_task_list(frame, list, profile, tick);
         }
+        Screen::Timer(timer) => draw_timer(frame, timer, tick),
         Screen::Offline { message, pending } => {
             draw_offline(frame, message, pending.is_some(), tick);
         }
@@ -251,6 +252,137 @@ fn draw_task_list(frame: &mut Frame, list: &TaskListState, profile: &str, tick: 
             Paragraph::new(Span::raw(hint)).wrap(Wrap { trim: true }),
             *slot,
         );
+    }
+}
+
+/// The live `MM:SS` countdown label for a running session, computed from Unix-epoch seconds.
+///
+/// Pure render derivation (ADR-0002 §2–3, hard-constraint #1): the remaining time is recomputed
+/// from the absolute `ends_at_secs` and the server's `server_now_secs` advanced by
+/// `since_response` (the whole seconds elapsed locally since the running response was applied) —
+/// never stored. `remaining = ends_at − (server_now + since_response)`, floored at zero. When it
+/// reaches zero the label is `00:00` and the caller shows a local "completed" hint until the
+/// server's authoritative `Completed` verdict arrives on the next coarse refresh.
+///
+/// Taking epoch seconds (not a `chrono` type) keeps this fn — and the `tui` crate — free of a
+/// direct `chrono` dependency; the caller derives the seconds from the `contract` DTO's
+/// `DateTime` via `timestamp()`.
+#[must_use]
+pub fn countdown_label(ends_at_secs: i64, server_now_secs: i64, since_response: i64) -> String {
+    let remaining = (ends_at_secs - server_now_secs - since_response).max(0);
+    let minutes = remaining / 60;
+    let seconds = remaining % 60;
+    format!("{minutes:02}:{seconds:02}")
+}
+
+fn draw_timer(frame: &mut Frame, timer: &TimerState, tick: u64) {
+    let area = frame.area();
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(2),
+            Constraint::Min(3),
+            Constraint::Length(2),
+            Constraint::Length(2),
+        ])
+        .split(area);
+
+    if let Some(slot) = chunks.first() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "organized-koala — focus timer",
+                Style::default().add_modifier(Modifier::BOLD),
+            )),
+            *slot,
+        );
+    }
+
+    if let Some(slot) = chunks.get(1) {
+        let duration = format!("Duration: {} min", timer.config.duration_minutes);
+        frame.render_widget(Paragraph::new(Span::raw(duration)), *slot);
+    }
+
+    if let Some(slot) = chunks.get(2) {
+        let lines = timer_body(timer);
+        frame.render_widget(
+            Paragraph::new(lines)
+                .block(Block::default().borders(Borders::ALL).title("Session"))
+                .wrap(Wrap { trim: true }),
+            *slot,
+        );
+    }
+
+    if let Some(slot) = chunks.get(3) {
+        let text = if let Some(edit) = &timer.editing {
+            let err = edit.error.as_deref().unwrap_or("");
+            format!("Set duration (min): {}  {err}", edit.buffer)
+        } else {
+            timer.message.clone().unwrap_or_default()
+        };
+        frame.render_widget(
+            Paragraph::new(Span::raw(text)).wrap(Wrap { trim: true }),
+            *slot,
+        );
+    }
+
+    if let Some(slot) = chunks.get(4) {
+        let working = working_hint(tick);
+        let hint = if timer.is_pending() {
+            working.as_str()
+        } else if timer.editing.is_some() {
+            "Enter: save  Esc: cancel"
+        } else {
+            "s: start  x: stop  d: set duration  r: refresh  Esc: back  Ctrl+C: quit"
+        };
+        frame.render_widget(
+            Paragraph::new(Span::raw(hint)).wrap(Wrap { trim: true }),
+            *slot,
+        );
+    }
+}
+
+/// The session-state lines for the timer body: idle, the live countdown while running, or the
+/// completed verdict. The countdown advances from the locally-elapsed time since the session was
+/// applied; reaching zero shows a local "completed" hint pending the server's verdict.
+fn timer_body(timer: &TimerState) -> Vec<Line<'static>> {
+    match &timer.session {
+        TimerSession::Idle => vec![Line::from(Span::raw("Idle — no active session."))],
+        TimerSession::Running {
+            ends_at,
+            server_now,
+            ..
+        } => {
+            let since = timer.applied_at.map_or(0, |t| {
+                i64::try_from(t.elapsed().as_secs()).unwrap_or(i64::MAX)
+            });
+            let label = countdown_label(ends_at.timestamp(), server_now.timestamp(), since);
+            if label == "00:00" {
+                vec![
+                    Line::from(Span::styled(
+                        "00:00",
+                        Style::default().add_modifier(Modifier::BOLD),
+                    )),
+                    Line::from(Span::raw("Completed (awaiting server confirmation).")),
+                ]
+            } else {
+                vec![
+                    Line::from(Span::styled(
+                        label,
+                        Style::default().add_modifier(Modifier::BOLD),
+                    )),
+                    Line::from(Span::raw("Running.")),
+                ]
+            }
+        }
+        TimerSession::Completed { .. } => vec![
+            Line::from(Span::styled(
+                "00:00",
+                Style::default().add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::raw("Completed.")),
+        ],
     }
 }
 

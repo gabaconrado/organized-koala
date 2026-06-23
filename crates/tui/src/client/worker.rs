@@ -39,6 +39,21 @@ fn run<C: Client>(client: &C, request: ClientRequest) -> Outcome {
             profile_id,
             task_id,
         } => Outcome::CloseTask(client.close_task(&token, &profile_id, &task_id)),
+        ClientRequest::GetTimerConfig { token } => {
+            Outcome::GetTimerConfig(client.get_timer_config(&token))
+        }
+        ClientRequest::UpdateTimerConfig { token, req } => {
+            Outcome::UpdateTimerConfig(client.update_timer_config(&token, &req))
+        }
+        ClientRequest::GetTimerSession { token } => {
+            Outcome::GetTimerSession(client.get_timer_session(&token))
+        }
+        ClientRequest::StartTimerSession { token } => {
+            Outcome::StartTimerSession(client.start_timer_session(&token))
+        }
+        ClientRequest::StopTimerSession { token } => {
+            Outcome::StopTimerSession(client.stop_timer_session(&token))
+        }
     }
 }
 

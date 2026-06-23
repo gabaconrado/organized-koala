@@ -412,6 +412,51 @@ Dependency edges: **1 → 2 → 3 → 4** (each depends on the contract/protocol
   integration tests pass, full suite 0 failures), `./ok.sh lint` clean, `./ok.sh fmt --check`
   clean. No source under `crates/*/src/` touched (tests only).
 
+- 2026-06-23 [tui-dev] built **slice 3** — the TUI client/protocol additions for the timer
+  surface. Added five `Client` trait methods (`crates/tui/src/client/mod.rs`):
+  `get_timer_config`, `update_timer_config`, `get_timer_session`, `start_timer_session`,
+  `stop_timer_session`, each `ClientResult<…>` over the new DTOs, with `HttpClient` impls
+  following the existing `bearer_auth` + status-branch + `decode`/`api_error` pattern verbatim
+  (`PUT /api/timer/config` carries the body; the session start/stop are bodyless POSTs; all are
+  account-global, no `profile_id`). Added matching `ClientRequest` variants (`GetTimerConfig`,
+  `UpdateTimerConfig`, `GetTimerSession`, `StartTimerSession`, `StopTimerSession`, each carrying
+  `token`) and `Outcome` variants in `crates/tui/src/app/protocol.rs`, and the worker `run` arms
+  in `crates/tui/src/client/worker.rs` — exact shape of the existing task arms. Gates on the
+  source: `./ok.sh build` clean, `cargo clippy --lib --bins -p tui` clean, `./ok.sh fmt --check`
+  clean. **Test-compile dependency flagged:** the `FakeClient` is in `crates/tui/tests/common/mod.rs`
+  (tester-owned, slice 4t); the new trait methods mean the tui integration-test binaries do not
+  compile until 4t adds the `FakeClient` timer impls + the `screen_name` `Screen::Timer` arm. Per
+  the slice brief, that file was left untouched. `contract` + `server` suites and the tui lib/bin
+  build stay green.
+
+- 2026-06-23 [tui-dev] built **slice 4** — the focus/timer view. Added `Screen::Timer(TimerState)`
+  with a new `crates/tui/src/app/timer.rs`: `TimerState` holds the last server-returned
+  `TimerConfig` + `TimerSession`, the in-flight `pending: Option<RequestId>` marker, an optional
+  inline `message`, an optional `DurationEditState` edit buffer (same category as `AddTaskState`),
+  and a monotonic `applied_at: Option<Instant>` captured when the session response landed — **no
+  authoritative remaining-seconds integer is stored** (#1). `draw_timer` (`crates/tui/src/ui/mod.rs`)
+  shows the duration, the session state, and — when running — a live `MM:SS` countdown via the
+  pure `countdown_label(ends_at_secs, server_now_secs, since_response)`, recomputed every ~80 ms
+  render tick from `ends_at − (server_now + elapsed_since_response)`; on reaching `00:00` locally
+  it shows "Completed (awaiting server confirmation)" until the server's authoritative `Completed`
+  verdict arrives. `countdown_label` takes epoch seconds (not a `chrono` type) so the `tui` crate
+  keeps its no-direct-`chrono` invariant; the caller derives them from the DTO's `DateTime` via
+  `timestamp()`. Coarse session refresh is `TIMER_REFRESH_TICKS = 63` ticks ≈ 5 s (A3) in the
+  `terminal::run` loop while the timer view is open and idle (plus on entry and on each user
+  action) — never per-second; the ~80 ms tick only animates the local countdown. Navigation (A2):
+  `t` on the task list opens the timer (`Event::OpenTimer`, which loads config→session from the
+  server); `Esc` on the timer is `Event::Cancel` (the core resolves it to abandon-edit /
+  cancel-in-flight / back-to-task-list, re-listing tasks on return); in the timer `s`=start,
+  `x`=stop, `d`=set duration, `r`=refresh, `Ctrl+C`=quit — added the `map_key` arms and the
+  `Screen::Timer` cases across `handle_event`/`set_pending`/`cancel_in_flight`/`apply_response`.
+  Switching profiles does not touch the account-global timer (the view derives only from the
+  timer endpoints, not the profile). Error routing unchanged (ADR-0006 §6): `unauthenticated` →
+  login, offline → blocking screen, a duration-update validation error surfaces inline in the edit
+  sub-flow, other `Api` codes → inline `message`. Gates on the source green: `./ok.sh build`,
+  `cargo clippy --lib --bins -p tui`, `./ok.sh fmt --check`. The interactive `TestBackend` suite
+  (`crates/tui/tests/timer.rs`) is slice 4t, `tester`'s — not written here; `./ok.sh test` /
+  full-target `./ok.sh lint` go green once 4t lands (see the slice-3 test-compile note).
+
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md

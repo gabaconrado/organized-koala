@@ -13,11 +13,13 @@ pub mod auth;
 pub mod protocol;
 pub mod task_add;
 pub mod task_list;
+pub mod timer;
 
 pub use auth::{AuthField, AuthMode, AuthState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
 pub use task_add::AddTaskState;
 pub use task_list::TaskListState;
+pub use timer::{DurationEditState, TimerState};
 
 use contract::ErrorCode;
 
@@ -44,6 +46,14 @@ pub enum Event {
     BeginAddTask,
     /// Close / mark-done the selected task (task list only).
     CloseSelected,
+    /// Open the focus/timer view (task list only).
+    OpenTimer,
+    /// Start (or restart) the focus session (timer view only).
+    StartTimer,
+    /// Stop the active focus session (timer view only).
+    StopTimer,
+    /// Begin editing the session duration (timer view only).
+    BeginEditDuration,
     /// Refresh the current view from the server (also the manual retry from the offline
     /// screen).
     Refresh,
@@ -84,6 +94,8 @@ pub enum Screen {
     Auth(AuthState),
     /// The task-list screen for the active profile.
     TaskList(TaskListState),
+    /// The focus/timer screen (account-global; ADR-0002 §5).
+    Timer(TimerState),
     /// The blocking "server unreachable" screen. Carries the message and the in-flight marker
     /// while a retry probe is outstanding.
     Offline {
@@ -157,6 +169,7 @@ impl App {
         match &self.screen {
             Screen::Auth(auth) => auth.pending,
             Screen::TaskList(list) => list.pending,
+            Screen::Timer(timer) => timer.pending,
             Screen::Offline { pending, .. } => *pending,
         }
     }
@@ -179,11 +192,22 @@ impl App {
                 self.cancel_in_flight();
                 return None;
             }
+            // Navigation between the task list and the timer view. `OpenTimer` enters the timer
+            // and loads it from the server; `Cancel` from the timer (when not editing/pending)
+            // returns to the task list, re-listing from the server (#1).
+            Event::OpenTimer if matches!(self.screen, Screen::TaskList(_)) => {
+                return self.open_timer();
+            }
+            Event::Cancel if matches!(&self.screen, Screen::Timer(timer) if timer.editing.is_none()) =>
+            {
+                return self.leave_timer();
+            }
             _ => {}
         }
         let request = match &mut self.screen {
             Screen::Auth(auth) => auth.handle_event(event),
             Screen::TaskList(list) => list.handle_event(event, self.session.as_ref()),
+            Screen::Timer(timer) => timer.handle_event(event, self.session.as_ref()),
             Screen::Offline { pending, .. } => {
                 if pending.is_some() {
                     None
@@ -210,6 +234,7 @@ impl App {
         match &mut self.screen {
             Screen::Auth(auth) => auth.pending = id,
             Screen::TaskList(list) => list.pending = id,
+            Screen::Timer(timer) => timer.pending = id,
             Screen::Offline { pending, .. } => *pending = id,
         }
     }
@@ -224,6 +249,12 @@ impl App {
                 list.pending = None;
                 if let Some(add) = &mut list.adding {
                     add.error = None;
+                }
+            }
+            Screen::Timer(timer) => {
+                timer.pending = None;
+                if let Some(edit) = &mut timer.editing {
+                    edit.error = None;
                 }
             }
             Screen::Offline { pending, .. } => *pending = None,
@@ -248,6 +279,11 @@ impl App {
             Outcome::ListTasks(result) => self.apply_tasks(result),
             Outcome::CreateTask(result) => self.apply_create(result),
             Outcome::CloseTask(result) => self.apply_close(result),
+            Outcome::GetTimerConfig(result) => self.apply_timer_config(result, true),
+            Outcome::UpdateTimerConfig(result) => self.apply_timer_config(result, false),
+            Outcome::GetTimerSession(result)
+            | Outcome::StartTimerSession(result)
+            | Outcome::StopTimerSession(result) => self.apply_timer_session(result),
         }
     }
 
@@ -393,6 +429,114 @@ impl App {
         None
     }
 
+    /// Enter the timer view and load it from the server: switch to a fresh [`TimerState`] and
+    /// dispatch `GetTimerConfig` (whose success chains `GetTimerSession`), so every value shown is
+    /// server-derived (#1).
+    fn open_timer(&mut self) -> Option<Dispatch> {
+        let session = self.session.clone()?;
+        self.screen = Screen::Timer(TimerState::new());
+        Some(self.dispatch(ClientRequest::GetTimerConfig {
+            token: session.token,
+        }))
+    }
+
+    /// Return from the timer view to the task list, re-listing the active profile's tasks from the
+    /// server (#1). The account-global timer is unaffected by leaving the view.
+    fn leave_timer(&mut self) -> Option<Dispatch> {
+        let session = self.session.clone()?;
+        self.screen = Screen::TaskList(TaskListState::new(Vec::new()));
+        Some(self.dispatch(ClientRequest::ListTasks {
+            token: session.token,
+            profile_id: session.profile_id,
+        }))
+    }
+
+    /// Fold a timer-config response into the timer screen. On the entry read (`chain_session`),
+    /// chains a `GetTimerSession` so the session state loads too; on a duration update it stores
+    /// the new config and closes the edit sub-flow.
+    fn apply_timer_config(
+        &mut self,
+        result: crate::client::ClientResult<contract::TimerConfig>,
+        chain_session: bool,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(config) => {
+                if let Screen::Timer(timer) = &mut self.screen {
+                    timer.config = config;
+                    timer.editing = None;
+                }
+                if chain_session && let Some(session) = self.session.clone() {
+                    return Some(self.dispatch(ClientRequest::GetTimerSession {
+                        token: session.token,
+                    }));
+                }
+                self.set_pending(None);
+                None
+            }
+            Err(err) => {
+                self.set_pending(None);
+                self.handle_timer_config_error(err);
+                None
+            }
+        }
+    }
+
+    /// Fold a timer-session response (get / start / stop) into the timer screen, capturing the
+    /// monotonic instant the session was applied so the rendered countdown advances between coarse
+    /// refreshes (ADR-0002 §3). No remaining-seconds integer is stored (#1).
+    fn apply_timer_session(
+        &mut self,
+        result: crate::client::ClientResult<contract::TimerSession>,
+    ) -> Option<Dispatch> {
+        self.set_pending(None);
+        match result {
+            Ok(session) => {
+                if let Screen::Timer(timer) = &mut self.screen {
+                    timer.session = session;
+                    timer.applied_at = Some(std::time::Instant::now());
+                }
+            }
+            Err(err) => self.handle_timer_error(err),
+        }
+        None
+    }
+
+    /// Error routing for a timer-session call (ADR-0006 §6): offline → blocking screen,
+    /// `unauthenticated` → login, anything else → inline message on the timer screen.
+    fn handle_timer_error(&mut self, err: ClientError) {
+        if err.is_offline() {
+            self.go_offline(&err);
+            return;
+        }
+        if err.code() == Some(&ErrorCode::Unauthenticated) {
+            self.go_to_login();
+            return;
+        }
+        if let Screen::Timer(timer) = &mut self.screen {
+            timer.message = Some(err.to_string());
+        }
+    }
+
+    /// Error routing for a duration update: offline → blocking, `unauthenticated` → login, and a
+    /// validation (or other) error surfaces inline in the edit sub-flow so the user can correct it.
+    fn handle_timer_config_error(&mut self, err: ClientError) {
+        if err.is_offline() {
+            self.go_offline(&err);
+            return;
+        }
+        if err.code() == Some(&ErrorCode::Unauthenticated) {
+            self.go_to_login();
+            return;
+        }
+        if let Screen::Timer(timer) = &mut self.screen {
+            if let Some(edit) = &mut timer.editing {
+                edit.error = Some(err.to_string());
+            } else {
+                timer.message = Some(err.to_string());
+            }
+        }
+    }
+
     fn handle_auth_error(&mut self, err: ClientError) {
         if err.is_offline() {
             self.go_offline(&err);
@@ -418,6 +562,7 @@ impl App {
         let message = err.to_string();
         match &mut self.screen {
             Screen::TaskList(list) => list.message = Some(message),
+            Screen::Timer(timer) => timer.message = Some(message),
             Screen::Auth(auth) => auth.error = Some(message),
             Screen::Offline { .. } => {}
         }

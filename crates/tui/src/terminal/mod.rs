@@ -30,12 +30,19 @@ use crate::ui;
 /// latency and sets the spinner cadence. `tui-dev`'s call (ADR-0006 assumptions); ~12.5 fps.
 const TICK: Duration = Duration::from_millis(80);
 
+/// Coarse timer-session refresh cadence, in poll-loop ticks. At ~80 ms per tick, 63 ticks ≈ 5 s
+/// (plan Assumption A3): while the timer view is open and idle, re-`GetTimerSession` this often so
+/// the server's running/completed verdict stays fresh — far above the ~80 ms render tick that
+/// animates the local countdown, and well clear of per-second polling (ADR-0002 §3, ADR-0006).
+const TIMER_REFRESH_TICKS: u64 = 63;
+
 /// Whether the app is currently in a text-entry context, where letters are typed rather than
 /// interpreted as commands.
 fn is_text_entry(screen: &Screen) -> bool {
     match screen {
         Screen::Auth(_) => true,
         Screen::TaskList(list) => list.adding.is_some(),
+        Screen::Timer(timer) => timer.editing.is_some(),
         Screen::Offline { .. } => false,
     }
 }
@@ -64,11 +71,15 @@ pub fn map_key(screen: &Screen, key: KeyEvent) -> Option<Event> {
 
     let text_entry = is_text_entry(screen);
     let in_add_task = matches!(screen, Screen::TaskList(list) if list.adding.is_some());
+    // On the timer screen `Esc` always means cancel: the core resolves it to abandon-edit,
+    // cancel-in-flight, or back-to-task-list. Elsewhere `Esc` cancels only an add-task sub-flow
+    // or an in-flight request, and otherwise quits.
+    let on_timer = matches!(screen, Screen::Timer(_));
     let pending = is_pending(screen);
 
     match key.code {
         KeyCode::Esc => {
-            if in_add_task || pending {
+            if in_add_task || on_timer || pending {
                 Some(Event::Cancel)
             } else {
                 Some(Event::Quit)
@@ -82,8 +93,12 @@ pub fn map_key(screen: &Screen, key: KeyEvent) -> Option<Event> {
         KeyCode::Char(c) if text_entry => Some(Event::Char(c)),
         KeyCode::Char('a') if matches!(screen, Screen::TaskList(_)) => Some(Event::BeginAddTask),
         KeyCode::Char('c') if matches!(screen, Screen::TaskList(_)) => Some(Event::CloseSelected),
+        KeyCode::Char('t') if matches!(screen, Screen::TaskList(_)) => Some(Event::OpenTimer),
+        KeyCode::Char('s') if matches!(screen, Screen::Timer(_)) => Some(Event::StartTimer),
+        KeyCode::Char('x') if matches!(screen, Screen::Timer(_)) => Some(Event::StopTimer),
+        KeyCode::Char('d') if matches!(screen, Screen::Timer(_)) => Some(Event::BeginEditDuration),
         KeyCode::Char('r') => match screen {
-            Screen::TaskList(_) | Screen::Offline { .. } => Some(Event::Refresh),
+            Screen::TaskList(_) | Screen::Timer(_) | Screen::Offline { .. } => Some(Event::Refresh),
             Screen::Auth(_) => None,
         },
         KeyCode::Char('q') if matches!(screen, Screen::TaskList(_)) => Some(Event::Quit),
@@ -91,11 +106,23 @@ pub fn map_key(screen: &Screen, key: KeyEvent) -> Option<Event> {
     }
 }
 
+/// Whether a coarse timer-session refresh is due this tick: the timer view is open, idle (no
+/// request in flight), not in the duration-edit sub-flow, and the tick is on the
+/// [`TIMER_REFRESH_TICKS`] cadence boundary (never at `tick == 0`, which is the entry load).
+fn timer_refresh_due(screen: &Screen, tick: u64) -> bool {
+    matches!(
+        screen,
+        Screen::Timer(timer) if timer.pending.is_none() && timer.editing.is_none()
+    ) && tick != 0
+        && tick.is_multiple_of(TIMER_REFRESH_TICKS)
+}
+
 /// Whether the given screen has a request outstanding.
 fn is_pending(screen: &Screen) -> bool {
     match screen {
         Screen::Auth(auth) => auth.is_pending(),
         Screen::TaskList(list) => list.is_pending(),
+        Screen::Timer(timer) => timer.is_pending(),
         Screen::Offline { pending, .. } => pending.is_some(),
     }
 }
@@ -155,6 +182,17 @@ pub fn run(
         {
             // The worker outliving the UI is impossible to recover from; treat a closed
             // request channel as a fatal transport failure.
+            requests
+                .send(dispatch)
+                .map_err(|_| anyhow::anyhow!("request worker stopped unexpectedly"))?;
+        }
+
+        // Coarse timer-session refresh: while the timer view is open and idle, re-pull the
+        // session every `TIMER_REFRESH_TICKS` so the server's running/completed verdict stays
+        // current (the local countdown already animates each tick). Never per second.
+        if timer_refresh_due(app.screen(), tick)
+            && let Some(dispatch) = app.handle_event(Event::Refresh)
+        {
             requests
                 .send(dispatch)
                 .map_err(|_| anyhow::anyhow!("request worker stopped unexpectedly"))?;

@@ -8,7 +8,10 @@
 //! are the core's transport-agnostic request language — they carry owned [`contract`] payloads
 //! and the bearer token, never a live connection.
 
-use contract::{CreateTaskRequest, LoginRequest, Profile, RegisterRequest, SessionResponse, Task};
+use contract::{
+    CreateTaskRequest, LoginRequest, Profile, RegisterRequest, SessionResponse, Task, TimerConfig,
+    TimerSession, UpdateTimerConfigRequest,
+};
 
 use crate::client::ClientResult;
 
@@ -60,6 +63,33 @@ pub enum ClientRequest {
         /// The task to close.
         task_id: String,
     },
+    /// `GET /api/timer/config` — read the account-global duration config.
+    GetTimerConfig {
+        /// The bearer token to authenticate with.
+        token: String,
+    },
+    /// `PUT /api/timer/config` — update the global session duration.
+    UpdateTimerConfig {
+        /// The bearer token to authenticate with.
+        token: String,
+        /// The new duration to set.
+        req: UpdateTimerConfigRequest,
+    },
+    /// `GET /api/timer/session` — read the current focus session.
+    GetTimerSession {
+        /// The bearer token to authenticate with.
+        token: String,
+    },
+    /// `POST /api/timer/session/start` — start (or restart) a focus session.
+    StartTimerSession {
+        /// The bearer token to authenticate with.
+        token: String,
+    },
+    /// `POST /api/timer/session/stop` — stop the active session (resets to idle).
+    StopTimerSession {
+        /// The bearer token to authenticate with.
+        token: String,
+    },
 }
 
 /// The outcome of a [`ClientRequest`], paired with the [`RequestId`] it was dispatched under so
@@ -88,6 +118,16 @@ pub enum Outcome {
     CreateTask(ClientResult<Task>),
     /// Result of a [`ClientRequest::CloseTask`] call.
     CloseTask(ClientResult<Task>),
+    /// Result of a [`ClientRequest::GetTimerConfig`] call.
+    GetTimerConfig(ClientResult<TimerConfig>),
+    /// Result of a [`ClientRequest::UpdateTimerConfig`] call.
+    UpdateTimerConfig(ClientResult<TimerConfig>),
+    /// Result of a [`ClientRequest::GetTimerSession`] call.
+    GetTimerSession(ClientResult<TimerSession>),
+    /// Result of a [`ClientRequest::StartTimerSession`] call.
+    StartTimerSession(ClientResult<TimerSession>),
+    /// Result of a [`ClientRequest::StopTimerSession`] call.
+    StopTimerSession(ClientResult<TimerSession>),
 }
 
 /// A completed [`ClientRequest`]: the [`RequestId`] it ran under plus its [`Outcome`]. The edge

@@ -10,7 +10,7 @@ pub mod worker;
 
 use contract::{
     CreateTaskRequest, ErrorBody, ErrorCode, LoginRequest, Profile, RegisterRequest,
-    SessionResponse, Task,
+    SessionResponse, Task, TimerConfig, TimerSession, UpdateTimerConfigRequest,
 };
 
 /// A failure from a client call.
@@ -116,6 +116,30 @@ pub trait Client {
     /// `POST /api/profiles/{profile_id}/tasks/{task_id}/close` — close a task, returning the
     /// updated [`Task`] (status `done`, `closed_at` set). Idempotent server-side.
     fn close_task(&self, token: &str, profile_id: &str, task_id: &str) -> ClientResult<Task>;
+
+    /// `GET /api/timer/config` — the account-global Pomodoro config (duration). Account-global,
+    /// not profile-scoped (ADR-0002 §5), so it takes no `profile_id`.
+    fn get_timer_config(&self, token: &str) -> ClientResult<TimerConfig>;
+
+    /// `PUT /api/timer/config` — update the global session duration, returning the updated
+    /// [`TimerConfig`]. An out-of-bounds duration is a `validation_failed` [`ClientError::Api`].
+    fn update_timer_config(
+        &self,
+        token: &str,
+        req: &UpdateTimerConfigRequest,
+    ) -> ClientResult<TimerConfig>;
+
+    /// `GET /api/timer/session` — the current focus session (idle / running / completed). The
+    /// server is the authority for the running-vs-completed verdict (ADR-0002 §3).
+    fn get_timer_session(&self, token: &str) -> ClientResult<TimerSession>;
+
+    /// `POST /api/timer/session/start` — start (or restart) a focus session, returning the
+    /// running session with its absolute `ends_at` and `server_now`.
+    fn start_timer_session(&self, token: &str) -> ClientResult<TimerSession>;
+
+    /// `POST /api/timer/session/stop` — stop the active session (no pause; resets to idle).
+    /// Idempotent server-side.
+    fn stop_timer_session(&self, token: &str) -> ClientResult<TimerSession>;
 }
 
 /// A blocking `reqwest` implementation of [`Client`] against a single server base URL.
@@ -283,6 +307,86 @@ impl Client for HttpClient {
         let resp = self
             .http
             .post(self.url(&format!("/api/profiles/{profile_id}/tasks/{task_id}/close")))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn get_timer_config(&self, token: &str) -> ClientResult<TimerConfig> {
+        let resp = self
+            .http
+            .get(self.url("/api/timer/config"))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn update_timer_config(
+        &self,
+        token: &str,
+        req: &UpdateTimerConfigRequest,
+    ) -> ClientResult<TimerConfig> {
+        let resp = self
+            .http
+            .put(self.url("/api/timer/config"))
+            .bearer_auth(token)
+            .json(req)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn get_timer_session(&self, token: &str) -> ClientResult<TimerSession> {
+        let resp = self
+            .http
+            .get(self.url("/api/timer/session"))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn start_timer_session(&self, token: &str) -> ClientResult<TimerSession> {
+        let resp = self
+            .http
+            .post(self.url("/api/timer/session/start"))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn stop_timer_session(&self, token: &str) -> ClientResult<TimerSession> {
+        let resp = self
+            .http
+            .post(self.url("/api/timer/session/stop"))
             .bearer_auth(token)
             .send()
             .map_err(offline)?;
