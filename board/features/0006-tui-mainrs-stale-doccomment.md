@@ -68,3 +68,27 @@ the deferred TUI backlog (profile-switch UX, task edit/delete, Notes, Pomodoro, 
 
 <!-- written at end of cycle; what the human reviews -->
 ## Summary
+
+The module doc comment at the top of `crates/tui/src/main.rs` described a prior behaviour —
+an *"initial health probe so an unreachable server is reported up front"* — that no longer
+matches the binary. That entrypoint was reshaped by 0005 (ADR-0006 Model A): `main` resolves
+the server base URL, builds the `reqwest`-backed client, **spawns the worker thread that owns
+it**, and hands control to the interactive loop, where the UI thread drives the pure
+`tui::app::App` core and never blocks on I/O. The comment was rewritten to describe exactly
+that, with the stale health-probe clause removed; the `anyhow` error-propagation note was
+kept. Verified line-by-line against `main()`.
+
+**Comment-only — the chore invariant held.** No code path, signature, behaviour, `contract`/
+wire shape (#2), or domain structure (#3) changed; the diff vs `main` is the `//!` doc comment
+in `crates/tui/src/main.rs` (plus feature-local Board state). Gates green: `./ok.sh fmt
+--check`, `./ok.sh lint`, `./ok.sh test` (tui `TestBackend` suite 11 rendering / all flows
+pass).
+
+**Inaugural `chore`.** This is the first item to run the lighter chore Definition of done:
+clauses 1–3 (test/lint/fmt) plus a cold `reviewer` approval that **explicitly attests the
+chore invariant** (no behaviour, no contract/wire, no domain-structure change), pinned to the
+code-tree hash `401ad3de59c4cc7e33c3ebf8308c171d80659e4e` (sha `5b5c788`). The live `verifier`
+pass (clause 4) was correctly **skipped** — a comment-only change has nothing new for a live
+boot to exercise; the cold reviewer is the safety net in its place. Origin: an out-of-scope
+pre-existing nit flagged by the `reviewer` during the 0005 cycle and recorded in
+`docs/handoff.md` as a "free pickup," minted directly as a `chore` (no `architect` plan).
