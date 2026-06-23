@@ -1,13 +1,14 @@
 //! The app core: a screen state machine advanced by two pure update functions over [`Event`]s
 //! and server [`ClientResponse`]s.
 //!
-//! [`App`] owns the session ([`Session`]) and the current [`Screen`]. It performs **no** I/O and
-//! holds **no** client: [`App::handle_event`] is pure and returns an [`Option<Dispatch>`]
-//! describing the [`ClientRequest`] to execute (the worker thread runs it), and
-//! [`App::apply_response`] folds a completed [`ClientResponse`] back into screen state. The whole
-//! interactive surface is driveable through a `ratatui` `TestBackend` with no client and no
-//! threads (ADR-0003 / ADR-0006). All state lives in memory for the process lifetime only
-//! (hard-constraint #1) — there is no on-disk or cross-run persistence.
+//! [`App`] owns the session ([`Session`]), the current [`Screen`], and the account-global
+//! [`Timer`] (a persistent widget rendered on every post-auth screen, ADR-0006 §8.1, not a
+//! navigable screen). It performs **no** I/O and holds **no** client: [`App::handle_event`] is
+//! pure and returns an [`Option<Dispatch>`] describing the [`ClientRequest`] to execute (the
+//! worker thread runs it), and [`App::apply_response`] folds a completed [`ClientResponse`] back
+//! into state. The whole interactive surface is driveable through a `ratatui` `TestBackend` with
+//! no client and no threads (ADR-0003 / ADR-0006). All state lives in memory for the process
+//! lifetime only (hard-constraint #1) — there is no on-disk or cross-run persistence.
 
 pub mod auth;
 pub mod protocol;
@@ -19,7 +20,7 @@ pub use auth::{AuthField, AuthMode, AuthState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
 pub use task_add::AddTaskState;
 pub use task_list::TaskListState;
-pub use timer::{DurationEditState, TimerState};
+pub use timer::{DurationEditState, Timer};
 
 use contract::ErrorCode;
 
@@ -46,13 +47,10 @@ pub enum Event {
     BeginAddTask,
     /// Close / mark-done the selected task (task list only).
     CloseSelected,
-    /// Open the focus/timer view (task list only).
-    OpenTimer,
-    /// Start (or restart) the focus session (timer view only).
-    StartTimer,
-    /// Stop the active focus session (timer view only).
-    StopTimer,
-    /// Begin editing the session duration (timer view only).
+    /// Toggle the account-global focus session: start when idle/completed, stop when running.
+    /// Global on every post-auth screen (ADR-0006 §8.2).
+    ToggleTimer,
+    /// Begin editing the global session duration (on any post-auth screen; ADR-0006 §8).
     BeginEditDuration,
     /// Refresh the current view from the server (also the manual retry from the offline
     /// screen).
@@ -65,8 +63,8 @@ pub enum Event {
 }
 
 /// A request the core wants dispatched: the [`ClientRequest`] plus the [`RequestId`] the core
-/// stamped it with (and recorded as the active screen's in-flight marker). The edge ships this
-/// to the worker thread verbatim.
+/// stamped it with (and recorded as the matching in-flight marker). The edge ships this to the
+/// worker thread verbatim.
 #[derive(Debug, Clone)]
 pub struct Dispatch {
     /// The id the in-flight marker was set to; the matching [`ClientResponse`] must echo it.
@@ -87,15 +85,14 @@ pub struct Session {
     pub profile_name: String,
 }
 
-/// The current screen of the state machine.
+/// The current screen of the state machine. The timer is **not** a screen — it is a global widget
+/// rendered on every post-auth screen (ADR-0006 §8.1).
 #[derive(Debug, Clone)]
 pub enum Screen {
     /// The auth screen (login or register).
     Auth(AuthState),
     /// The task-list screen for the active profile.
     TaskList(TaskListState),
-    /// The focus/timer screen (account-global; ADR-0002 §5).
-    Timer(TimerState),
     /// The blocking "server unreachable" screen. Carries the message and the in-flight marker
     /// while a retry probe is outstanding.
     Offline {
@@ -106,8 +103,17 @@ pub enum Screen {
     },
 }
 
-/// The application: the screen state machine plus the in-memory session and the request-id
-/// counter.
+impl Screen {
+    /// Whether this is a post-auth screen (the timer widget is shown and the global timer
+    /// keybindings are live). The auth and offline screens are excluded.
+    #[must_use]
+    fn is_post_auth(&self) -> bool {
+        matches!(self, Screen::TaskList(_))
+    }
+}
+
+/// The application: the screen state machine, the account-global timer, the in-memory session,
+/// and the request-id counter.
 ///
 /// Advance it by feeding [`Event`]s to [`App::handle_event`] (which may return a [`Dispatch`] to
 /// run) and completed results to [`App::apply_response`]; render the current state with the
@@ -116,6 +122,7 @@ pub enum Screen {
 pub struct App {
     session: Option<Session>,
     screen: Screen,
+    timer: Timer,
     quit: bool,
     next_id: u64,
 }
@@ -133,6 +140,7 @@ impl App {
         Self {
             session: None,
             screen: Screen::Auth(AuthState::new()),
+            timer: Timer::new(),
             quit: false,
             next_id: 0,
         }
@@ -142,6 +150,12 @@ impl App {
     #[must_use]
     pub fn screen(&self) -> &Screen {
         &self.screen
+    }
+
+    /// The account-global timer, for rendering the global widget.
+    #[must_use]
+    pub fn timer(&self) -> &Timer {
+        &self.timer
     }
 
     /// The active session, if authenticated.
@@ -156,58 +170,69 @@ impl App {
         self.quit
     }
 
-    /// Whether a server request is currently outstanding (the active screen's in-flight marker
-    /// is set). While true the UI renders a spinner and request-triggering events are no-ops.
+    /// Whether a server request is currently outstanding on the active screen. While true the UI
+    /// renders the spinner and request-triggering screen events are no-ops.
     #[must_use]
     pub fn is_pending(&self) -> bool {
-        self.pending_id().is_some()
+        self.screen_pending_id().is_some()
     }
 
-    /// The id of the currently-awaited request, if any.
+    /// Whether the duration-edit sub-flow owns keystrokes (it overlays the active post-auth
+    /// screen as a global text-entry mode).
     #[must_use]
-    fn pending_id(&self) -> Option<RequestId> {
+    pub fn is_editing_duration(&self) -> bool {
+        self.timer.is_editing()
+    }
+
+    /// The id of the request currently awaited on the active screen, if any.
+    #[must_use]
+    fn screen_pending_id(&self) -> Option<RequestId> {
         match &self.screen {
             Screen::Auth(auth) => auth.pending,
             Screen::TaskList(list) => list.pending,
-            Screen::Timer(timer) => timer.pending,
             Screen::Offline { pending, .. } => *pending,
         }
     }
 
-    /// The pure update entry point: apply one [`Event`] to the current screen, returning a
+    /// The pure update entry point: apply one [`Event`] to the current state, returning a
     /// [`Dispatch`] if the event triggers a server request.
     ///
     /// This is purely a state transition (no I/O, no client). The same event on the same state
     /// always produces the same `(next state, Option<Dispatch>)`, so the whole interactive
     /// surface is driveable from tests with no client and no threads. At most one request is in
-    /// flight: a request-triggering event while a request is outstanding is a no-op. `Quit` and
-    /// `Cancel` stay live during a request.
+    /// flight per surface (the screen and the timer each have their own marker); a
+    /// request-triggering event while that surface's request is outstanding is a no-op. `Quit`
+    /// and `Cancel` stay live during a request.
     pub fn handle_event(&mut self, event: Event) -> Option<Dispatch> {
+        // The duration-edit sub-flow is a global text-entry mode overlaying the active post-auth
+        // screen: while open it owns keystrokes, so they never reach the screen handler.
+        if self.timer.is_editing() {
+            return self.handle_edit_event(event);
+        }
         match event {
             Event::Quit => {
                 self.quit = true;
-                return None;
+                None
             }
             Event::Cancel if self.is_pending() => {
                 self.cancel_in_flight();
-                return None;
+                None
             }
-            // Navigation between the task list and the timer view. `OpenTimer` enters the timer
-            // and loads it from the server; `Cancel` from the timer (when not editing/pending)
-            // returns to the task list, re-listing from the server (#1).
-            Event::OpenTimer if matches!(self.screen, Screen::TaskList(_)) => {
-                return self.open_timer();
+            // Global timer controls, live on every post-auth screen (ADR-0006 §8.2).
+            Event::ToggleTimer if self.screen.is_post_auth() => self.toggle_timer(),
+            Event::BeginEditDuration if self.screen.is_post_auth() => {
+                self.timer.begin_edit();
+                None
             }
-            Event::Cancel if matches!(&self.screen, Screen::Timer(timer) if timer.editing.is_none()) =>
-            {
-                return self.leave_timer();
-            }
-            _ => {}
+            _ => self.handle_screen_event(event),
         }
+    }
+
+    /// Dispatch a non-edit event to the active screen, stamping the screen's in-flight marker.
+    fn handle_screen_event(&mut self, event: Event) -> Option<Dispatch> {
         let request = match &mut self.screen {
             Screen::Auth(auth) => auth.handle_event(event),
             Screen::TaskList(list) => list.handle_event(event, self.session.as_ref()),
-            Screen::Timer(timer) => timer.handle_event(event, self.session.as_ref()),
             Screen::Offline { pending, .. } => {
                 if pending.is_some() {
                     None
@@ -218,30 +243,91 @@ impl App {
                 }
             }
         };
-        request.map(|request| self.dispatch(request))
+        request.map(|request| self.dispatch_screen(request))
+    }
+
+    /// Handle a keystroke while the duration-edit sub-flow is open. `Submit` issues the update
+    /// (stamping the timer marker); `Cancel` abandons the edit; the rest mutate the buffer.
+    fn handle_edit_event(&mut self, event: Event) -> Option<Dispatch> {
+        if self.timer.is_pending() {
+            return None;
+        }
+        match event {
+            Event::Char(c) => self.timer.edit_char(c),
+            Event::Backspace => self.timer.edit_backspace(),
+            Event::Cancel => self.timer.cancel_edit(),
+            Event::Submit => {
+                let session = self.session.clone()?;
+                let request = self.timer.submit_edit(&session)?;
+                return Some(self.dispatch_timer(request));
+            }
+            _ => {}
+        }
+        None
+    }
+
+    /// Resolve the global `p` toggle to a start/stop request, stamping the timer's marker.
+    fn toggle_timer(&mut self) -> Option<Dispatch> {
+        let session = self.session.clone()?;
+        let request = self.timer.toggle(&session)?;
+        Some(self.dispatch_timer(request))
+    }
+
+    /// Issue the initial timer config→session load if a session exists and it has not loaded yet.
+    /// Called by the edge once a post-auth screen is shown. Stamps the timer marker.
+    pub fn load_timer_if_needed(&mut self) -> Option<Dispatch> {
+        if !self.screen.is_post_auth() {
+            return None;
+        }
+        let session = self.session.clone()?;
+        let request = self.timer.initial_load(&session)?;
+        Some(self.dispatch_timer(request))
+    }
+
+    /// Issue the coarse timer-session refresh (the ~1-minute cadence). Called by the edge on the
+    /// cadence boundary while a post-auth screen is shown. Stamps the timer marker.
+    pub fn refresh_timer(&mut self) -> Option<Dispatch> {
+        if !self.screen.is_post_auth() {
+            return None;
+        }
+        let session = self.session.clone()?;
+        let request = self.timer.refresh(&session)?;
+        Some(self.dispatch_timer(request))
     }
 
     /// Stamp a request with a fresh id, record it as the active screen's in-flight marker, and
     /// return the [`Dispatch`] for the edge to run.
-    fn dispatch(&mut self, request: ClientRequest) -> Dispatch {
-        let id = RequestId(self.next_id);
-        self.next_id = self.next_id.wrapping_add(1);
-        self.set_pending(Some(id));
+    fn dispatch_screen(&mut self, request: ClientRequest) -> Dispatch {
+        let id = self.next_request_id();
+        self.set_screen_pending(Some(id));
         Dispatch { id, request }
     }
 
-    fn set_pending(&mut self, id: Option<RequestId>) {
+    /// Stamp a request with a fresh id, record it as the timer's in-flight marker, and return the
+    /// [`Dispatch`] for the edge to run.
+    fn dispatch_timer(&mut self, request: ClientRequest) -> Dispatch {
+        let id = self.next_request_id();
+        self.timer.pending = Some(id);
+        Dispatch { id, request }
+    }
+
+    fn next_request_id(&mut self) -> RequestId {
+        let id = RequestId(self.next_id);
+        self.next_id = self.next_id.wrapping_add(1);
+        id
+    }
+
+    fn set_screen_pending(&mut self, id: Option<RequestId>) {
         match &mut self.screen {
             Screen::Auth(auth) => auth.pending = id,
             Screen::TaskList(list) => list.pending = id,
-            Screen::Timer(timer) => timer.pending = id,
             Screen::Offline { pending, .. } => *pending = id,
         }
     }
 
-    /// Abandon the in-flight request (user pressed cancel): clear the marker so the screen is
-    /// interactive again. The worker still runs the abandoned request to completion, but its
-    /// response will be dropped by [`apply_response`] on id mismatch.
+    /// Abandon the in-flight request on the active screen (user pressed cancel): clear the marker
+    /// so the screen is interactive again. The worker still runs the abandoned request to
+    /// completion, but its response will be dropped by [`apply_response`] on id mismatch.
     fn cancel_in_flight(&mut self) {
         match &mut self.screen {
             Screen::Auth(auth) => auth.pending = None,
@@ -251,48 +337,74 @@ impl App {
                     add.error = None;
                 }
             }
-            Screen::Timer(timer) => {
-                timer.pending = None;
-                if let Some(edit) = &mut timer.editing {
-                    edit.error = None;
-                }
-            }
             Screen::Offline { pending, .. } => *pending = None,
         }
     }
 
-    /// The pure response-folding seam: apply a completed [`ClientResponse`] to the in-flight
-    /// state, running the same success / error-code branching the inline code ran pre-split.
+    /// The pure response-folding seam: apply a completed [`ClientResponse`] to the matching
+    /// in-flight surface (the active screen or the global timer), running the same success /
+    /// error-code branching the inline code ran pre-split.
     ///
-    /// A response whose id does not match the currently-awaited request is **dropped** (it was
-    /// cancelled or superseded). Returns a follow-up [`Dispatch`] when the response chains into
-    /// the next request (post-auth profile/task load, or a refresh after create).
+    /// A response whose id does not match the awaited request on its surface is **dropped** (it
+    /// was cancelled or superseded). Returns a follow-up [`Dispatch`] when the response chains
+    /// into the next request (post-auth profile/task load, a refresh after create, or the
+    /// config→session chain).
     pub fn apply_response(&mut self, response: ClientResponse) -> Option<Dispatch> {
-        if self.pending_id() != Some(response.id) {
-            // Stale: the request was cancelled or superseded — never mutate state.
-            return None;
-        }
         match response.outcome {
-            Outcome::Health(result) => self.apply_health(result),
-            Outcome::Register(result) | Outcome::Login(result) => self.apply_auth(result),
-            Outcome::ListProfiles { token, result } => self.apply_profiles(token, result),
-            Outcome::ListTasks(result) => self.apply_tasks(result),
-            Outcome::CreateTask(result) => self.apply_create(result),
-            Outcome::CloseTask(result) => self.apply_close(result),
-            Outcome::GetTimerConfig(result) => self.apply_timer_config(result, true),
-            Outcome::UpdateTimerConfig(result) => self.apply_timer_config(result, false),
+            Outcome::GetTimerConfig(result) => {
+                self.apply_timer(response.id, |app| app.apply_timer_config(result, true))
+            }
+            Outcome::UpdateTimerConfig(result) => {
+                self.apply_timer(response.id, |app| app.apply_timer_config(result, false))
+            }
             Outcome::GetTimerSession(result)
             | Outcome::StartTimerSession(result)
-            | Outcome::StopTimerSession(result) => self.apply_timer_session(result),
+            | Outcome::StopTimerSession(result) => {
+                self.apply_timer(response.id, |app| app.apply_timer_session(result))
+            }
+            outcome => {
+                if self.screen_pending_id() != Some(response.id) {
+                    // Stale: the screen request was cancelled or superseded — never mutate state.
+                    return None;
+                }
+                match outcome {
+                    Outcome::Health(result) => self.apply_health(result),
+                    Outcome::Register(result) | Outcome::Login(result) => self.apply_auth(result),
+                    Outcome::ListProfiles { token, result } => self.apply_profiles(token, result),
+                    Outcome::ListTasks(result) => self.apply_tasks(result),
+                    Outcome::CreateTask(result) => self.apply_create(result),
+                    Outcome::CloseTask(result) => self.apply_close(result),
+                    // Timer outcomes are handled above.
+                    Outcome::GetTimerConfig(_)
+                    | Outcome::UpdateTimerConfig(_)
+                    | Outcome::GetTimerSession(_)
+                    | Outcome::StartTimerSession(_)
+                    | Outcome::StopTimerSession(_) => None,
+                }
+            }
         }
     }
 
+    /// Guard a timer outcome by the timer's own in-flight marker, dropping a stale response, and
+    /// run the folding closure on a match.
+    fn apply_timer(
+        &mut self,
+        id: RequestId,
+        fold: impl FnOnce(&mut Self) -> Option<Dispatch>,
+    ) -> Option<Dispatch> {
+        if self.timer.pending != Some(id) {
+            // Stale: the timer request was cancelled or superseded.
+            return None;
+        }
+        fold(self)
+    }
+
     fn apply_health(&mut self, result: crate::client::ClientResult<()>) -> Option<Dispatch> {
-        self.set_pending(None);
+        self.set_screen_pending(None);
         match result {
             Ok(()) => {
                 if let Some(session) = self.session.clone() {
-                    Some(self.dispatch(ClientRequest::ListTasks {
+                    Some(self.dispatch_screen(ClientRequest::ListTasks {
                         token: session.token,
                         profile_id: session.profile_id,
                     }))
@@ -315,10 +427,10 @@ impl App {
         match result {
             Ok(session) => {
                 let token = session.token;
-                Some(self.dispatch(ClientRequest::ListProfiles { token }))
+                Some(self.dispatch_screen(ClientRequest::ListProfiles { token }))
             }
             Err(err) => {
-                self.set_pending(None);
+                self.set_screen_pending(None);
                 self.handle_auth_error(err);
                 None
             }
@@ -333,7 +445,7 @@ impl App {
         match result {
             Ok(profiles) => {
                 let Some(profile) = profiles.into_iter().next() else {
-                    self.set_pending(None);
+                    self.set_screen_pending(None);
                     if let Screen::Auth(auth) = &mut self.screen {
                         auth.error = Some("account has no profile".to_owned());
                     }
@@ -347,13 +459,13 @@ impl App {
                 // The auth screen still holds the in-flight marker; carry it forward by
                 // re-dispatching the task load (the new id replaces it on the auth screen until
                 // the task list materialises in `apply_tasks`).
-                Some(self.dispatch(ClientRequest::ListTasks {
+                Some(self.dispatch_screen(ClientRequest::ListTasks {
                     token,
                     profile_id: profile.id,
                 }))
             }
             Err(err) => {
-                self.set_pending(None);
+                self.set_screen_pending(None);
                 self.handle_post_auth_error(err);
                 None
             }
@@ -376,7 +488,7 @@ impl App {
                 self.screen = Screen::TaskList(state);
             }
             Err(err) => {
-                self.set_pending(None);
+                self.set_screen_pending(None);
                 self.handle_post_auth_error(err);
             }
         }
@@ -394,17 +506,17 @@ impl App {
                 }
                 // Chain a refresh so the new task is shown from a server response (#1).
                 let Some(session) = self.session.clone() else {
-                    self.set_pending(None);
+                    self.set_screen_pending(None);
                     self.go_to_login();
                     return None;
                 };
-                Some(self.dispatch(ClientRequest::ListTasks {
+                Some(self.dispatch_screen(ClientRequest::ListTasks {
                     token: session.token,
                     profile_id: session.profile_id,
                 }))
             }
             Err(err) => {
-                self.set_pending(None);
+                self.set_screen_pending(None);
                 self.handle_add_task_error(err);
                 None
             }
@@ -415,7 +527,7 @@ impl App {
         &mut self,
         result: crate::client::ClientResult<contract::Task>,
     ) -> Option<Dispatch> {
-        self.set_pending(None);
+        self.set_screen_pending(None);
         match result {
             Ok(updated) => {
                 if let Screen::TaskList(list) = &mut self.screen
@@ -429,29 +541,7 @@ impl App {
         None
     }
 
-    /// Enter the timer view and load it from the server: switch to a fresh [`TimerState`] and
-    /// dispatch `GetTimerConfig` (whose success chains `GetTimerSession`), so every value shown is
-    /// server-derived (#1).
-    fn open_timer(&mut self) -> Option<Dispatch> {
-        let session = self.session.clone()?;
-        self.screen = Screen::Timer(TimerState::new());
-        Some(self.dispatch(ClientRequest::GetTimerConfig {
-            token: session.token,
-        }))
-    }
-
-    /// Return from the timer view to the task list, re-listing the active profile's tasks from the
-    /// server (#1). The account-global timer is unaffected by leaving the view.
-    fn leave_timer(&mut self) -> Option<Dispatch> {
-        let session = self.session.clone()?;
-        self.screen = Screen::TaskList(TaskListState::new(Vec::new()));
-        Some(self.dispatch(ClientRequest::ListTasks {
-            token: session.token,
-            profile_id: session.profile_id,
-        }))
-    }
-
-    /// Fold a timer-config response into the timer screen. On the entry read (`chain_session`),
+    /// Fold a timer-config response into the global timer. On the initial read (`chain_session`),
     /// chains a `GetTimerSession` so the session state loads too; on a duration update it stores
     /// the new config and closes the edit sub-flow.
     fn apply_timer_config(
@@ -461,40 +551,37 @@ impl App {
     ) -> Option<Dispatch> {
         match result {
             Ok(config) => {
-                if let Screen::Timer(timer) = &mut self.screen {
-                    timer.config = config;
-                    timer.editing = None;
-                }
+                self.timer.config = config;
+                self.timer.editing = None;
                 if chain_session && let Some(session) = self.session.clone() {
-                    return Some(self.dispatch(ClientRequest::GetTimerSession {
+                    let request = ClientRequest::GetTimerSession {
                         token: session.token,
-                    }));
+                    };
+                    return Some(self.dispatch_timer(request));
                 }
-                self.set_pending(None);
+                self.timer.pending = None;
                 None
             }
             Err(err) => {
-                self.set_pending(None);
+                self.timer.pending = None;
                 self.handle_timer_config_error(err);
                 None
             }
         }
     }
 
-    /// Fold a timer-session response (get / start / stop) into the timer screen, capturing the
+    /// Fold a timer-session response (get / start / stop) into the global timer, capturing the
     /// monotonic instant the session was applied so the rendered countdown advances between coarse
     /// refreshes (ADR-0002 §3). No remaining-seconds integer is stored (#1).
     fn apply_timer_session(
         &mut self,
         result: crate::client::ClientResult<contract::TimerSession>,
     ) -> Option<Dispatch> {
-        self.set_pending(None);
+        self.timer.pending = None;
         match result {
             Ok(session) => {
-                if let Screen::Timer(timer) = &mut self.screen {
-                    timer.session = session;
-                    timer.applied_at = Some(std::time::Instant::now());
-                }
+                self.timer.session = session;
+                self.timer.applied_at = Some(std::time::Instant::now());
             }
             Err(err) => self.handle_timer_error(err),
         }
@@ -502,7 +589,7 @@ impl App {
     }
 
     /// Error routing for a timer-session call (ADR-0006 §6): offline → blocking screen,
-    /// `unauthenticated` → login, anything else → inline message on the timer screen.
+    /// `unauthenticated` → login, anything else → inline message on the timer widget.
     fn handle_timer_error(&mut self, err: ClientError) {
         if err.is_offline() {
             self.go_offline(&err);
@@ -512,9 +599,7 @@ impl App {
             self.go_to_login();
             return;
         }
-        if let Screen::Timer(timer) = &mut self.screen {
-            timer.message = Some(err.to_string());
-        }
+        self.timer.message = Some(err.to_string());
     }
 
     /// Error routing for a duration update: offline → blocking, `unauthenticated` → login, and a
@@ -528,12 +613,10 @@ impl App {
             self.go_to_login();
             return;
         }
-        if let Screen::Timer(timer) = &mut self.screen {
-            if let Some(edit) = &mut timer.editing {
-                edit.error = Some(err.to_string());
-            } else {
-                timer.message = Some(err.to_string());
-            }
+        if let Some(edit) = &mut self.timer.editing {
+            edit.error = Some(err.to_string());
+        } else {
+            self.timer.message = Some(err.to_string());
         }
     }
 
@@ -562,7 +645,6 @@ impl App {
         let message = err.to_string();
         match &mut self.screen {
             Screen::TaskList(list) => list.message = Some(message),
-            Screen::Timer(timer) => timer.message = Some(message),
             Screen::Auth(auth) => auth.error = Some(message),
             Screen::Offline { .. } => {}
         }
@@ -592,8 +674,10 @@ impl App {
     }
 
     fn go_to_login(&mut self) {
-        // Expiry / unauthenticated drops the in-memory session and returns to login.
+        // Expiry / unauthenticated drops the in-memory session and the timer state, returning to
+        // login; the next login re-loads the account-global timer afresh.
         self.session = None;
+        self.timer.reset();
         let mut auth = AuthState::new();
         auth.error = Some("session expired — please log in again".to_owned());
         self.screen = Screen::Auth(auth);

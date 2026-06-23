@@ -30,28 +30,36 @@ use crate::ui;
 /// latency and sets the spinner cadence. `tui-dev`'s call (ADR-0006 assumptions); ~12.5 fps.
 const TICK: Duration = Duration::from_millis(80);
 
-/// Coarse timer-session refresh cadence, in poll-loop ticks. At ~80 ms per tick, 63 ticks ≈ 5 s
-/// (plan Assumption A3): while the timer view is open and idle, re-`GetTimerSession` this often so
-/// the server's running/completed verdict stays fresh — far above the ~80 ms render tick that
-/// animates the local countdown, and well clear of per-second polling (ADR-0002 §3, ADR-0006).
-const TIMER_REFRESH_TICKS: u64 = 63;
+/// Coarse timer-session refresh cadence, in poll-loop ticks. At ~80 ms per tick, 750 ticks ≈ 60 s
+/// (ADR-0006 §8.4): while a post-auth screen is shown and the timer is idle, re-`GetTimerSession`
+/// this often so the server's running/completed verdict stays reasonably fresh — far above the
+/// ~80 ms render tick that animates the local countdown, and well clear of per-second polling
+/// (ADR-0002 §3, ADR-0006). Raised from ~5 s on human feedback (Board 0008): a coarser cadence
+/// removes the flicker class and the running→completed verdict may lag up to ~1 min, which is
+/// cosmetic (the local countdown already shows `00:00`).
+const TIMER_REFRESH_TICKS: u64 = 750;
 
 /// Whether the app is currently in a text-entry context, where letters are typed rather than
-/// interpreted as commands.
-fn is_text_entry(screen: &Screen) -> bool {
+/// interpreted as commands. The duration-edit sub-flow (`editing_duration`) is a global text-entry
+/// mode that overlays the active post-auth screen.
+fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
+    if editing_duration {
+        return true;
+    }
     match screen {
         Screen::Auth(_) => true,
         Screen::TaskList(list) => list.adding.is_some(),
-        Screen::Timer(timer) => timer.editing.is_some(),
         Screen::Offline { .. } => false,
     }
 }
 
-/// Translate a crossterm key into an app [`Event`] given the current screen.
+/// Translate a crossterm key into an app [`Event`] given the current screen and whether the
+/// global duration-edit sub-flow is active.
 ///
 /// Returns `None` for keys that are not bound in the current context. The mapping:
 ///
-/// - `Esc` / `Ctrl+C` → [`Event::Quit`] (and in the add-task flow `Esc` is [`Event::Cancel`]).
+/// - `Esc` / `Ctrl+C` → [`Event::Quit`] (and in a sub-flow / while in flight `Esc` is
+///   [`Event::Cancel`]).
 /// - `Enter` → [`Event::Submit`].
 /// - `Tab` / `Down` → [`Event::Next`]; `BackTab` / `Up` → [`Event::Prev`].
 /// - `Backspace` → [`Event::Backspace`].
@@ -59,27 +67,28 @@ fn is_text_entry(screen: &Screen) -> bool {
 /// - In a text-entry context, a printable key → [`Event::Char`].
 /// - On the task list (not entering text): `a` → [`Event::BeginAddTask`], `c` →
 ///   [`Event::CloseSelected`], `r` → [`Event::Refresh`], `q` → [`Event::Quit`].
+/// - On any post-auth screen (not entering text): `p` → [`Event::ToggleTimer`], `d` →
+///   [`Event::BeginEditDuration`] (the global timer controls, ADR-0006 §8.2).
 /// - On the offline screen: `r` → [`Event::Refresh`].
 ///
 /// While a request is outstanding, `Esc` maps to [`Event::Cancel`] (abandon the request) rather
 /// than `Quit`, so cancel stays live; `Ctrl+C` always quits.
 #[must_use]
-pub fn map_key(screen: &Screen, key: KeyEvent) -> Option<Event> {
+pub fn map_key(screen: &Screen, editing_duration: bool, key: KeyEvent) -> Option<Event> {
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return Some(Event::Quit);
     }
 
-    let text_entry = is_text_entry(screen);
+    let text_entry = is_text_entry(screen, editing_duration);
     let in_add_task = matches!(screen, Screen::TaskList(list) if list.adding.is_some());
-    // On the timer screen `Esc` always means cancel: the core resolves it to abandon-edit,
-    // cancel-in-flight, or back-to-task-list. Elsewhere `Esc` cancels only an add-task sub-flow
-    // or an in-flight request, and otherwise quits.
-    let on_timer = matches!(screen, Screen::Timer(_));
     let pending = is_pending(screen);
+    // A sub-flow (add-task or duration-edit) or an in-flight request makes `Esc` mean cancel.
+    let in_sub_flow = in_add_task || editing_duration;
+    let post_auth = matches!(screen, Screen::TaskList(_));
 
     match key.code {
         KeyCode::Esc => {
-            if in_add_task || on_timer || pending {
+            if in_sub_flow || pending {
                 Some(Event::Cancel)
             } else {
                 Some(Event::Quit)
@@ -93,12 +102,12 @@ pub fn map_key(screen: &Screen, key: KeyEvent) -> Option<Event> {
         KeyCode::Char(c) if text_entry => Some(Event::Char(c)),
         KeyCode::Char('a') if matches!(screen, Screen::TaskList(_)) => Some(Event::BeginAddTask),
         KeyCode::Char('c') if matches!(screen, Screen::TaskList(_)) => Some(Event::CloseSelected),
-        KeyCode::Char('t') if matches!(screen, Screen::TaskList(_)) => Some(Event::OpenTimer),
-        KeyCode::Char('s') if matches!(screen, Screen::Timer(_)) => Some(Event::StartTimer),
-        KeyCode::Char('x') if matches!(screen, Screen::Timer(_)) => Some(Event::StopTimer),
-        KeyCode::Char('d') if matches!(screen, Screen::Timer(_)) => Some(Event::BeginEditDuration),
+        // The global timer controls are live on every post-auth screen (not while a text-entry
+        // sub-flow owns the keystroke — Assumption B4).
+        KeyCode::Char('p') if post_auth => Some(Event::ToggleTimer),
+        KeyCode::Char('d') if post_auth => Some(Event::BeginEditDuration),
         KeyCode::Char('r') => match screen {
-            Screen::TaskList(_) | Screen::Timer(_) | Screen::Offline { .. } => Some(Event::Refresh),
+            Screen::TaskList(_) | Screen::Offline { .. } => Some(Event::Refresh),
             Screen::Auth(_) => None,
         },
         KeyCode::Char('q') if matches!(screen, Screen::TaskList(_)) => Some(Event::Quit),
@@ -106,23 +115,11 @@ pub fn map_key(screen: &Screen, key: KeyEvent) -> Option<Event> {
     }
 }
 
-/// Whether a coarse timer-session refresh is due this tick: the timer view is open, idle (no
-/// request in flight), not in the duration-edit sub-flow, and the tick is on the
-/// [`TIMER_REFRESH_TICKS`] cadence boundary (never at `tick == 0`, which is the entry load).
-fn timer_refresh_due(screen: &Screen, tick: u64) -> bool {
-    matches!(
-        screen,
-        Screen::Timer(timer) if timer.pending.is_none() && timer.editing.is_none()
-    ) && tick != 0
-        && tick.is_multiple_of(TIMER_REFRESH_TICKS)
-}
-
 /// Whether the given screen has a request outstanding.
 fn is_pending(screen: &Screen) -> bool {
     match screen {
         Screen::Auth(auth) => auth.is_pending(),
         Screen::TaskList(list) => list.is_pending(),
-        Screen::Timer(timer) => timer.is_pending(),
         Screen::Offline { pending, .. } => pending.is_some(),
     }
 }
@@ -173,29 +170,31 @@ pub fn run(
         let _frame = guard.terminal.draw(|frame| ui::draw(frame, &app, tick))?;
         tick = tick.wrapping_add(1);
 
+        // The account-global timer loads once a post-auth screen is shown (ADR-0006 §8.1), so the
+        // bottom-right widget reflects a server response from the first frame after login.
+        if let Some(dispatch) = app.load_timer_if_needed() {
+            send(&requests, dispatch)?;
+        }
+
         // Input: poll with the tick timeout so the loop wakes to redraw even with no keypress.
         if event::poll(TICK)?
             && let CtEvent::Key(key) = event::read()?
             && key.kind == event::KeyEventKind::Press
-            && let Some(mapped) = map_key(app.screen(), key)
+            && let Some(mapped) = map_key(app.screen(), app.is_editing_duration(), key)
             && let Some(dispatch) = app.handle_event(mapped)
         {
-            // The worker outliving the UI is impossible to recover from; treat a closed
-            // request channel as a fatal transport failure.
-            requests
-                .send(dispatch)
-                .map_err(|_| anyhow::anyhow!("request worker stopped unexpectedly"))?;
+            send(&requests, dispatch)?;
         }
 
-        // Coarse timer-session refresh: while the timer view is open and idle, re-pull the
-        // session every `TIMER_REFRESH_TICKS` so the server's running/completed verdict stays
-        // current (the local countdown already animates each tick). Never per second.
-        if timer_refresh_due(app.screen(), tick)
-            && let Some(dispatch) = app.handle_event(Event::Refresh)
+        // Coarse timer-session refresh: while a post-auth screen is shown and the timer is idle,
+        // re-pull the session every `TIMER_REFRESH_TICKS` so the server's running/completed
+        // verdict stays current (the local countdown already animates each tick). Never per
+        // second (ADR-0006 §8.4).
+        if tick != 0
+            && tick.is_multiple_of(TIMER_REFRESH_TICKS)
+            && let Some(dispatch) = app.refresh_timer()
         {
-            requests
-                .send(dispatch)
-                .map_err(|_| anyhow::anyhow!("request worker stopped unexpectedly"))?;
+            send(&requests, dispatch)?;
         }
 
         // Drain any completed worker responses, re-dispatching chained follow-ups.
@@ -203,9 +202,7 @@ pub fn run(
             match responses.try_recv() {
                 Ok(response) => {
                     if let Some(dispatch) = app.apply_response(response) {
-                        requests
-                            .send(dispatch)
-                            .map_err(|_| anyhow::anyhow!("request worker stopped unexpectedly"))?;
+                        send(&requests, dispatch)?;
                     }
                 }
                 Err(TryRecvError::Empty) => break,
@@ -216,4 +213,12 @@ pub fn run(
         }
     }
     Ok(())
+}
+
+/// Send a dispatch to the worker, treating a closed channel as a fatal transport failure (the
+/// worker outliving the UI is impossible to recover from).
+fn send(requests: &Sender<Dispatch>, dispatch: Dispatch) -> anyhow::Result<()> {
+    requests
+        .send(dispatch)
+        .map_err(|_| anyhow::anyhow!("request worker stopped unexpectedly"))
 }

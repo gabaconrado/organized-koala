@@ -1,8 +1,8 @@
 //! Rendering: pure draw functions from an [`App`] onto a `ratatui` frame.
 //!
-//! No state lives here — every widget is derived from the current [`Screen`]. Splitting
-//! rendering out from the app core lets the same draw path run against a `TestBackend` for
-//! buffer-snapshot assertions (ADR-0003).
+//! No state lives here — every widget is derived from the current [`Screen`] and the global
+//! [`Timer`]. Splitting rendering out from the app core lets the same draw path run against a
+//! `TestBackend` for buffer-snapshot assertions (ADR-0003).
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -10,11 +10,15 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
-use crate::app::{App, AuthField, AuthMode, AuthState, Screen, TaskListState, TimerState};
+use crate::app::{App, AuthField, AuthMode, AuthState, Screen, TaskListState, Timer};
 use contract::{TaskStatus, TimerSession};
 
 /// The frames of the in-flight spinner, cycled by the poll loop's tick counter.
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
+
+/// The base hotkey caption for the task-list screen (idle, not adding). The global timer keys
+/// (`p`, `d`) are shown on every post-auth screen so they are discoverable (ADR-0006 §8.2).
+const TASK_LIST_CAPTION: &str = "a: add  c: mark done  Up/Down: move  p: start/stop timer  d: set duration  r: refresh  q: quit";
 
 /// The spinner glyph for the given tick, or empty when not pending. Pure so the spinner cadence
 /// is testable independently of the real loop's timing.
@@ -25,6 +29,46 @@ pub fn spinner_frame(tick: u64) -> &'static str {
     SPINNER_FRAMES.get(i).copied().unwrap_or("|")
 }
 
+/// The hotkey caption with the in-flight spinner **appended** (ADR-0006 §8.3): while a request is
+/// outstanding, a trailing spinner glyph is added to the end of the stable caption rather than
+/// replacing it, so the caption never flickers. The "Esc to cancel" affordance is appended
+/// alongside the spinner. When idle, the base caption is returned unchanged.
+#[must_use]
+pub fn caption_with_spinner(base: &str, pending: bool, tick: u64) -> String {
+    if pending {
+        format!("{base}   {} (Esc to cancel)", spinner_frame(tick))
+    } else {
+        base.to_owned()
+    }
+}
+
+/// The single-line label for the global timer widget rendered bottom-right on every post-auth
+/// screen (ADR-0006 §8.1): `idle` + configured duration, the live `MM:SS` countdown when running
+/// (recomputed each render tick from the absolute `ends_at` — render, not state, so #1 holds), or
+/// `completed`.
+#[must_use]
+pub fn timer_widget_label(timer: &Timer) -> String {
+    match &timer.session {
+        TimerSession::Idle => format!("timer idle · {} min", timer.config.duration_minutes),
+        TimerSession::Running {
+            ends_at,
+            server_now,
+            ..
+        } => {
+            let since = timer.applied_at.map_or(0, |t| {
+                i64::try_from(t.elapsed().as_secs()).unwrap_or(i64::MAX)
+            });
+            let label = countdown_label(ends_at.timestamp(), server_now.timestamp(), since);
+            if label == "00:00" {
+                "timer 00:00 (completing…)".to_owned()
+            } else {
+                format!("timer {label}")
+            }
+        }
+        TimerSession::Completed { .. } => "timer completed".to_owned(),
+    }
+}
+
 /// Draws the whole application for the current frame, dispatching on the active screen. `tick`
 /// drives the in-flight spinner animation; it is ignored when no request is outstanding.
 pub fn draw(frame: &mut Frame, app: &App, tick: u64) {
@@ -32,41 +76,27 @@ pub fn draw(frame: &mut Frame, app: &App, tick: u64) {
         Screen::Auth(auth) => draw_auth(frame, auth, tick),
         Screen::TaskList(list) => {
             let profile = app.session().map_or("", |s| s.profile_name.as_str());
-            draw_task_list(frame, list, profile, tick);
+            draw_task_list(frame, list, app.timer(), profile, tick);
         }
-        Screen::Timer(timer) => draw_timer(frame, timer, tick),
         Screen::Offline { message, pending } => {
             draw_offline(frame, message, pending.is_some(), tick);
         }
     }
 }
 
-/// The "working…" hint shown while a request is outstanding, with the animated spinner glyph.
-fn working_hint(tick: u64) -> String {
-    format!("{} working… (Esc to cancel)", spinner_frame(tick))
-}
-
 fn draw_auth(frame: &mut Frame, auth: &AuthState, tick: u64) {
     let area = frame.area();
-    let working = working_hint(tick);
-    let (title, hint) = match auth.mode {
+    let (title, base_hint) = match auth.mode {
         AuthMode::Login => (
             "Login",
-            if auth.is_pending() {
-                working.as_str()
-            } else {
-                "Enter: submit  Tab: next field  F2: switch to register  Esc/Ctrl+C: quit"
-            },
+            "Enter: submit  Tab: next field  F2: switch to register  Esc/Ctrl+C: quit",
         ),
         AuthMode::Register => (
             "Register",
-            if auth.is_pending() {
-                working.as_str()
-            } else {
-                "Enter: submit  Tab: next field  F2: switch to login  Esc/Ctrl+C: quit"
-            },
+            "Enter: submit  Tab: next field  F2: switch to login  Esc/Ctrl+C: quit",
         ),
     };
+    let hint = caption_with_spinner(base_hint, auth.is_pending(), tick);
 
     let fields: Vec<(&str, &str, bool, bool)> = match auth.mode {
         AuthMode::Login => vec![
@@ -178,7 +208,13 @@ fn draw_field(
     frame.render_widget(Paragraph::new(shown).block(block), area);
 }
 
-fn draw_task_list(frame: &mut Frame, list: &TaskListState, profile: &str, tick: u64) {
+fn draw_task_list(
+    frame: &mut Frame,
+    list: &TaskListState,
+    timer: &Timer,
+    profile: &str,
+    tick: u64,
+) {
     let area = frame.area();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -223,13 +259,19 @@ fn draw_task_list(frame: &mut Frame, list: &TaskListState, profile: &str, tick: 
     }
 
     if let Some(slot) = chunks.get(2) {
-        let text = if let Some(add) = &list.adding {
+        let text = if let Some(edit) = &timer.editing {
+            // The duration-edit sub-flow overlays the active screen's message line (ADR-0006 §8).
+            let err = edit.error.as_deref().unwrap_or("");
+            format!("Set duration (min): {}  {err}", edit.buffer)
+        } else if let Some(add) = &list.adding {
             let field = if add.on_title { "Title" } else { "Description" };
             let err = add.error.as_deref().unwrap_or("");
             format!(
                 "Add task — {field}: title='{}' desc='{}'  {err}",
                 add.title, add.description
             )
+        } else if let Some(msg) = &timer.message {
+            msg.clone()
         } else {
             list.message.clone().unwrap_or_default()
         };
@@ -240,16 +282,44 @@ fn draw_task_list(frame: &mut Frame, list: &TaskListState, profile: &str, tick: 
     }
 
     if let Some(slot) = chunks.get(3) {
-        let working = working_hint(tick);
-        let hint = if list.is_pending() {
-            working.as_str()
+        let base = if timer.editing.is_some() {
+            "Enter: save  Esc: cancel"
         } else if list.adding.is_some() {
             "Enter: save  Tab: switch field  Esc: cancel"
         } else {
-            "a: add  c: mark done  Up/Down: move  r: refresh  q: quit"
+            TASK_LIST_CAPTION
         };
+        // The spinner is appended (never replaces the caption) and reflects either the screen's
+        // request or the global timer's request being in flight (ADR-0006 §8.3).
+        let pending = list.is_pending() || timer.is_pending();
+        let caption = caption_with_spinner(base, pending, tick);
+        draw_bottom_row(frame, *slot, &caption, timer);
+    }
+}
+
+/// The bottom row of a post-auth screen: the hotkey caption on the left and the persistent global
+/// timer widget on the right (ADR-0006 §8.1).
+fn draw_bottom_row(frame: &mut Frame, area: Rect, caption: &str, timer: &Timer) {
+    let label = timer_widget_label(timer);
+    // Reserve the right column for the timer label (+2 padding); the caption takes the rest.
+    let right = u16::try_from(label.chars().count() + 2).unwrap_or(u16::MAX);
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), Constraint::Length(right)])
+        .split(area);
+
+    if let Some(slot) = columns.first() {
         frame.render_widget(
-            Paragraph::new(Span::raw(hint)).wrap(Wrap { trim: true }),
+            Paragraph::new(Span::raw(caption.to_owned())).wrap(Wrap { trim: true }),
+            *slot,
+        );
+    }
+    if let Some(slot) = columns.get(1) {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                label,
+                Style::default().add_modifier(Modifier::BOLD),
+            )),
             *slot,
         );
     }
@@ -261,7 +331,7 @@ fn draw_task_list(frame: &mut Frame, list: &TaskListState, profile: &str, tick: 
 /// from the absolute `ends_at_secs` and the server's `server_now_secs` advanced by
 /// `since_response` (the whole seconds elapsed locally since the running response was applied) —
 /// never stored. `remaining = ends_at − (server_now + since_response)`, floored at zero. When it
-/// reaches zero the label is `00:00` and the caller shows a local "completed" hint until the
+/// reaches zero the label is `00:00` and the caller shows a local "completing" hint until the
 /// server's authoritative `Completed` verdict arrives on the next coarse refresh.
 ///
 /// Taking epoch seconds (not a `chrono` type) keeps this fn — and the `tui` crate — free of a
@@ -275,127 +345,13 @@ pub fn countdown_label(ends_at_secs: i64, server_now_secs: i64, since_response: 
     format!("{minutes:02}:{seconds:02}")
 }
 
-fn draw_timer(frame: &mut Frame, timer: &TimerState, tick: u64) {
-    let area = frame.area();
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(1)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Length(2),
-            Constraint::Min(3),
-            Constraint::Length(2),
-            Constraint::Length(2),
-        ])
-        .split(area);
-
-    if let Some(slot) = chunks.first() {
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                "organized-koala — focus timer",
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
-            *slot,
-        );
-    }
-
-    if let Some(slot) = chunks.get(1) {
-        let duration = format!("Duration: {} min", timer.config.duration_minutes);
-        frame.render_widget(Paragraph::new(Span::raw(duration)), *slot);
-    }
-
-    if let Some(slot) = chunks.get(2) {
-        let lines = timer_body(timer);
-        frame.render_widget(
-            Paragraph::new(lines)
-                .block(Block::default().borders(Borders::ALL).title("Session"))
-                .wrap(Wrap { trim: true }),
-            *slot,
-        );
-    }
-
-    if let Some(slot) = chunks.get(3) {
-        let text = if let Some(edit) = &timer.editing {
-            let err = edit.error.as_deref().unwrap_or("");
-            format!("Set duration (min): {}  {err}", edit.buffer)
-        } else {
-            timer.message.clone().unwrap_or_default()
-        };
-        frame.render_widget(
-            Paragraph::new(Span::raw(text)).wrap(Wrap { trim: true }),
-            *slot,
-        );
-    }
-
-    if let Some(slot) = chunks.get(4) {
-        let working = working_hint(tick);
-        let hint = if timer.is_pending() {
-            working.as_str()
-        } else if timer.editing.is_some() {
-            "Enter: save  Esc: cancel"
-        } else {
-            "s: start  x: stop  d: set duration  r: refresh  Esc: back  Ctrl+C: quit"
-        };
-        frame.render_widget(
-            Paragraph::new(Span::raw(hint)).wrap(Wrap { trim: true }),
-            *slot,
-        );
-    }
-}
-
-/// The session-state lines for the timer body: idle, the live countdown while running, or the
-/// completed verdict. The countdown advances from the locally-elapsed time since the session was
-/// applied; reaching zero shows a local "completed" hint pending the server's verdict.
-fn timer_body(timer: &TimerState) -> Vec<Line<'static>> {
-    match &timer.session {
-        TimerSession::Idle => vec![Line::from(Span::raw("Idle — no active session."))],
-        TimerSession::Running {
-            ends_at,
-            server_now,
-            ..
-        } => {
-            let since = timer.applied_at.map_or(0, |t| {
-                i64::try_from(t.elapsed().as_secs()).unwrap_or(i64::MAX)
-            });
-            let label = countdown_label(ends_at.timestamp(), server_now.timestamp(), since);
-            if label == "00:00" {
-                vec![
-                    Line::from(Span::styled(
-                        "00:00",
-                        Style::default().add_modifier(Modifier::BOLD),
-                    )),
-                    Line::from(Span::raw("Completed (awaiting server confirmation).")),
-                ]
-            } else {
-                vec![
-                    Line::from(Span::styled(
-                        label,
-                        Style::default().add_modifier(Modifier::BOLD),
-                    )),
-                    Line::from(Span::raw("Running.")),
-                ]
-            }
-        }
-        TimerSession::Completed { .. } => vec![
-            Line::from(Span::styled(
-                "00:00",
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::raw("Completed.")),
-        ],
-    }
-}
-
 fn draw_offline(frame: &mut Frame, message: &str, pending: bool, tick: u64) {
     let area = frame.area();
     let block = Block::default()
         .borders(Borders::ALL)
         .title("Server unreachable");
-    let action = if pending {
-        working_hint(tick)
-    } else {
-        "Press r to retry, or Esc/Ctrl+C to quit.".to_owned()
-    };
+    let base = "Press r to retry, or Esc/Ctrl+C to quit.";
+    let action = caption_with_spinner(base, pending, tick);
     let lines = vec![
         Line::from(Span::raw(message.to_owned())),
         Line::from(""),

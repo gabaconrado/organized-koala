@@ -711,6 +711,45 @@ to code-hash `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`.
   source changes (the workspace code-tree hash moves), so the item re-enters the full feature
   track. Status → `working`.
 
+- 2026-06-23 [tui-dev] built **0008-R1 src** — the TUI-only feedback re-entry (ADR-0006 §8).
+  **Removed the dedicated timer screen**: deleted `Screen::Timer(TimerState)`, the `OpenTimer`/
+  `StartTimer`/`StopTimer` events, the `t`/`Esc` navigation, and `draw_timer`. **Promoted timer
+  state to an app-level global field**: the per-screen `TimerState` became `app::timer::Timer`
+  (renamed; same fields — last `TimerConfig` + `TimerSession`, monotonic `applied_at`, the
+  duration-edit sub-flow, the in-flight `pending` marker — plus a `loaded` flag), held on `App`
+  and rendered on every post-auth screen. No stored remaining-seconds integer (#1); the countdown
+  is recomputed each render tick via the unchanged pure `countdown_label`. **Global `p` toggle**:
+  added `Event::ToggleTimer`; the pure core resolves it to `StartTimerSession` when idle/completed
+  and `StopTimerSession` when running, stamping the timer's own in-flight marker (independent of
+  the screen marker, so a screen request and the timer coexist); a `p` while the toggle is pending
+  is a no-op (`Timer::toggle` returns `None`). The duration edit (`d` → `BeginEditDuration`) is now
+  a global text-entry sub-flow overlaying the active screen; while it owns keystrokes, `p`/`d` are
+  suppressed (B4). **Global corner widget**: `ui::draw` renders the timer label bottom-right beside
+  the bottom-left caption on every post-auth screen (`draw_bottom_row` splits the bottom row
+  left/right); auth/offline excluded (B3, no session before login). **Append-spinner indicator**:
+  replaced `working_hint` (which substituted the caption) with `caption_with_spinner(base, pending,
+  tick)`, which **appends** a trailing animated spinner + "(Esc to cancel)" to the END of the
+  stable caption — applied to **every** screen's caption (auth/task-list/offline), removing the
+  flicker class generally. **Added `p: start/stop timer` + `d: set duration`** to the task-list
+  caption (the help menu). **Coarse cadence**: raised `TIMER_REFRESH_TICKS` from `63` (~5 s) to
+  **`750`** (~60 s at ~80 ms/tick, ADR-0006 §8.4); the refresh + the initial config→session load
+  now fire whenever a post-auth screen is shown (via `App::load_timer_if_needed` /
+  `App::refresh_timer`), not only on a dedicated timer screen. `map_key` now takes an
+  `editing_duration: bool` (the duration-edit sub-flow is app-level, not per-screen) — the edge
+  passes `app.is_editing_duration()`. **No `contract`/protocol/client-trait/worker shape changed**
+  — reuses the existing `GetTimerConfig`/`UpdateTimerConfig`/`GetTimerSession`/`StartTimerSession`/
+  `StopTimerSession` variants and worker arms verbatim; account-global (no `profile_id` on any
+  timer request, #4 / ADR-0002 §5). Source gates green from the worktree: `./ok.sh build`,
+  `cargo clippy --lib --bins -p tui` (no issues), `./ok.sh fmt --check`. **Expected test-build
+  breakage for `tester` (slice next):** `crates/tui/tests/**` still reference removed/renamed
+  symbols — `Screen::Timer`, `TimerState` (now `Timer`), `Event::OpenTimer`/`StartTimer`/
+  `StopTimer`, the old `map_key(screen, key)` two-arg signature (now `map_key(screen,
+  editing_duration, key)`), and `working_hint`/`draw_timer`. Affected files:
+  `crates/tui/tests/timer.rs`, `crates/tui/tests/keybindings.rs`, `crates/tui/tests/common/mod.rs`
+  (the `screen_name` `Screen::Timer` arm, the `timer_screen*` builders, the synchronous executor is
+  unaffected since the protocol is unchanged). `./ok.sh test` / full-target `./ok.sh lint` go green
+  once `tester` adapts the suite to the global-widget model.
+
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
