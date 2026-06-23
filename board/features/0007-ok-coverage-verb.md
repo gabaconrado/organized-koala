@@ -2,12 +2,12 @@
 id: 0007
 title: Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold)
 type: chore         # feature | chore
-status: ready          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working        # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches ok.sh + workspace tooling only; no crate source, no contract
-branch: null
-worktree: null
+branch: feature/0007-ok-coverage-verb
+worktree: .claude/worktrees/0007-ok-coverage-verb
 created: 2026-06-23
 updated: 2026-06-23
 ---
@@ -57,5 +57,6 @@ invariant and re-scope the item to a `feature` via the scope guard.
 
 [llvm-cov]: https://github.com/taiki-e/cargo-llvm-cov
 
-- 2026-06-23 [orchestrator] CLAIMED → branch `feature/0007-ok-coverage-verb`. This `main` copy
-  is frozen at the claim snapshot; the branch copy is authoritative until the human merges.
+- 2026-06-23 [orchestrator] claimed for build; cut worktree on branch
+  `feature/0007-ok-coverage-verb` from `main`@09445c6. status → working. Owner: `platform-dev`.
+  session: drive-0007.
