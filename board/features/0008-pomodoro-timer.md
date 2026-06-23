@@ -602,6 +602,17 @@ to code-hash `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`.
   `./ok.sh test` green (exit 0), `./ok.sh lint` clean, `./ok.sh fmt --check` clean. Board-only
   freshen — does not retrigger review. Status → `awaiting-merge`.
 
+- [ ] 2026-06-23 [human] suggestion(ui): We don't need a dedicated page for the Timer, specially
+  because it is a global concept, it should be always visible across pages. My suggestion is that
+  we position it in the bottom right corner; user presses "p" to start and stop. Don't forget to
+  add it to the help menu in the bottom left.
+
+- [ ] 2026-06-23 [human] issue(ui): The constant refresh of the UI for the Timer is causing the UI
+  to flick due to the (working...) text replacing the hotkeys caption. My suggestion is that
+  instead of replacing the text, we just add the spinner at the end of it whenever the state is
+  updating. I also feel like we don't need to check the state of the timer that frequently — looks
+  like every 5s now; once every minute should be more than enough.
+
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
