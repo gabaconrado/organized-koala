@@ -6,8 +6,10 @@ mod auth;
 mod health;
 mod profiles;
 mod tasks;
+mod timer;
 
 pub use auth::{login, register};
 pub use health::healthz;
 pub use profiles::list_profiles;
 pub use tasks::{close_task, create_task, list_tasks};
+pub use timer::{get_config, get_session, start_session, stop_session, update_config};

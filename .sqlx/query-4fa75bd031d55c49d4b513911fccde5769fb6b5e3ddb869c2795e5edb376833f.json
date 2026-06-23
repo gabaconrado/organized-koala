@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO timer_sessions (user_id, started_at, duration_minutes) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET started_at = EXCLUDED.started_at, duration_minutes = EXCLUDED.duration_minutes RETURNING started_at, duration_minutes",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "duration_minutes",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "4fa75bd031d55c49d4b513911fccde5769fb6b5e3ddb869c2795e5edb376833f"
+}

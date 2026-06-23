@@ -65,5 +65,12 @@ pub fn router(state: AppState) -> Router {
             "/api/profiles/{profile_id}/tasks/{task_id}/close",
             post(handlers::close_task),
         )
+        .route(
+            "/api/timer/config",
+            get(handlers::get_config).put(handlers::update_config),
+        )
+        .route("/api/timer/session", get(handlers::get_session))
+        .route("/api/timer/session/start", post(handlers::start_session))
+        .route("/api/timer/session/stop", post(handlers::stop_session))
         .with_state(state)
 }

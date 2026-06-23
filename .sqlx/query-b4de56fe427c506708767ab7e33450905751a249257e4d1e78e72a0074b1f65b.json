@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO timer_configs (user_id, duration_minutes, updated_at) VALUES ($1, $2, now()) ON CONFLICT (user_id) DO UPDATE SET duration_minutes = EXCLUDED.duration_minutes, updated_at = now() RETURNING duration_minutes",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "duration_minutes",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b4de56fe427c506708767ab7e33450905751a249257e4d1e78e72a0074b1f65b"
+}

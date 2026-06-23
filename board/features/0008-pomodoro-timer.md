@@ -358,6 +358,31 @@ Dependency edges: **1 → 2 → 3 → 4** (each depends on the contract/protocol
   `./ok.sh test` (19 timer tests + all 15 contract doctests, incl. the 3 new), `./ok.sh lint`,
   `./ok.sh fmt --check`. No source under `crates/*/src/` touched (tests only).
 
+- 2026-06-23 [server-dev] built **slice 2** — the server endpoints, handler module, and
+  reversible migration. New migration `20260612163048_timer.{up,down}.sql` (one timestamp after
+  `…163047_tasks`): `timer_configs` and `timer_sessions`, both keyed `user_id UUID PRIMARY KEY
+  REFERENCES users(id) ON DELETE CASCADE` (schema-enforced at-most-one config / one active
+  session per account, ADR-0002 §5), `duration_minutes INT NOT NULL CHECK (>= 1)`; `ends_at` is
+  derived (`started_at + duration_minutes`), never stored. The `down` drops both tables (a
+  missing `down` is review-blocking). New handler module `crates/server/src/handlers/timer.rs`
+  (declared in `handlers/mod.rs`, wired in `app.rs`) with five **account-global** routes keyed on
+  `AuthUser.user_id`, **no `profile_id` in any path** (#4 / ADR-0002 §5): `GET /api/timer/config`
+  (defaults to 30 lazily, no row written on read); `PUT /api/timer/config` (upsert; outside
+  `[1, 1440]` → `400` reusing `ValidationFailed`, no new `ErrorCode`); `GET /api/timer/session`
+  (idle/running/completed, completion read-time `server_now >= ends_at`, row kept until stop —
+  A6); `POST /api/timer/session/start` (snapshots current `duration_minutes`, upsert so starting
+  while active replaces — A5); `POST /api/timer/session/stop` (deletes the active row, idempotent
+  when idle). `server_now = Utc::now()`; `ends_at = started_at + Duration::minutes(...)`.
+  `#[tracing::instrument(skip_all, fields(user_id = %user.user_id))]` on each handler (OTel spans,
+  DoD clause 4). `i32`↔`u32` at the DB boundary via `try_from` with explicit error handling —
+  never `as` (`clippy::as_conversions` denied). Refreshed the committed `.sqlx/` cache via
+  `./ok.sh prepare` against a **live throwaway test Postgres** (the project's own
+  `deploy/docker-compose.test.yml` `postgres:16-alpine`, migrations applied via the sqlx CLI,
+  torn down after) — 5 new query files, none orphaned. Gates green from the worktree:
+  `./ok.sh build`, `./ok.sh lint`, `./ok.sh fmt --check`, `./ok.sh test` (full suite, 0 failures;
+  contract + server-integration + tui suites). Integration tests (`crates/server/tests/timer.rs`,
+  slice 2t) are `tester`'s; not written here.
+
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
