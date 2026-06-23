@@ -2,7 +2,7 @@
 id: 0008
 title: Pomodoro focus timer — global duration config + start/stop session
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0002 (timer authority) is on `main`; no in-flight Board item gates this
@@ -864,6 +864,14 @@ code-hash `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`, voided when the re-entry m
   all clean. code-hash at HEAD `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` matches the reviewed hash.
   **VERIFY-STATUS: verified** · CODE-HASH `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` · COMMIT
   `09470e9`.
+
+- 2026-06-23 [orchestrator] step-7 freshen: rebased `feature/0008-pomodoro-timer` onto `main`
+  @ `a07eba5` (main had advanced only in `docs/` + `board/README.md` via the eng-manager step).
+  `./ok.sh code-hash` at the rebased head is unchanged at `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd`
+  = the attested hash, so the `approved`/`verified` verdicts carry forward untouched (no relabel;
+  the commit-sha pointers may now be stale — the binding key is the hash). Re-ran the gates on the
+  rebased tree: `./ok.sh test` green (exit 0), `./ok.sh lint` clean, `./ok.sh fmt --check` clean.
+  Board-only freshen — does not retrigger review. Status → `awaiting-merge`.
 
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
