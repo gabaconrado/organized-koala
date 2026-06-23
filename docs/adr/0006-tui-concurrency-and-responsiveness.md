@@ -1,6 +1,6 @@
 # ADR-0006: TUI concurrency and responsiveness model
 
-**Status:** Accepted · 2026-06-22
+**Status:** Accepted · 2026-06-22 (amended 2026-06-23 — §8; see Board 0008)
 
 ## Context
 
@@ -183,6 +183,72 @@ The threaded layer sits **entirely at the edge**, beside the existing `terminal`
 If splitting the seam this way makes the suite *harder* to write rather than easier, that is the
 ADR-0003 architecture smell and `tui-dev`/`tester` bubble up rather than bend a test.
 
+## Amendment 2026-06-23 — §8: global timer widget, append-spinner indicator, coarse cadence (Board 0008)
+
+Human feedback on Board item [0008][feat-0008] (the Pomodoro timer, built on this model and
+ADR-0002) reshapes three TUI-presentation choices. None touches a wire shape, the `contract`
+crate, an endpoint, the server, or ADR-0002's authority/render model (the server still owns the
+countdown; the TUI still renders it from the absolute `ends_at` + `server_now`, §3 of ADR-0002
+unchanged). All three are `tui`-crate presentation/structure decisions, recorded here where the
+TUI runtime structure and the in-flight indicator (§5) already live.
+
+### 8.1 The timer is an always-visible global widget, not a dedicated screen
+
+The Pomodoro timer is a **global** concept (account-global, one per account — ADR-0002 §5), so
+it is **not** a navigable `Screen`. The dedicated `Screen::Timer` (reached with `t`, exited with
+`Esc`) is **removed**. Instead the timer is a **persistent widget rendered in the bottom-right
+corner under every post-auth screen**, beside the existing bottom-left hotkey caption. It shows
+the current session at a glance — the live `MM:SS` countdown when running (recomputed each render
+tick from `ends_at − (server_now + monotonic delta)`, exactly as ADR-0002 §3 and the prior 0008
+build already do — render, not state, so #1 holds), `idle`, the configured duration, or
+`completed` — on every screen, with no navigation.
+
+- **Where the timer state lives now.** Because the widget is global, its transient render state
+  (the last `TimerConfig` + `TimerSession`, the monotonic `applied_at` instant, and its own
+  in-flight `RequestId` marker for the toggle) moves **out of a per-screen `TimerState` and onto
+  `App`** as a single app-level field, rendered by every draw path. This is the same
+  process-lifetime, never-persisted, derived-from-a-server-response category as the in-memory
+  session and the in-flight marker (§5) — **#1 holds unchanged**. There is no stored authoritative
+  remaining-seconds counter; the countdown is recomputed each draw.
+- **Auth screen carve-out.** Before login there is no session and no token, so the widget is not
+  rendered on `Screen::Auth` (and no timer request is issued until authenticated). It appears once
+  a session exists, on every post-auth screen.
+
+### 8.2 Start/stop is a global `p` toggle, surfaced in the hotkey menu
+
+A single global key — **`p`** — toggles the focus session start/stop from **any** post-auth
+screen (it maps to a new transport-agnostic `Event::ToggleTimer`, resolved in the pure core to
+`StartTimerSession` when idle/completed and `StopTimerSession` when running — reusing the existing
+start/stop client methods and protocol variants from the 0008 build; **no new `contract`/protocol
+shape**). The duration is still set via the existing update-config path; how that edit is reached
+without a dedicated screen is left to the plan (Assumption B2) and is a TUI-presentation choice,
+not an ADR decision. `p` is added to the **bottom-left hotkey caption** on every screen that shows
+it, so the binding is discoverable (the feedback's "help menu").
+
+### 8.3 The in-flight indicator APPENDS a spinner; it never replaces the caption
+
+ADR-0006 §5's in-flight indicator is refined: a request in flight must **append a trailing spinner
+glyph to the end of the existing hotkey caption**, rather than **replacing** the caption text with
+a "working…" string. Replacing the whole caption each refresh causes visible flicker (the caption
+text vanishes and returns every coarse poll). The caption stays stable; only a trailing spinner
+glyph is added/animated while a request is outstanding (and the "Esc to cancel" affordance is
+preserved as part of the stable caption or alongside the spinner). This is a pure `tui::ui`
+rendering change — the spinner is still the §5 transient process-lifetime marker, just rendered
+additively. §5's substance (a spinner communicates "busy"; it animates on the poll tick; it is
+never persisted) is unchanged.
+
+### 8.4 The coarse timer-session refresh cadence is ~1 minute
+
+The coarse `GetTimerSession` cadence is loosened from ~5 s to **~1 minute** (ADR-0002 §3's "coarse
+interval, not every second" is unchanged in spirit — only the constant moves). At ~80 ms per
+poll-loop tick this is `TIMER_REFRESH_TICKS ≈ 750`; `tui-dev` picks the exact constant. The local
+countdown still animates every render tick from the absolute `ends_at` (no per-second network
+traffic — the property ADR-0002 §3 and this ADR §1 require), and start/stop still refresh
+immediately on the `p` action. A coarser cadence means the server's running→`completed` verdict
+can lag up to ~1 min behind the locally-displayed `00:00`; this is cosmetic (the local countdown
+already shows `00:00`/"completed (awaiting server confirmation)") and acceptable — completion is
+still the server's authority, just confirmed less eagerly.
+
 ## Consequences
 
 - **Responsiveness becomes a structural property**, not a hope: the UI thread never blocks on
@@ -211,6 +277,7 @@ ADR-0003 architecture smell and `tui-dev`/`tester` bubble up rather than bend a 
   together.
 
 [feat-0005]: ../../board/features/0005-tui-responsive-event-loop.md
+[feat-0008]: ../../board/features/0008-pomodoro-timer.md
 [adr-0003]: ./0003-verification-layering.md
 [adr-0005]: ./0005-foundational-wire-contract.md
 [coding-standards]: ../../.claude/skills/coding-standards/SKILL.md

@@ -9,7 +9,7 @@ One row per ADR. Newest at the bottom.
 | [0003][adr-0003] | Verification layering — who validates the TUI | Accepted | 2026-06-11 |
 | [0004][adr-0004] | Migration authority and the server-binary admin CLI | Accepted | 2026-06-11 |
 | [0005][adr-0005] | Foundational wire contract — auth, profile bootstrap, tasks, error codes | Accepted | 2026-06-11 |
-| [0006][adr-0006] | TUI concurrency and responsiveness model | Accepted | 2026-06-22 |
+| [0006][adr-0006] | TUI concurrency and responsiveness model | Accepted | 2026-06-22 (amended 2026-06-23) |
 
 [adr-0001]: ./adr/0001-foundational-architecture.md
 [adr-0002]: ./adr/0002-pomodoro-timer-authority.md
