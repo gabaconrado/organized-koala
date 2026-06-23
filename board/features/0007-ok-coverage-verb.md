@@ -56,3 +56,6 @@ invariant and re-scope the item to a `feature` via the scope guard.
   via `architect`.
 
 [llvm-cov]: https://github.com/taiki-e/cargo-llvm-cov
+
+- 2026-06-23 [orchestrator] CLAIMED → branch `feature/0007-ok-coverage-verb`. This `main` copy
+  is frozen at the claim snapshot; the branch copy is authoritative until the human merges.
