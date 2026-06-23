@@ -1,8 +1,9 @@
 //! The `organized-koala` TUI binary: a thin shell over the [`tui`] library.
 //!
-//! Resolves the server base URL, builds the `reqwest`-backed client, performs an initial
-//! health probe so an unreachable server is reported up front, and hands control to the
-//! interactive loop. Application errors propagate via `anyhow`.
+//! Resolves the server base URL, builds the `reqwest`-backed client, spawns the worker thread
+//! that owns it, and hands control to the interactive loop — the UI thread drives the pure
+//! [`tui::app::App`] core and never blocks on I/O (ADR-0006). Application errors propagate via
+//! `anyhow`.
 
 use anyhow::Context;
 use tui::app::App;
