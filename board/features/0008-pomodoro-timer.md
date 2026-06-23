@@ -2,13 +2,20 @@
 id: 0008
 title: Pomodoro focus timer — global duration config + start/stop session
 type: feature      # feature | chore
-status: ready          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: ready          # FROZEN snapshot — authoritative copy is on feature/0008-pomodoro-timer
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0002 (timer authority) is on `main`; no in-flight Board item gates this
+branch: feature/0008-pomodoro-timer   # claimed 2026-06-23; this main copy is frozen until merge
+worktree: .claude/worktrees/0008-pomodoro-timer
 created: 2026-06-23
 updated: 2026-06-23
 ---
+
+<!-- FROZEN @ claim (2026-06-23): this item was claimed into worktree
+.claude/worktrees/0008-pomodoro-timer on branch feature/0008-pomodoro-timer (cut from main
+@ 04926d4). The branch's copy is authoritative and advances there; this main copy stays frozen
+at the ready snapshot until the human's fast-forward merge brings the finished item back. -->
 
 ## Feature request
 
