@@ -2,20 +2,15 @@
 id: 0008
 title: Pomodoro focus timer — global duration config + start/stop session
 type: feature      # feature | chore
-status: ready          # FROZEN snapshot — authoritative copy is on feature/0008-pomodoro-timer
+status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0002 (timer authority) is on `main`; no in-flight Board item gates this
-branch: feature/0008-pomodoro-timer   # claimed 2026-06-23; this main copy is frozen until merge
+branch: feature/0008-pomodoro-timer
 worktree: .claude/worktrees/0008-pomodoro-timer
 created: 2026-06-23
 updated: 2026-06-23
 ---
-
-<!-- FROZEN @ claim (2026-06-23): this item was claimed into worktree
-.claude/worktrees/0008-pomodoro-timer on branch feature/0008-pomodoro-timer (cut from main
-@ 04926d4). The branch's copy is authoritative and advances there; this main copy stays frozen
-at the ready snapshot until the human's fast-forward merge brings the finished item back. -->
 
 ## Feature request
 
@@ -329,6 +324,13 @@ Dependency edges: **1 → 2 → 3 → 4** (each depends on the contract/protocol
   contract/domain surface; the plan only pins the exact shapes under it. Assumptions A1–A6
   recorded (tagged-enum session DTO, single key to reach the view, ~5 s coarse refresh, 1–1440
   min duration bound, start-replaces-active, completed-row-kept-until-stop). Status → `ready`.
+
+- 2026-06-23 [orchestrator] claimed `ready` → `working`: cut worktree
+  `.claude/worktrees/0008-pomodoro-timer` + branch `feature/0008-pomodoro-timer` from `main`
+  @ 04926d4 (the commit carrying the plan; ADR-0002 already on `main`, verified present in the
+  worktree). Branch copy is now authoritative; `main`'s copy frozen at the claim snapshot.
+  Session: drive cycle, build slices next in plan dependency order (1 contract → 2 server →
+  3 TUI client/protocol → 4 TUI view), tests alongside.
 
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
