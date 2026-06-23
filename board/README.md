@@ -35,7 +35,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0003](./features/0003-server-auth-profile-tasks.md) | Server — auth, default profile, tasks, migrations, docker stack (slice 2 of 0001) | feature | merged | high | 0002 | — (merged) |
 | [0004](./features/0004-tui-foundational.md) | TUI — register/login, default profile, task add/list/close (slice 3 of 0001) | feature | merged | high | 0003 | — (merged) |
 | [0005](./features/0005-tui-responsive-event-loop.md) | TUI — responsive (non-blocking) event loop + `tui::app` submodule reorg | feature | merged | high | 0004 | — (merged) |
-| [0006](./features/0006-tui-mainrs-stale-doccomment.md) | Fix stale doc comment in `tui/src/main.rs` | chore | inbox | low | — | feature/0006-tui-mainrs-stale-doccomment |
+| [0006](./features/0006-tui-mainrs-stale-doccomment.md) | Fix stale doc comment in `tui/src/main.rs` | chore | merged | low | — | — (merged) |
 
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
@@ -53,14 +53,12 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > pinned to code-hash `bc89672d4be5cdecd0bb54b340a24a5b8741cf21`), fast-forwarded to `main` at
 > `6f9a80a`; worktree + branch removed.
 >
-> **In flight — `0006` (chore, branch-owned).** The inaugural `chore` (new lightweight item
-> type): the `tui/src/main.rs` stale-doc-comment fix, now describing the ADR-0006
-> worker/pure-`App` entrypoint. Scope-limited, comment-only — no behaviour/contract/domain
-> change. Ran the lighter chore DoD (gates green + a cold `reviewer` **approved** attesting the
-> chore invariant, pinned to code-hash `401ad3de59c4cc7e33c3ebf8308c171d80659e4e`; the live
-> verifier pass was correctly **skipped**). Live status is **`awaiting-merge`** on
-> `feature/0006-tui-mainrs-stale-doccomment`; the `main` snapshot above stays frozen at the
-> claim (`inbox`) until the human's merge.
+> **`0006` — MERGED.** The inaugural `chore` (new lightweight item type): the
+> `tui/src/main.rs` stale-doc-comment fix, now describing the ADR-0006 worker/pure-`App`
+> entrypoint. Scope-limited, comment-only — no behaviour/contract/domain change. Ran the
+> lighter chore DoD (gates green + a cold `reviewer` **approved** attesting the chore invariant,
+> pinned to code-hash `401ad3de59c4cc7e33c3ebf8308c171d80659e4e`; the live verifier pass was
+> correctly **skipped**). Fast-forwarded to `main` at `2b400ab`; worktree + branch removed.
 >
 > **Sanctioned follow-up (not yet a Board item):** a reported-only `./ok.sh coverage` verb over
 > `cargo-llvm-cov` (no hard threshold, not a DoD gate) — `architect` to plan it as a new item.

@@ -2,7 +2,7 @@
 id: 0006
 title: Fix stale doc comment in tui/src/main.rs
 type: chore         # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches main.rs only; not blocked on 0005, but if claimed after 0005
