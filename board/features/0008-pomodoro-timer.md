@@ -2,7 +2,7 @@
 id: 0008
 title: Pomodoro focus timer — global duration config + start/stop session
 type: feature      # feature | chore
-status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0002 (timer authority) is on `main`; no in-flight Board item gates this
@@ -302,6 +302,87 @@ Dependency edges: **1 → 2 → 3 → 4** (each depends on the contract/protocol
    shapes under it; **no new/amended ADR needed**. Any new gotcha is recorded in `CLAUDE.md`.
 6. `reviewer` posts `REVIEW-STATUS: approved` pinned to `./ok.sh code-hash`.
 7. Branch rebased current on `main` (step-7 freshen; verdict pins to the code-tree hash).
+
+### Re-entry plan — 0008-R1 (feedback 2026-06-23, governed by [ADR-0006][adr-0006] §8 amendment)
+
+Two `[human]` UI-feedback lines (global timer widget + `p` toggle + help-menu entry;
+append-spinner instead of caption-replacement + ~1/min cadence) re-enter on the existing branch.
+**TUI-only** — no `contract`, no server, no migration, no new wire/protocol shape. Governed by
+the ADR-0006 §8 amendment (landed on `main`; branch rebased onto it before this work). The
+[ADR-0002][adr-0002] authority/render model is unchanged (server owns the countdown; TUI renders
+from `ends_at + server_now`). Reuses the existing 0008 client methods, protocol variants
+(`GetTimerConfig`/`GetTimerSession`/`StartTimerSession`/`StopTimerSession`/`UpdateTimerConfig`),
+and worker arms verbatim — **none of those change.**
+
+Owner: **`tui-dev`** (source); **`tester`** (TestBackend/core suite). Files touched (all `tui`):
+`crates/tui/src/app/mod.rs`, `crates/tui/src/app/timer.rs`, `crates/tui/src/ui/mod.rs`,
+`crates/tui/src/terminal/mod.rs`; tests `crates/tui/tests/timer.rs`,
+`crates/tui/tests/keybindings.rs`, `crates/tui/tests/common/mod.rs`.
+
+#### Concrete changes
+
+1. **Remove the dedicated timer screen.** Delete the `Screen::Timer(TimerState)` variant and its
+   navigation (`t` to open, `Esc` to back, the `OpenTimer` event and its `map_key` arm). The
+   per-screen `TimerState` no longer holds *navigation* state.
+2. **Promote timer state to an app-level global field (ADR-0006 §8.1).** Move the last
+   `TimerConfig` + `TimerSession`, the monotonic `applied_at: Option<Instant>`, the toggle's
+   in-flight `Option<RequestId>` marker, and the optional duration-edit sub-flow onto `App` as a
+   single field. Still derived-from-server, never persisted, no stored remaining-seconds integer
+   (#1; reviewer guards exactly as today). On reaching a logged-in screen, an initial
+   config→session load is issued; thereafter the coarse refresh and `p` toggle keep it current.
+3. **Render the global corner widget (ADR-0006 §8.1).** `ui::draw` renders the timer widget in
+   the **bottom-right** on every post-auth screen (auth excluded), beside the bottom-left hotkey
+   caption — a small bottom row split left (caption) / right (timer). Shows `idle` + configured
+   duration, the live `MM:SS` countdown when running (reusing the existing pure
+   `countdown_label`), or `completed`. The countdown is recomputed each ~80 ms render tick.
+4. **Global `p` toggle (ADR-0006 §8.2).** Add `Event::ToggleTimer`; `map_key` maps `p` to it on
+   every post-auth screen (not while a text-entry sub-flow owns the keystroke). In the pure core,
+   `ToggleTimer` resolves to `StartTimerSession` when idle/completed and `StopTimerSession` when
+   running, stamping the app-level in-flight marker. At most one timer request in flight; a `p`
+   while the toggle is already pending is a no-op.
+5. **Add `p` to the hotkey caption (ADR-0006 §8.2 — the "help menu").** Append a `p: start/stop
+   timer` entry to the bottom-left caption on every post-auth screen.
+6. **Append-spinner in-flight indicator (ADR-0006 §8.3).** Change the caption draw so an
+   outstanding request **appends** a trailing animated spinner glyph to the end of the existing
+   caption rather than replacing it with the "working… (Esc to cancel)" string. The "Esc to
+   cancel" affordance stays present. Applies to **every** screen's caption — removes the flicker
+   class generally, not just for the timer.
+7. **Coarse cadence ~1 min (ADR-0006 §8.4).** Raise `TIMER_REFRESH_TICKS` from `63` (~5 s) to
+   ~`750` (~1 min) in `crates/tui/src/terminal/mod.rs`; exact constant is `tui-dev`'s to pin.
+   `timer_refresh_due` now fires whenever a logged-in screen is shown (the timer is global), not
+   only when a dedicated timer screen is open.
+8. **Duration editing without a dedicated screen (Assumption B2).** Keep the existing duration
+   edit sub-flow, reached by a key from any post-auth screen (e.g. `d`), issuing the existing
+   `UpdateTimerConfig`. Smallest change — no new screen, no new wire shape.
+
+#### Acceptance criteria (re-entry)
+
+- [ ] The timer is **always visible in the bottom-right** on every post-auth screen; there is
+      **no** dedicated timer page and no `t`/`Esc` navigation to one.
+- [ ] **`p`** starts the session when idle/completed and stops it when running, from any
+      post-auth screen; `p` is listed in the bottom-left hotkey caption.
+- [ ] An in-flight request **appends a trailing spinner** to the hotkey caption — the caption text
+      is **not** replaced (no flicker); verified in the `TestBackend` buffer.
+- [ ] The coarse session refresh is **~1 minute** (`TIMER_REFRESH_TICKS ≈ 750`), not ~5 s; the
+      local countdown still animates each render tick with no per-second polling.
+- [ ] Account-global unchanged: no `profile_id` on any timer request; switching profiles does not
+      change the timer (#4 / ADR-0002 §5).
+- [ ] Full `feature` DoD re-run: `./ok.sh test | lint | fmt --check` green; `reviewer`
+      re-approved (pinned to the new `./ok.sh code-hash`); the TUI `TestBackend` suite green
+      (ADR-0003); the live `verifier` re-confirms server API + reqwest path unaffected.
+
+#### Assumptions (human is AFK — smallest change satisfying both feedback items)
+
+- **B1** — Both feedback items are co-located in `tui::ui` + the loop, so they re-enter together
+  on the existing branch in a single pass, not as two items.
+- **B2** — Duration editing keeps the existing edit sub-flow, reached by a key (e.g. `d`) from any
+  post-auth screen rather than a dedicated screen.
+- **B3** — The widget is rendered on every post-auth screen only (auth excluded — no
+  session/token before login).
+- **B4** — `p` is suppressed while a text-entry sub-flow owns keystrokes, so a literal `p` typed
+  into a field is not hijacked by the global toggle.
+- **B5** — The exact `TIMER_REFRESH_TICKS` constant (~750 for ~1 min at ~80 ms/tick) is
+  `tui-dev`'s to pin; "~1 minute" is the requirement.
 
 ## Summary
 
@@ -612,6 +693,23 @@ to code-hash `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`.
   instead of replacing the text, we just add the spinner at the end of it whenever the state is
   updating. I also feel like we don't need to check the state of the timer that frequently — looks
   like every 5s now; once every minute should be more than enough.
+
+- 2026-06-23 [architect] feedback re-entry triage (drive step 0): the two `[human]` UI-feedback
+  lines (global always-visible timer widget + `p` start/stop toggle + help-menu entry;
+  append-spinner instead of caption-replacement + ~1/min coarse cadence) are scope/approach TUI
+  changes, so they require an ADR before re-implementation. **Amended [ADR-0006][adr-0006] (§8)** —
+  the natural home (TUI structure + the §5 in-flight indicator + the polled-loop coarse cadence);
+  **not** ADR-0002 (timer authority/render model unchanged — server still owns the countdown) and
+  not a new ADR. The amendment + the `docs/decisions.md` row update landed on **`main`** (home #1,
+  commit `af582e6`); the branch was rebased onto it before `tui-dev` cites §8. Appended the
+  **0008-R1 re-entry plan** above (TUI-only: remove `Screen::Timer`, promote timer state to an
+  app-level global widget rendered bottom-right on every post-auth screen, add
+  `Event::ToggleTimer`/`p`, add `p` to the caption, append-spinner indicator, `TIMER_REFRESH_TICKS`
+  ~63 → ~750; reuse the existing client/protocol/worker shapes verbatim — **no
+  `contract`/server/migration change**). Owners: `tui-dev` (source), `tester` (TestBackend suite).
+  Assumptions B1–B5 recorded. The prior `approved`/`verified` verdicts are **void** once the TUI
+  source changes (the workspace code-tree hash moves), so the item re-enters the full feature
+  track. Status → `working`.
 
 [adr-0001]: ../../docs/adr/0001-foundational-architecture.md
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
