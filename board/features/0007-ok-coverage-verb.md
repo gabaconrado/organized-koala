@@ -2,7 +2,7 @@
 id: 0007
 title: Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold)
 type: chore         # feature | chore
-status: awaiting-merge # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches ok.sh + workspace tooling only; no crate source, no contract
@@ -120,3 +120,8 @@ byte-identical to the last-merged head, corroborating tooling-only scope.
   frozen-pointer note in favour of the branch copy). **code-hash unchanged @ `3fa0adef`** →
   reviewer `approved` verdict carries forward untouched (no relabel). Gates re-run green on the
   rebased tree (`fmt --check` / `lint` / `test`). Verify correctly skipped (chore).
+
+- 2026-06-24 [orchestrator] operator authorized close ("happy with the changes"). Re-freshened
+  onto `main`@11593bf (the 0009 plan commit) — clean rebase, **code-hash unchanged @ `3fa0adef`**
+  so the reviewer `approved` verdict carries forward untouched; gates re-confirmed (fmt/lint
+  clean). Fast-forward merged into `main`. status → merged.
