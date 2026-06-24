@@ -66,6 +66,16 @@ pub fn router(state: AppState) -> Router {
             post(handlers::close_task),
         )
         .route(
+            "/api/profiles/{profile_id}/notes",
+            get(handlers::list_notes).post(handlers::create_note),
+        )
+        .route(
+            "/api/profiles/{profile_id}/notes/{note_id}",
+            get(handlers::get_note)
+                .patch(handlers::update_note)
+                .delete(handlers::delete_note),
+        )
+        .route(
             "/api/timer/config",
             get(handlers::get_config).put(handlers::update_config),
         )
