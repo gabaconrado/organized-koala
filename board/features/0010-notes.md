@@ -2,7 +2,7 @@
 id: 0010
 title: Notes — full feature (contract module, migration, server CRUD, TUI views)
 type: feature      # feature | chore
-status: working           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0007 lands on `main` with this item's plan; no in-flight Board item gates it
@@ -164,3 +164,13 @@ into the working branch before 2/3 compile.
       pending caption+spinner clipped the cancel affordance at 80×24 (ADR-0006 §8.3); `tui-dev`
       widened the bottom band to 3 rows + re-phrased both captions, no assertions weakened. All four
       gates green at branch head: `./ok.sh build | test | lint --all-targets | fmt --check`.
+- [x] 2026-06-24 [reviewer] **REVIEW-STATUS: approved** — code-hash
+      `46c1c60f1eb3865eb127a72502982827ebb09d65` (head sha `0155a32`, a human-readable pointer).
+      Mechanical gate green (test: contract 11 + 18 doctests, server notes 28, tui notes 13 +
+      rendering; lint --all-targets clean; fmt clean). All hard constraints clear: #3 flat
+      `{id,title,content,created_at}` no `updated_at` (migration + handler + test assert it); #2
+      DTOs only in `contract` (ADR-0007); no new `ErrorCode`; #4 every query ownership-joined,
+      unowned profile+note id → 404 never 403; #1 TUI stateless (open re-fetches, mutations chain
+      a refresh); A8 no `chrono` in tui. Migration up/down paired + `ON DELETE CASCADE`. Caption
+      `fix(tui)` in-scope (ADR-0006 §8.3), `rendering.rs:227` guard not weakened. No fix-now, no
+      nits, no out-of-scope chore. Verdict valid while `./ok.sh code-hash HEAD` == the hash above.
