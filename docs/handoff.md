@@ -5,6 +5,85 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-24 (0010 — Notes, the final domain feature, end-to-end across all three crates)
+
+The **last missing domain feature** shipped: Notes, a near-exact structural clone of the task
+surface, governed by [ADR-0007][adr-0007] (notes wire contract — already on `main` with the plan).
+Branch: `feature/0010-notes` (code sha `2a4074d` at verification; current branch HEAD after this
+eng-manager step). Reviewer **approved** and verifier **verified**, both pinned to code-hash
+`46c1c60f1eb3865eb127a72502982827ebb09d65` (re-confirmed equal at this step — verdicts carry
+forward, no relabelling). The cycle stopped at the AI-terminal `awaiting-merge` on the branch.
+
+What shipped (on the branch, contract → server → tui per the slice order):
+
+- **`contract`** — a new `note` module: `Note { id, title, content, created_at }`,
+  `CreateNoteRequest { title, content }`, `UpdateNoteRequest { title, content }`, reusing the
+  `{ code?, message }` error contract with **no** new `ErrorCode`. Flat (#3), no `updated_at`
+  (editing mutates in place; only `created_at` is a timestamp, operator-locked).
+- **`server`** — five CRUD routes under `/api/profiles/{id}/notes` (create 201 / list 200 bare
+  array newest-first / get 200 / update 200 in-place / delete 204), every query ownership-joined
+  so an unowned or missing profile/note id is `404 not_found` (never 403, #4 / ADR-0005 §4
+  non-observability). Reversible migration `20260612163049_notes` (paired up/down; `ON DELETE
+  CASCADE`, `(profile_id, created_at DESC)` index) + a `.sqlx/` refresh.
+- **`tui`** — five `Client` trait methods + `HttpClient` impls, `ClientRequest`/`Outcome` variants
+  (carrying `token` + `profile_id`) + worker arms, and a `Screen::Notes` view (list +
+  create/edit/delete sub-flows) opened by `n` from the task list. Stateless (#1); no `chrono` in
+  `tui` (A8 — timestamp formatting at the render seam).
+- **`fix(tui)`** — a caption-layout regression the TUI suite surfaced (see learning below): adding
+  `n: notes` grew `TASK_LIST_CAPTION` so the pending caption + spinner clipped the cancel
+  affordance at 80×24 (ADR-0006 §8.3); the bottom band was widened to 3 rows and both captions
+  re-phrased with ` | ` separators, no assertions weakened.
+
+Tests in all three crates: `contract` note DTOs 11 (+ doctests), `server` notes integration 28
+(incl. profile-scoping + auth-required per route), `tui` `TestBackend` notes suite 13 (+
+rendering 11). All four gates green at branch head (`build | test | lint --all-targets |
+fmt --check`).
+
+Verdicts (both @ code-hash `46c1c60f1eb3865eb127a72502982827ebb09d65`):
+
+- **reviewer — REVIEW-STATUS: approved.** Hard constraints clear (#1 stateless, #2 DTOs only in
+  `contract`, #3 flat no-`updated_at`, #4 every query ownership-joined → 404 never 403); no new
+  `ErrorCode`; migration up/down paired + cascade; the caption `fix(tui)` in-scope (ADR-0006 §8.3).
+- **verifier — VERIFY-STATUS: verified.** Booted the real stack (`./ok.sh up`, docker 29.5.3);
+  migration applied; flat schema confirmed (`id,profile_id,title,content,created_at`, no
+  `updated_at`); the full wire surface exercised live (shapes, status codes, `{code,message}`
+  contract, profile-scoping → 404, all five OTel handler spans). One stated inference: the reqwest
+  `HttpClient` path verified by structural equivalence (curl drove the wire; the `tui` Client maps
+  one-for-one + the 13-test suite drives the trait), not a literal live reqwest harness — not a
+  coverage gap.
+
+coverage: **68.24% line** (62.99% region, 70.77% function), the headline `TOTAL` from a fresh
+`./ok.sh coverage` run in the worktree (docker + throwaway test Postgres booted cleanly — nothing
+acquired, #6 intact). Up from the 0009 snapshot (66.36% line) — the notes server handlers and TUI
+view land well-tested (`handlers/notes.rs` 100% line, `app/notes.rs` 90%). **Report-only — no
+threshold, never a gate.**
+
+Durable learning recorded (one, in the `tui-dev` agent): **caption width and bottom-band height
+are coupled at the 80×24 test viewport.** This bit on 0008-R1 (the append-spinner work) and **again
+on 0010** (adding the `n: notes` hotkey), so it earned a durable agent note rather than staying a
+per-cycle surprise: growing a fixed-width caption can wrap the stable caption + appended spinner +
+cancel affordance an extra line and clip it — a render regression the `TestBackend` suite catches,
+not the compiler. The fix is always to budget the band row count (and pick ` | ` wrap points) in
+the *same* change that grows the caption; the invariant is owned by ADR-0006 §8.3, and the
+rendering code already carries inline comments naming the 80×24 boundary. No CLAUDE.md hard
+constraint earned (this is a TUI-layout discipline, not a cross-cutting domain rule), no
+standards-skill edit, **no new ADR** (ADR-0007 governs the contract and was already on `main`),
+**no new crate → no new dev agent**.
+
+**Homes.** Feature-local on the branch (home #2): the item's `## Summary` (with the coverage line)
+and this `[eng-manager]` Log context, committed on `feature/0010-notes`. Cross-cutting/derived on
+`main` (homes #1/#3): this `docs/handoff.md` entry (+ the "What works right now" snapshot refreshed
+for the 0010 state), the `tui-dev` caption/band learning, and the regenerated `board/README.md`.
+**`main`'s frozen copy of `board/features/0010-notes.md` stays untouched** at the claim snapshot
+(`ready`) until the human's merge. The orchestrator flips the branch status to `awaiting-merge`
+after this step.
+
+**Free pickup noted (mintable `chore`):** none this cycle.
+
+[adr-0007]: ./adr/0007-notes-wire-contract.md
+
+---
+
 ## Handoff — 2026-06-24 (0009 — coverage capture wired into the cycle + each Summary; chore, `main`-only)
 
 The operator's process request — *"add the coverage run in the process, and report the code
@@ -1119,3 +1198,17 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   worktree**; cold reviewer **approved** with the chore invariant attested (code-hash
   `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd`), live verifier **skipped**. 0009's own Summary is the
   first to carry a coverage line: 66.36% line / 61.48% region / 66.67% function.
+- **Notes — the final domain feature — is at `awaiting-merge` on `feature/0010-notes`** (0010, a
+  `feature`, live-verified): the last missing flat feature, a near-exact structural clone of the
+  task surface governed by [ADR-0007][adr-0007]. A new `contract` `note` module
+  (`Note { id, title, content, created_at }`, `CreateNoteRequest`, `UpdateNoteRequest`, no new
+  `ErrorCode`, no `updated_at` — flat #3); five profile-scoped server CRUD routes under
+  `/api/profiles/{id}/notes` (create 201 / list 200 newest-first / get 200 / update 200 in-place /
+  delete 204), every query ownership-joined so an unowned/missing profile or note id is `404`
+  (never 403, #4), with a reversible migration `20260612163049_notes` (`ON DELETE CASCADE`,
+  `(profile_id, created_at DESC)` index); and a TUI `Screen::Notes` view (list + create/edit/delete)
+  opened by `n` from the task list, stateless (#1), reqwest client maps one-for-one to the wire.
+  Tests in all three crates (`contract` 11, `server` 28, `tui` `TestBackend` 13). Reviewer
+  **approved** + verifier **verified**, both pinned to code-hash
+  `46c1c60f1eb3865eb127a72502982827ebb09d65`; coverage 68.24% line. With Notes done, all four flat
+  features (TODO, Pomodoro, Notes, Profiles) exist except Profiles CRUD (0012, still `ready`).

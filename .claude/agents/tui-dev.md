@@ -36,3 +36,10 @@ You are the **tui-dev** for organized-koala.
   are a thin rim around that core. This is the structure 0004 shipped; see `rust-standards`.
 - Binary errors use `anyhow`. Tests in their own files.
 - The TUI requires the server online — surface a clear error when it is not, never fabricate.
+- **Caption width and bottom-band height are coupled at the 80×24 test viewport (learned
+  0008-R1, again 0010).** Adding a hotkey to a fixed-width caption string can push the stable
+  caption + the appended in-flight spinner + cancel affordance to wrap an extra line and clip it
+  at 80×24 — a render regression the `TestBackend` suite catches, not the compiler. When you grow
+  a caption, budget the bottom-band row count (and re-phrase with ` | ` separators to control wrap
+  points) in the **same** change; do not expect to bolt on a hotkey without touching layout. The
+  invariant is owned by ADR-0006 §8.3.

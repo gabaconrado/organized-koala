@@ -39,19 +39,29 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0007](./features/0007-ok-coverage-verb.md) | Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold) | chore | merged | low | — | — (merged) |
 | [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | merged | medium | — | — (merged) |
 | [0009](./features/0009-coverage-in-cycle-and-summary.md) | Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary | chore | merged | low | 0007 (merged ✓) | — (main-only governance; no worktree) |
-| [0010](./features/0010-notes.md) | Notes — full feature (contract module, migration, server CRUD, TUI views) | feature | ready | medium | — | — (unclaimed) |
+| [0010](./features/0010-notes.md) | Notes — full feature (contract module, migration, server CRUD, TUI views) | feature | ready (branch: awaiting-merge) | medium | — | feature/0010-notes |
 | [0011](./features/0011-task-update-delete-reopen.md) | Task update + delete + reopen — generalize close into PATCH (breaking) | feature | ready | medium | — | — (unclaimed) |
 | [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | ready | medium | — | — (unclaimed) |
 
-> **0010 / 0011 / 0012 — READY (planned, unclaimed).** The final three domain features that
-> complete organized-koala, each born on `main` with its governing ADR (0010→ADR-0007 notes wire
-> contract; 0011→ADR-0008 task mutation generalization; 0012→ADR-0009 profile mutations). Operator
-> locked the design forks: generalize `close`→`PATCH` (task status open↔done, reopen clears
-> `closed_at`); edit scope title+description (notes title+content); **no `updated_at`** (stay flat,
-> #3). Recommended claim order **0010 → 0011 → 0012** — 0010 and 0011 are independent (disjoint
-> files), while 0012's full delete-cascade test wants the `notes` table to exist; `depends-on` is
-> left `[]` because 0012's *code* does not depend on 0010, only its cascade *test* does. No cycle
-> kicked off yet.
+> **0010 — Notes — AWAITING-MERGE on `feature/0010-notes`** (live status on the branch; the
+> `main` snapshot stays frozen at the claim `ready` until the human's ff-merge). The final missing
+> domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
+> task surface governed by [ADR-0007](../docs/adr/0007-notes-wire-contract.md): a `contract` `note`
+> module (`Note { id, title, content, created_at }`, no new `ErrorCode`, no `updated_at` — flat
+> #3), five profile-scoped server CRUD routes under `/api/profiles/{id}/notes` (ownership-joined →
+> `404` never 403, #4; reversible migration `20260612163049_notes` with `ON DELETE CASCADE`), and a
+> TUI `Screen::Notes` view opened by `n` (stateless, #1). Tests in all three crates (contract 11,
+> server 28, tui `TestBackend` 13). Reviewer **approved** + verifier **verified**, both pinned to
+> code-hash `46c1c60f1eb3865eb127a72502982827ebb09d65`; coverage 68.24% line (report-only).
+>
+> **0011 / 0012 — READY (planned, unclaimed).** The remaining two domain features that complete
+> organized-koala, each born on `main` with its governing ADR (0011→ADR-0008 task mutation
+> generalization; 0012→ADR-0009 profile mutations). Operator locked the design forks: generalize
+> `close`→`PATCH` (task status open↔done, reopen clears `closed_at`); edit scope title+description;
+> **no `updated_at`** (stay flat, #3). Recommended claim order **0011 → 0012** — 0011 is independent
+> of 0010 (disjoint files), while 0012's full delete-cascade test wants the `notes` table (now built
+> on 0010's branch) to exist; `depends-on` is left `[]` because 0012's *code* does not depend on
+> 0010, only its cascade *test* does.
 >
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
