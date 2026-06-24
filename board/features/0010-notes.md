@@ -2,7 +2,7 @@
 id: 0010
 title: Notes — full feature (contract module, migration, server CRUD, TUI views)
 type: feature      # feature | chore
-status: review           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0007 lands on `main` with this item's plan; no in-flight Board item gates it
@@ -11,10 +11,6 @@ worktree: .claude/worktrees/0010-notes
 created: 2026-06-24
 updated: 2026-06-24
 ---
-
-<!-- CLAIMED 2026-06-24 — this `main` copy is FROZEN at the claim snapshot. The branch
-     `feature/0010-notes` copy is authoritative until the human's ff-merge brings the finished
-     item back to `main`. Do not advance status here. -->
 
 ## Feature request
 
@@ -191,6 +187,13 @@ into the working branch before 2/3 compile.
       `tui` Client maps one-for-one + `tester`'s 13-test suite drives the trait), not a literal
       live reqwest harness (would require editing read-only code) — not a coverage gap. Stack
       torn down; worktree clean.
+- [x] 2026-06-24 [drive] Step-7 freshen: rebased onto `main` `61101e0` (docs/handoff + dashboard
+      + `.claude/agents/tui-dev.md` learning; no crate code on `main`). `./ok.sh code-hash` at the
+      rebased head is **unchanged at `46c1c60f1eb3865eb127a72502982827ebb09d65`** == the attested
+      reviewer/verifier hash ⇒ code byte-identical, **both verdicts carry forward untouched** (no
+      relabelling). Dropped the `main`-only frozen-pointer comment that the rebase auto-merged into
+      this authoritative branch copy. Gates re-run green on the rebased tree (`test | lint | fmt
+      --check`). Board-only commit — does not retrigger review. → `awaiting-merge`.
 
 <!-- ─────────────────────────────  SUMMARY  ───────────────────────────── -->
 ## Summary
