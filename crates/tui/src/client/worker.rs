@@ -39,6 +39,30 @@ fn run<C: Client>(client: &C, request: ClientRequest) -> Outcome {
             profile_id,
             task_id,
         } => Outcome::CloseTask(client.close_task(&token, &profile_id, &task_id)),
+        ClientRequest::ListNotes { token, profile_id } => {
+            Outcome::ListNotes(client.list_notes(&token, &profile_id))
+        }
+        ClientRequest::CreateNote {
+            token,
+            profile_id,
+            req,
+        } => Outcome::CreateNote(client.create_note(&token, &profile_id, &req)),
+        ClientRequest::GetNote {
+            token,
+            profile_id,
+            note_id,
+        } => Outcome::GetNote(client.get_note(&token, &profile_id, &note_id)),
+        ClientRequest::UpdateNote {
+            token,
+            profile_id,
+            note_id,
+            req,
+        } => Outcome::UpdateNote(client.update_note(&token, &profile_id, &note_id, &req)),
+        ClientRequest::DeleteNote {
+            token,
+            profile_id,
+            note_id,
+        } => Outcome::DeleteNote(client.delete_note(&token, &profile_id, &note_id)),
         ClientRequest::GetTimerConfig { token } => {
             Outcome::GetTimerConfig(client.get_timer_config(&token))
         }

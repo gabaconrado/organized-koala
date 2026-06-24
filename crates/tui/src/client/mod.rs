@@ -9,8 +9,9 @@
 pub mod worker;
 
 use contract::{
-    CreateTaskRequest, ErrorBody, ErrorCode, LoginRequest, Profile, RegisterRequest,
-    SessionResponse, Task, TimerConfig, TimerSession, UpdateTimerConfigRequest,
+    CreateNoteRequest, CreateTaskRequest, ErrorBody, ErrorCode, LoginRequest, Note, Profile,
+    RegisterRequest, SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest,
+    UpdateTimerConfigRequest,
 };
 
 /// A failure from a client call.
@@ -116,6 +117,37 @@ pub trait Client {
     /// `POST /api/profiles/{profile_id}/tasks/{task_id}/close` — close a task, returning the
     /// updated [`Task`] (status `done`, `closed_at` set). Idempotent server-side.
     fn close_task(&self, token: &str, profile_id: &str, task_id: &str) -> ClientResult<Task>;
+
+    /// `GET /api/profiles/{profile_id}/notes` — the profile's notes, newest-first.
+    fn list_notes(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Note>>;
+
+    /// `POST /api/profiles/{profile_id}/notes` — create a note, returning the created [`Note`].
+    /// An empty (after trim) title is a `validation_failed` [`ClientError::Api`].
+    fn create_note(
+        &self,
+        token: &str,
+        profile_id: &str,
+        req: &CreateNoteRequest,
+    ) -> ClientResult<Note>;
+
+    /// `GET /api/profiles/{profile_id}/notes/{note_id}` — read one note. An unowned or missing
+    /// note is a `not_found` [`ClientError::Api`].
+    fn get_note(&self, token: &str, profile_id: &str, note_id: &str) -> ClientResult<Note>;
+
+    /// `PATCH /api/profiles/{profile_id}/notes/{note_id}` — replace title+content in place,
+    /// returning the updated [`Note`]. An unowned/missing note is `not_found`; an empty title is
+    /// `validation_failed`.
+    fn update_note(
+        &self,
+        token: &str,
+        profile_id: &str,
+        note_id: &str,
+        req: &UpdateNoteRequest,
+    ) -> ClientResult<Note>;
+
+    /// `DELETE /api/profiles/{profile_id}/notes/{note_id}` — delete a note (`204`). An unowned or
+    /// missing note is a `not_found` [`ClientError::Api`].
+    fn delete_note(&self, token: &str, profile_id: &str, note_id: &str) -> ClientResult<()>;
 
     /// `GET /api/timer/config` — the account-global Pomodoro config (duration). Account-global,
     /// not profile-scoped (ADR-0002 §5), so it takes no `profile_id`.
@@ -313,6 +345,95 @@ impl Client for HttpClient {
         let status = resp.status();
         if status.is_success() {
             decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn list_notes(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Note>> {
+        let resp = self
+            .http
+            .get(self.url(&format!("/api/profiles/{profile_id}/notes")))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn create_note(
+        &self,
+        token: &str,
+        profile_id: &str,
+        req: &CreateNoteRequest,
+    ) -> ClientResult<Note> {
+        let resp = self
+            .http
+            .post(self.url(&format!("/api/profiles/{profile_id}/notes")))
+            .bearer_auth(token)
+            .json(req)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn get_note(&self, token: &str, profile_id: &str, note_id: &str) -> ClientResult<Note> {
+        let resp = self
+            .http
+            .get(self.url(&format!("/api/profiles/{profile_id}/notes/{note_id}")))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn update_note(
+        &self,
+        token: &str,
+        profile_id: &str,
+        note_id: &str,
+        req: &UpdateNoteRequest,
+    ) -> ClientResult<Note> {
+        let resp = self
+            .http
+            .patch(self.url(&format!("/api/profiles/{profile_id}/notes/{note_id}")))
+            .bearer_auth(token)
+            .json(req)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn delete_note(&self, token: &str, profile_id: &str, note_id: &str) -> ClientResult<()> {
+        let resp = self
+            .http
+            .delete(self.url(&format!("/api/profiles/{profile_id}/notes/{note_id}")))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            // `204 No Content` carries no body; success is the status alone.
+            Ok(())
         } else {
             Err(api_error(status, resp))
         }

@@ -10,15 +10,21 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
-use crate::app::{App, AuthField, AuthMode, AuthState, Screen, TaskListState, Timer};
-use contract::{TaskStatus, TimerSession};
+use crate::app::{
+    App, AuthField, AuthMode, AuthState, NotesMode, NotesState, Screen, TaskListState, Timer,
+};
+use contract::{Note, TaskStatus, TimerSession};
 
 /// The frames of the in-flight spinner, cycled by the poll loop's tick counter.
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 
 /// The base hotkey caption for the task-list screen (idle, not adding). The global timer keys
 /// (`p`, `d`) are shown on every post-auth screen so they are discoverable (ADR-0006 §8.2).
-const TASK_LIST_CAPTION: &str = "a: add  c: mark done  Up/Down: move  p: start/stop timer  d: set duration  r: refresh  q: quit";
+const TASK_LIST_CAPTION: &str = "a: add  c: mark done  n: notes  Up/Down: move  p: start/stop timer  d: set duration  r: refresh  q: quit";
+
+/// The base hotkey caption for the notes screen (idle list). Mirrors the task-list caption with
+/// the notes commands (`a` create, `e` edit, `x` delete, Enter open) and an `Esc` back-to-tasks.
+const NOTES_CAPTION: &str = "a: add  e: edit  x: delete  Enter: open  Up/Down: move  Esc: back  p: timer  d: duration  r: refresh  q: quit";
 
 /// The spinner glyph for the given tick, or empty when not pending. Pure so the spinner cadence
 /// is testable independently of the real loop's timing.
@@ -77,6 +83,10 @@ pub fn draw(frame: &mut Frame, app: &App, tick: u64) {
         Screen::TaskList(list) => {
             let profile = app.session().map_or("", |s| s.profile_name.as_str());
             draw_task_list(frame, list, app.timer(), profile, tick);
+        }
+        Screen::Notes(notes) => {
+            let profile = app.session().map_or("", |s| s.profile_name.as_str());
+            draw_notes(frame, notes, app.timer(), profile, tick);
         }
         Screen::Offline { message, pending } => {
             draw_offline(frame, message, pending.is_some(), tick);
@@ -295,6 +305,144 @@ fn draw_task_list(
         let caption = caption_with_spinner(base, pending, tick);
         draw_bottom_row(frame, *slot, &caption, timer);
     }
+}
+
+/// Render the active profile's notes view: the list with title + created_at (newest-first as
+/// returned), or the open create/edit/view/delete sub-flow, plus the shared bottom row.
+fn draw_notes(frame: &mut Frame, notes: &NotesState, timer: &Timer, profile: &str, tick: u64) {
+    let area = frame.area();
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(3),
+            Constraint::Length(2),
+            Constraint::Length(2),
+        ])
+        .split(area);
+
+    if let Some(slot) = chunks.first() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                format!("organized-koala — notes [{profile}]"),
+                Style::default().add_modifier(Modifier::BOLD),
+            )),
+            *slot,
+        );
+    }
+
+    if let Some(slot) = chunks.get(1) {
+        // The viewing sub-flow replaces the list with the single note's title + body; otherwise the
+        // list of notes is shown with its selection highlight.
+        if let NotesMode::Viewing(note) = &notes.mode {
+            let body = vec![
+                Line::from(Span::styled(
+                    note.title.clone(),
+                    Style::default().add_modifier(Modifier::BOLD),
+                )),
+                Line::from(Span::raw(format_created_at(note))),
+                Line::from(""),
+                Line::from(Span::raw(note.content.clone())),
+            ];
+            frame.render_widget(
+                Paragraph::new(body)
+                    .block(Block::default().borders(Borders::ALL).title("Note"))
+                    .wrap(Wrap { trim: false }),
+                *slot,
+            );
+        } else {
+            let items: Vec<ListItem> = notes
+                .notes
+                .iter()
+                .map(|note| {
+                    ListItem::new(Line::from(format!(
+                        "{}  ({})",
+                        note.title,
+                        format_created_at(note)
+                    )))
+                })
+                .collect();
+            let widget = List::new(items)
+                .block(Block::default().borders(Borders::ALL).title("Notes"))
+                .highlight_symbol("> ")
+                .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+            let mut state = ListState::default();
+            state.select(notes.selected);
+            frame.render_stateful_widget(widget, *slot, &mut state);
+        }
+    }
+
+    if let Some(slot) = chunks.get(2) {
+        let text = if let Some(edit) = &timer.editing {
+            // The duration-edit sub-flow overlays the active screen's message line (ADR-0006 §8).
+            let err = edit.error.as_deref().unwrap_or("");
+            format!("Set duration (min): {}  {err}", edit.buffer)
+        } else {
+            note_message_line(notes)
+        };
+        frame.render_widget(
+            Paragraph::new(Span::raw(text)).wrap(Wrap { trim: true }),
+            *slot,
+        );
+    }
+
+    if let Some(slot) = chunks.get(3) {
+        let base = notes_caption_base(notes, timer);
+        let pending = notes.is_pending() || timer.is_pending();
+        let caption = caption_with_spinner(base, pending, tick);
+        draw_bottom_row(frame, *slot, &caption, timer);
+    }
+}
+
+/// The message line for the notes screen: the open create/edit form's fields + inline error, the
+/// delete confirmation prompt, the timer message, or the screen's transient message.
+fn note_message_line(notes: &NotesState) -> String {
+    match &notes.mode {
+        NotesMode::Creating(form) => {
+            let field = if form.on_title { "Title" } else { "Content" };
+            let err = form.error.as_deref().unwrap_or("");
+            format!(
+                "New note — {field}: title='{}' content='{}'  {err}",
+                form.title, form.content
+            )
+        }
+        NotesMode::Editing { form, .. } => {
+            let field = if form.on_title { "Title" } else { "Content" };
+            let err = form.error.as_deref().unwrap_or("");
+            format!(
+                "Edit note — {field}: title='{}' content='{}'  {err}",
+                form.title, form.content
+            )
+        }
+        NotesMode::ConfirmingDelete { title, .. } => {
+            format!("Delete note '{title}'? Enter: confirm  Esc: cancel")
+        }
+        NotesMode::List | NotesMode::Viewing(_) => notes.message.clone().unwrap_or_default(),
+    }
+}
+
+/// The base hotkey caption for the notes screen, varying by the open sub-flow.
+fn notes_caption_base(notes: &NotesState, timer: &Timer) -> &'static str {
+    if timer.editing.is_some() {
+        "Enter: save  Esc: cancel"
+    } else {
+        match &notes.mode {
+            NotesMode::Creating(_) | NotesMode::Editing { .. } => {
+                "Enter: save  Tab: switch field  Esc: cancel"
+            }
+            NotesMode::ConfirmingDelete { .. } => "Enter: confirm delete  Esc: cancel",
+            NotesMode::Viewing(_) => "Esc: back to list",
+            NotesMode::List => NOTES_CAPTION,
+        }
+    }
+}
+
+/// Format a note's `created_at` for display, at the render seam, from the DTO's `DateTime`
+/// (hard-constraint A8: the `tui` crate keeps no direct `chrono` dependency — this calls a method
+/// on the contract DTO's type, exactly as the timer countdown derives epoch seconds).
+fn format_created_at(note: &Note) -> String {
+    note.created_at.format("%Y-%m-%d %H:%M UTC").to_string()
 }
 
 /// The bottom row of a post-auth screen: the hotkey caption on the left and the persistent global

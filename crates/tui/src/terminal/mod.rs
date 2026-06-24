@@ -49,6 +49,7 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
     match screen {
         Screen::Auth(_) => true,
         Screen::TaskList(list) => list.adding.is_some(),
+        Screen::Notes(notes) => notes.is_text_entry(),
         Screen::Offline { .. } => false,
     }
 }
@@ -81,15 +82,22 @@ pub fn map_key(screen: &Screen, editing_duration: bool, key: KeyEvent) -> Option
 
     let text_entry = is_text_entry(screen, editing_duration);
     let in_add_task = matches!(screen, Screen::TaskList(list) if list.adding.is_some());
+    let in_notes_sub_flow = matches!(screen, Screen::Notes(notes) if notes.in_sub_flow());
     let pending = is_pending(screen);
-    // A sub-flow (add-task or duration-edit) or an in-flight request makes `Esc` mean cancel.
-    let in_sub_flow = in_add_task || editing_duration;
-    let post_auth = matches!(screen, Screen::TaskList(_));
+    // A sub-flow (add-task, a notes sub-flow, or duration-edit) or an in-flight request makes
+    // `Esc` mean cancel.
+    let in_sub_flow = in_add_task || in_notes_sub_flow || editing_duration;
+    let on_task_list = matches!(screen, Screen::TaskList(_));
+    let on_notes = matches!(screen, Screen::Notes(_));
+    let post_auth = on_task_list || on_notes;
 
     match key.code {
         KeyCode::Esc => {
             if in_sub_flow || pending {
                 Some(Event::Cancel)
+            } else if on_notes {
+                // Idle notes list: `Esc` returns to the task list (Assumption A7).
+                Some(Event::Back)
             } else {
                 Some(Event::Quit)
             }
@@ -100,17 +108,23 @@ pub fn map_key(screen: &Screen, editing_duration: bool, key: KeyEvent) -> Option
         KeyCode::Backspace => Some(Event::Backspace),
         KeyCode::F(2) if matches!(screen, Screen::Auth(_)) => Some(Event::ToggleAuthMode),
         KeyCode::Char(c) if text_entry => Some(Event::Char(c)),
-        KeyCode::Char('a') if matches!(screen, Screen::TaskList(_)) => Some(Event::BeginAddTask),
-        KeyCode::Char('c') if matches!(screen, Screen::TaskList(_)) => Some(Event::CloseSelected),
+        KeyCode::Char('a') if on_task_list => Some(Event::BeginAddTask),
+        KeyCode::Char('c') if on_task_list => Some(Event::CloseSelected),
+        // `n` opens the notes view from the task list (Assumption A7).
+        KeyCode::Char('n') if on_task_list => Some(Event::OpenNotes),
+        // Notes-list commands (idle list, not a text-entry sub-flow): create / edit / delete.
+        KeyCode::Char('a') if on_notes => Some(Event::BeginAddNote),
+        KeyCode::Char('e') if on_notes => Some(Event::BeginEditNote),
+        KeyCode::Char('x') if on_notes => Some(Event::BeginDeleteNote),
         // The global timer controls are live on every post-auth screen (not while a text-entry
         // sub-flow owns the keystroke — Assumption B4).
         KeyCode::Char('p') if post_auth => Some(Event::ToggleTimer),
         KeyCode::Char('d') if post_auth => Some(Event::BeginEditDuration),
         KeyCode::Char('r') => match screen {
-            Screen::TaskList(_) | Screen::Offline { .. } => Some(Event::Refresh),
+            Screen::TaskList(_) | Screen::Notes(_) | Screen::Offline { .. } => Some(Event::Refresh),
             Screen::Auth(_) => None,
         },
-        KeyCode::Char('q') if matches!(screen, Screen::TaskList(_)) => Some(Event::Quit),
+        KeyCode::Char('q') if post_auth => Some(Event::Quit),
         _ => None,
     }
 }
@@ -120,6 +134,7 @@ fn is_pending(screen: &Screen) -> bool {
     match screen {
         Screen::Auth(auth) => auth.is_pending(),
         Screen::TaskList(list) => list.is_pending(),
+        Screen::Notes(notes) => notes.is_pending(),
         Screen::Offline { pending, .. } => pending.is_some(),
     }
 }

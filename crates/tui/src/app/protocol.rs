@@ -9,8 +9,8 @@
 //! and the bearer token, never a live connection.
 
 use contract::{
-    CreateTaskRequest, LoginRequest, Profile, RegisterRequest, SessionResponse, Task, TimerConfig,
-    TimerSession, UpdateTimerConfigRequest,
+    CreateNoteRequest, CreateTaskRequest, LoginRequest, Note, Profile, RegisterRequest,
+    SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest, UpdateTimerConfigRequest,
 };
 
 use crate::client::ClientResult;
@@ -62,6 +62,51 @@ pub enum ClientRequest {
         profile_id: String,
         /// The task to close.
         task_id: String,
+    },
+    /// `GET /api/profiles/{profile_id}/notes`.
+    ListNotes {
+        /// The bearer token to authenticate with.
+        token: String,
+        /// The profile namespace to list.
+        profile_id: String,
+    },
+    /// `POST /api/profiles/{profile_id}/notes`.
+    CreateNote {
+        /// The bearer token to authenticate with.
+        token: String,
+        /// The profile namespace to create the note in.
+        profile_id: String,
+        /// The note to create.
+        req: CreateNoteRequest,
+    },
+    /// `GET /api/profiles/{profile_id}/notes/{note_id}`.
+    GetNote {
+        /// The bearer token to authenticate with.
+        token: String,
+        /// The profile namespace owning the note.
+        profile_id: String,
+        /// The note to read.
+        note_id: String,
+    },
+    /// `PATCH /api/profiles/{profile_id}/notes/{note_id}`.
+    UpdateNote {
+        /// The bearer token to authenticate with.
+        token: String,
+        /// The profile namespace owning the note.
+        profile_id: String,
+        /// The note to update.
+        note_id: String,
+        /// The replacement title+content.
+        req: UpdateNoteRequest,
+    },
+    /// `DELETE /api/profiles/{profile_id}/notes/{note_id}`.
+    DeleteNote {
+        /// The bearer token to authenticate with.
+        token: String,
+        /// The profile namespace owning the note.
+        profile_id: String,
+        /// The note to delete.
+        note_id: String,
     },
     /// `GET /api/timer/config` — read the account-global duration config.
     GetTimerConfig {
@@ -118,6 +163,16 @@ pub enum Outcome {
     CreateTask(ClientResult<Task>),
     /// Result of a [`ClientRequest::CloseTask`] call.
     CloseTask(ClientResult<Task>),
+    /// Result of a [`ClientRequest::ListNotes`] call.
+    ListNotes(ClientResult<Vec<Note>>),
+    /// Result of a [`ClientRequest::CreateNote`] call.
+    CreateNote(ClientResult<Note>),
+    /// Result of a [`ClientRequest::GetNote`] call.
+    GetNote(ClientResult<Note>),
+    /// Result of a [`ClientRequest::UpdateNote`] call.
+    UpdateNote(ClientResult<Note>),
+    /// Result of a [`ClientRequest::DeleteNote`] call.
+    DeleteNote(ClientResult<()>),
     /// Result of a [`ClientRequest::GetTimerConfig`] call.
     GetTimerConfig(ClientResult<TimerConfig>),
     /// Result of a [`ClientRequest::UpdateTimerConfig`] call.

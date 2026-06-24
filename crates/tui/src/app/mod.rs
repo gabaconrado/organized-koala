@@ -11,12 +11,14 @@
 //! lifetime only (hard-constraint #1) — there is no on-disk or cross-run persistence.
 
 pub mod auth;
+pub mod notes;
 pub mod protocol;
 pub mod task_add;
 pub mod task_list;
 pub mod timer;
 
 pub use auth::{AuthField, AuthMode, AuthState};
+pub use notes::{NoteForm, NotesMode, NotesState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
 pub use task_add::AddTaskState;
 pub use task_list::TaskListState;
@@ -47,6 +49,16 @@ pub enum Event {
     BeginAddTask,
     /// Close / mark-done the selected task (task list only).
     CloseSelected,
+    /// Open the notes view for the active profile (task list only).
+    OpenNotes,
+    /// Return from the notes view to the task list (notes list, when idle).
+    Back,
+    /// Begin the create-note sub-flow (notes list only).
+    BeginAddNote,
+    /// Begin editing the selected note (notes list only).
+    BeginEditNote,
+    /// Begin the delete-confirmation sub-flow for the selected note (notes list only).
+    BeginDeleteNote,
     /// Toggle the account-global focus session: start when idle/completed, stop when running.
     /// Global on every post-auth screen (ADR-0006 §8.2).
     ToggleTimer,
@@ -93,6 +105,8 @@ pub enum Screen {
     Auth(AuthState),
     /// The task-list screen for the active profile.
     TaskList(TaskListState),
+    /// The notes screen for the active profile.
+    Notes(NotesState),
     /// The blocking "server unreachable" screen. Carries the message and the in-flight marker
     /// while a retry probe is outstanding.
     Offline {
@@ -108,7 +122,7 @@ impl Screen {
     /// keybindings are live). The auth and offline screens are excluded.
     #[must_use]
     fn is_post_auth(&self) -> bool {
-        matches!(self, Screen::TaskList(_))
+        matches!(self, Screen::TaskList(_) | Screen::Notes(_))
     }
 }
 
@@ -190,6 +204,7 @@ impl App {
         match &self.screen {
             Screen::Auth(auth) => auth.pending,
             Screen::TaskList(list) => list.pending,
+            Screen::Notes(notes) => notes.pending,
             Screen::Offline { pending, .. } => *pending,
         }
     }
@@ -230,9 +245,21 @@ impl App {
 
     /// Dispatch a non-edit event to the active screen, stamping the screen's in-flight marker.
     fn handle_screen_event(&mut self, event: Event) -> Option<Dispatch> {
+        // Cross-screen navigation between the two post-auth views (Assumption A7). Both issue a
+        // fresh server load so the destination derives from a response (#1).
+        match (&self.screen, &event) {
+            (Screen::TaskList(list), Event::OpenNotes) if list.adding.is_none() => {
+                return self.navigate_to_notes();
+            }
+            (Screen::Notes(notes), Event::Back) if !notes.in_sub_flow() => {
+                return self.navigate_to_tasks();
+            }
+            _ => {}
+        }
         let request = match &mut self.screen {
             Screen::Auth(auth) => auth.handle_event(event),
             Screen::TaskList(list) => list.handle_event(event, self.session.as_ref()),
+            Screen::Notes(notes) => notes.handle_event(event, self.session.as_ref()),
             Screen::Offline { pending, .. } => {
                 if pending.is_some() {
                     None
@@ -244,6 +271,29 @@ impl App {
             }
         };
         request.map(|request| self.dispatch_screen(request))
+    }
+
+    /// Switch to the notes view and dispatch its initial list load. The screen becomes an empty
+    /// `Notes` placeholder carrying the in-flight marker; `apply_response` replaces it with the
+    /// populated list (so it derives entirely from the server response, #1).
+    fn navigate_to_notes(&mut self) -> Option<Dispatch> {
+        let session = self.session.clone()?;
+        self.screen = Screen::Notes(NotesState::new(Vec::new()));
+        Some(self.dispatch_screen(ClientRequest::ListNotes {
+            token: session.token,
+            profile_id: session.profile_id,
+        }))
+    }
+
+    /// Switch back to the task list and dispatch its initial list load (mirror of
+    /// [`Self::navigate_to_notes`]).
+    fn navigate_to_tasks(&mut self) -> Option<Dispatch> {
+        let session = self.session.clone()?;
+        self.screen = Screen::TaskList(TaskListState::new(Vec::new()));
+        Some(self.dispatch_screen(ClientRequest::ListTasks {
+            token: session.token,
+            profile_id: session.profile_id,
+        }))
     }
 
     /// Handle a keystroke while the duration-edit sub-flow is open. `Submit` issues the update
@@ -321,6 +371,7 @@ impl App {
         match &mut self.screen {
             Screen::Auth(auth) => auth.pending = id,
             Screen::TaskList(list) => list.pending = id,
+            Screen::Notes(notes) => notes.pending = id,
             Screen::Offline { pending, .. } => *pending = id,
         }
     }
@@ -335,6 +386,15 @@ impl App {
                 list.pending = None;
                 if let Some(add) = &mut list.adding {
                     add.error = None;
+                }
+            }
+            Screen::Notes(notes) => {
+                notes.pending = None;
+                match &mut notes.mode {
+                    NotesMode::Creating(form) | NotesMode::Editing { form, .. } => {
+                        form.error = None;
+                    }
+                    _ => {}
                 }
             }
             Screen::Offline { pending, .. } => *pending = None,
@@ -374,6 +434,11 @@ impl App {
                     Outcome::ListTasks(result) => self.apply_tasks(result),
                     Outcome::CreateTask(result) => self.apply_create(result),
                     Outcome::CloseTask(result) => self.apply_close(result),
+                    Outcome::ListNotes(result) => self.apply_notes(result),
+                    Outcome::CreateNote(result) => self.apply_create_note(result),
+                    Outcome::GetNote(result) => self.apply_get_note(result),
+                    Outcome::UpdateNote(result) => self.apply_update_note(result),
+                    Outcome::DeleteNote(result) => self.apply_delete_note(result),
                     // Timer outcomes are handled above.
                     Outcome::GetTimerConfig(_)
                     | Outcome::UpdateTimerConfig(_)
@@ -541,6 +606,154 @@ impl App {
         None
     }
 
+    fn apply_notes(
+        &mut self,
+        result: crate::client::ClientResult<Vec<contract::Note>>,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(notes) => {
+                // Preserve an in-progress create/edit sub-flow across a refresh (mirror of
+                // `apply_tasks` preserving the add sub-flow).
+                let preserved = if let Screen::Notes(state) = &self.screen {
+                    Some(state.mode.clone())
+                } else {
+                    None
+                };
+                let mut state = NotesState::new(notes);
+                if let Some(mode) = preserved
+                    && matches!(mode, NotesMode::Creating(_) | NotesMode::Editing { .. })
+                {
+                    state.mode = mode;
+                }
+                self.screen = Screen::Notes(state);
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_post_auth_error(err);
+            }
+        }
+        None
+    }
+
+    fn apply_create_note(
+        &mut self,
+        result: crate::client::ClientResult<contract::Note>,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(_) => {
+                if let Screen::Notes(notes) = &mut self.screen {
+                    notes.mode = NotesMode::List;
+                }
+                // Chain a refresh so the new note is shown from a server response (#1).
+                let Some(session) = self.session.clone() else {
+                    self.set_screen_pending(None);
+                    self.go_to_login();
+                    return None;
+                };
+                Some(self.dispatch_screen(ClientRequest::ListNotes {
+                    token: session.token,
+                    profile_id: session.profile_id,
+                }))
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_note_form_error(err);
+                None
+            }
+        }
+    }
+
+    fn apply_get_note(
+        &mut self,
+        result: crate::client::ClientResult<contract::Note>,
+    ) -> Option<Dispatch> {
+        self.set_screen_pending(None);
+        match result {
+            Ok(note) => {
+                if let Screen::Notes(notes) = &mut self.screen {
+                    notes.mode = NotesMode::Viewing(note);
+                }
+            }
+            Err(err) => self.handle_post_auth_error(err),
+        }
+        None
+    }
+
+    fn apply_update_note(
+        &mut self,
+        result: crate::client::ClientResult<contract::Note>,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(_) => {
+                if let Screen::Notes(notes) = &mut self.screen {
+                    notes.mode = NotesMode::List;
+                }
+                // Chain a refresh so the edited note is shown from a server response (#1).
+                let Some(session) = self.session.clone() else {
+                    self.set_screen_pending(None);
+                    self.go_to_login();
+                    return None;
+                };
+                Some(self.dispatch_screen(ClientRequest::ListNotes {
+                    token: session.token,
+                    profile_id: session.profile_id,
+                }))
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_note_form_error(err);
+                None
+            }
+        }
+    }
+
+    fn apply_delete_note(&mut self, result: crate::client::ClientResult<()>) -> Option<Dispatch> {
+        match result {
+            Ok(()) => {
+                if let Screen::Notes(notes) = &mut self.screen {
+                    notes.mode = NotesMode::List;
+                }
+                // Chain a refresh so the list reflects the deletion from a server response (#1).
+                let Some(session) = self.session.clone() else {
+                    self.set_screen_pending(None);
+                    self.go_to_login();
+                    return None;
+                };
+                Some(self.dispatch_screen(ClientRequest::ListNotes {
+                    token: session.token,
+                    profile_id: session.profile_id,
+                }))
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_post_auth_error(err);
+                None
+            }
+        }
+    }
+
+    /// Error routing for a note create/update: offline → blocking, `unauthenticated` → login, and
+    /// a validation (or other) error surfaces inline in the open create/edit form so the user can
+    /// correct it (mirror of [`Self::handle_add_task_error`]).
+    fn handle_note_form_error(&mut self, err: ClientError) {
+        if err.is_offline() {
+            self.go_offline(&err);
+            return;
+        }
+        if err.code() == Some(&ErrorCode::Unauthenticated) {
+            self.go_to_login();
+            return;
+        }
+        if let Screen::Notes(notes) = &mut self.screen {
+            match &mut notes.mode {
+                NotesMode::Creating(form) | NotesMode::Editing { form, .. } => {
+                    form.error = Some(err.to_string());
+                }
+                _ => notes.message = Some(err.to_string()),
+            }
+        }
+    }
+
     /// Fold a timer-config response into the global timer. On the initial read (`chain_session`),
     /// chains a `GetTimerSession` so the session state loads too; on a duration update it stores
     /// the new config and closes the edit sub-flow.
@@ -645,6 +858,7 @@ impl App {
         let message = err.to_string();
         match &mut self.screen {
             Screen::TaskList(list) => list.message = Some(message),
+            Screen::Notes(notes) => notes.message = Some(message),
             Screen::Auth(auth) => auth.error = Some(message),
             Screen::Offline { .. } => {}
         }
