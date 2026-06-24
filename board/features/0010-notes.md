@@ -6,11 +6,15 @@ status: ready           # inbox → planned → ready → working → review →
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0007 lands on `main` with this item's plan; no in-flight Board item gates it
-branch: null
-worktree: null
+branch: feature/0010-notes
+worktree: .claude/worktrees/0010-notes
 created: 2026-06-24
 updated: 2026-06-24
 ---
+
+<!-- CLAIMED 2026-06-24 — this `main` copy is FROZEN at the claim snapshot. The branch
+     `feature/0010-notes` copy is authoritative until the human's ff-merge brings the finished
+     item back to `main`. Do not advance status here. -->
 
 ## Feature request
 
