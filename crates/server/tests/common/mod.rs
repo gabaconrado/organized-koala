@@ -164,6 +164,46 @@ pub fn put_json_auth(path: &str, token: &str, body: &Value) -> Request<Body> {
         .expect("request should build")
 }
 
+/// Build a JSON PATCH request to `path` carrying a `Bearer` token.
+pub fn patch_json_auth(path: &str, token: &str, body: &Value) -> Request<Body> {
+    Request::builder()
+        .method("PATCH")
+        .uri(path)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::from(body.to_string()))
+        .expect("request should build")
+}
+
+/// Build a JSON PATCH request to `path` with no Authorization header.
+pub fn patch_json(path: &str, body: &Value) -> Request<Body> {
+    Request::builder()
+        .method("PATCH")
+        .uri(path)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .expect("request should build")
+}
+
+/// Build a DELETE request to `path` carrying a `Bearer` token.
+pub fn delete_auth(path: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("DELETE")
+        .uri(path)
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .expect("request should build")
+}
+
+/// Build a DELETE request to `path` with no Authorization header.
+pub fn delete(path: &str) -> Request<Body> {
+    Request::builder()
+        .method("DELETE")
+        .uri(path)
+        .body(Body::empty())
+        .expect("request should build")
+}
+
 /// Build a bodyless POST request to `path` carrying a `Bearer` token (for action endpoints
 /// that take no request body, e.g. session start/stop).
 pub fn post_auth(path: &str, token: &str) -> Request<Body> {
