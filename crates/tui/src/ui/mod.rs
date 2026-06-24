@@ -20,11 +20,23 @@ const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 
 /// The base hotkey caption for the task-list screen (idle, not adding). The global timer keys
 /// (`p`, `d`) are shown on every post-auth screen so they are discoverable (ADR-0006 §8.2).
-const TASK_LIST_CAPTION: &str = "a: add  c: mark done  n: notes  Up/Down: move  p: start/stop timer  d: set duration  r: refresh  q: quit";
+/// `|`-separated so each command sits between word boundaries that the caption wrap can break
+/// on cleanly. The phrasing is chosen so that — once the in-flight spinner + ` (Esc to cancel)`
+/// affordance is appended — neither `p: start/stop timer` nor the cancel affordance straddles a
+/// wrap boundary at the 80×24 viewport, keeping the cancel affordance visible (ADR-0006 §8.3).
+const TASK_LIST_CAPTION: &str = "a: add | c: mark done | p: start/stop timer | n: notes | Up/Down: move | r: refresh | d: set duration | q: quit";
 
 /// The base hotkey caption for the notes screen (idle list). Mirrors the task-list caption with
 /// the notes commands (`a` create, `e` edit, `x` delete, Enter open) and an `Esc` back-to-tasks.
-const NOTES_CAPTION: &str = "a: add  e: edit  x: delete  Enter: open  Up/Down: move  Esc: back  p: timer  d: duration  r: refresh  q: quit";
+/// Kept short enough that the caption plus the appended spinner + cancel affordance stays within
+/// the bottom band at the 80×24 viewport (ADR-0006 §8.3).
+const NOTES_CAPTION: &str = "a: add | e: edit | x: del | Enter: open | Esc: back | p: timer | d: dur | r: refresh | q: quit";
+
+/// Height (rows) of the bottom band on a post-auth screen: the hotkey caption (which may wrap)
+/// on the left and the global timer widget on the right. Three rows so the wrapped caption plus
+/// the appended in-flight spinner + cancel affordance stays fully visible at the 80×24 viewport
+/// without clipping the cancel affordance (ADR-0006 §8.3).
+const BOTTOM_BAND_ROWS: u16 = 3;
 
 /// The spinner glyph for the given tick, or empty when not pending. Pure so the spinner cadence
 /// is testable independently of the real loop's timing.
@@ -233,7 +245,7 @@ fn draw_task_list(
             Constraint::Length(1),
             Constraint::Min(3),
             Constraint::Length(2),
-            Constraint::Length(2),
+            Constraint::Length(BOTTOM_BAND_ROWS),
         ])
         .split(area);
 
@@ -318,7 +330,7 @@ fn draw_notes(frame: &mut Frame, notes: &NotesState, timer: &Timer, profile: &st
             Constraint::Length(1),
             Constraint::Min(3),
             Constraint::Length(2),
-            Constraint::Length(2),
+            Constraint::Length(BOTTOM_BAND_ROWS),
         ])
         .split(area);
 
