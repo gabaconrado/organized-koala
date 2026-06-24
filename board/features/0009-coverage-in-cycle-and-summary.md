@@ -161,3 +161,18 @@ move a coverage number.
   pass (docs/`.claude`-only). status: working → review. (Co-author trailers on `6c83e73`/`6b6e373`
   corrected to `*@organized-koala.local` per git-standards — the dispatch's `noreply@anthropic.com`
   is never correct in this repo; learned 0003/0004.)
+- 2026-06-24 [reviewer] Cold review of the `main`-side governance diff (`6b6e373`). All acceptance
+  criteria met: drive SKILL step 6 captures the headline coverage % into `## Summary` every cycle
+  (report-only); CLAUDE.md DoD note is gate-neutral (not a clause, no threshold); eng-manager
+  charter updated; no-docker fallback present in all three files; wording consistent with the "How
+  to run" `coverage` row and the three-home model. Gates green (`fmt --check`/`lint`/`test`).
+  **Chore invariant ATTESTED** — `./ok.sh code-hash HEAD` == `3fa0adef…` == pre-0009 `cef68fe`
+  (zero code-path delta ⇒ no behaviour / no `contract`-wire (#2) / no domain-structure (#3)
+  change); no scope-guard re-type warranted.
+
+  ```text
+  REVIEW-STATUS: approved
+  code-hash: 3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd
+  commit: 97b9794  (human-readable pointer; binding key is the code-hash)
+  chore-invariant: ATTESTED (no behaviour / no contract-wire #2 / no domain-structure #3 change)
+  ```
