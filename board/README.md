@@ -39,7 +39,20 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0007](./features/0007-ok-coverage-verb.md) | Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold) | chore | merged | low | — | — (merged) |
 | [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | merged | medium | — | — (merged) |
 | [0009](./features/0009-coverage-in-cycle-and-summary.md) | Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary | chore | merged | low | 0007 (merged ✓) | — (main-only governance; no worktree) |
+| [0010](./features/0010-notes.md) | Notes — full feature (contract module, migration, server CRUD, TUI views) | feature | ready | medium | — | — (unclaimed) |
+| [0011](./features/0011-task-update-delete-reopen.md) | Task update + delete + reopen — generalize close into PATCH (breaking) | feature | ready | medium | — | — (unclaimed) |
+| [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | ready | medium | — | — (unclaimed) |
 
+> **0010 / 0011 / 0012 — READY (planned, unclaimed).** The final three domain features that
+> complete organized-koala, each born on `main` with its governing ADR (0010→ADR-0007 notes wire
+> contract; 0011→ADR-0008 task mutation generalization; 0012→ADR-0009 profile mutations). Operator
+> locked the design forks: generalize `close`→`PATCH` (task status open↔done, reopen clears
+> `closed_at`); edit scope title+description (notes title+content); **no `updated_at`** (stay flat,
+> #3). Recommended claim order **0010 → 0011 → 0012** — 0010 and 0011 are independent (disjoint
+> files), while 0012's full delete-cascade test wants the `notes` table to exist; `depends-on` is
+> left `[]` because 0012's *code* does not depend on 0010, only its cascade *test* does. No cycle
+> kicked off yet.
+>
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
 > too — its end-to-end acceptance was satisfied collectively at 0004's live verification (full

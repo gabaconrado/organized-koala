@@ -2,7 +2,7 @@
 id: 0012
 title: Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard)
 type: feature      # feature | chore
-status: planned         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0009 lands on `main` with this plan. See sequencing note re: 0010 (notes cascade).

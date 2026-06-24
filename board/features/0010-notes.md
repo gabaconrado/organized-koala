@@ -2,7 +2,7 @@
 id: 0010
 title: Notes — full feature (contract module, migration, server CRUD, TUI views)
 type: feature      # feature | chore
-status: planned         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0007 lands on `main` with this item's plan; no in-flight Board item gates it
