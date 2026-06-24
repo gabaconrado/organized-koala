@@ -2,10 +2,10 @@
 id: 0009
 title: Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary
 type: chore         # feature | chore
-status: ready          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
-depends-on: [0007]  # needs the `./ok.sh coverage` verb on `main` first (NOT on main yet)
+depends-on: [0007]  # SATISFIED 2026-06-24: 0007 merged, `./ok.sh coverage` verb now on `main`
 branch: null        # main-only governance change — NO worktree is cut (home #1 / shared state)
 worktree: null
 created: 2026-06-24
@@ -149,3 +149,8 @@ move a coverage number.
   CLAUDE.md, eng-manager agent) is home-#1 shared state and must never ride a branch; `eng-manager`
   applies it directly on `main`. status: planned → ready (self-accepted; smallest plan, settled
   decisions encoded, no genuine fork).
+- 2026-06-24 [orchestrator] Claimed for the cycle. Dependency `0007` is now **merged to `main`**
+  (`grep -c cmd_coverage ok.sh` == 2 on `main`); 0009 unblocked. Per plan this is a `main`-only
+  governance chore — **NO worktree** is cut; `eng-manager` applies the edits directly on `main`,
+  the cold `reviewer` reads the `main`-side diff + attests the chore invariant, verifier SKIPPED
+  (chore). status: ready → working (in place on `main`).
