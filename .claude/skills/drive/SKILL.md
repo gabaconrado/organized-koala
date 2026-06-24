@@ -122,10 +122,18 @@ both are read-only and report; the orchestrator does the branch-side Board commi
 
 Dispatch `eng-manager`: update agent/skill instructions and standards skills, add CLAUDE.md
 gotchas, register any new crate's dev agent, write the `docs/handoff.md` entry, and fill the
-item's `## Summary`. Those shared/cross-cutting edits (`docs/**`, `.claude/**`) land on
-**`main`** (home #1), while the item's `## Summary` is committed **on the branch** (home #2, it
-travels with the item). The derived `board/README.md` dashboard is regenerated on **`main`**
-from item frontmatter + active branch heads (home #3).
+item's `## Summary`. As part of filling the Summary, `eng-manager` runs **`./ok.sh coverage`**
+and parses the **headline workspace coverage percentage** from its summary output, then records
+it in the `## Summary` as a one-line `coverage: NN.N%` entry — or `coverage: unavailable
+(docker)` when docker / the throwaway test Postgres cannot boot. This runs on **every** cycle
+(both `feature` and `chore`) and is **report-only — never a gate**: the coverage line must NOT
+block the item from reaching `awaiting-merge` (consistent with CLAUDE.md "How to run", which
+calls the verb dev-facing / report-only / not a DoD gate). The coverage line is part of the
+`## Summary`, so it is committed **on the branch** for branched items (home #2) and on `main`
+for `main`-only governance items. Those shared/cross-cutting edits (`docs/**`, `.claude/**`)
+land on **`main`** (home #1), while the item's `## Summary` is committed **on the branch**
+(home #2, it travels with the item). The derived `board/README.md` dashboard is regenerated on
+**`main`** from item frontmatter + active branch heads (home #3).
 
 ### 7. Freshen against `main` (rebase current — so the human reviews up-to-date)
 

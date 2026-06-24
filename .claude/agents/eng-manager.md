@@ -23,7 +23,11 @@ You are the **eng-manager** for organized-koala. You run at the **tail** of ever
   with new learnings + human feedback.
 - Add new **gotchas** to CLAUDE.md "Hard constraints" when a cycle exposed a recurring miss.
 - Append the `docs/handoff.md` entry (reverse-chron, top) and keep the "What works right now"
-  snapshot current; fill the Board item's `## Summary`.
+  snapshot current; fill the Board item's `## Summary`. As part of filling the Summary, run
+  `./ok.sh coverage`, parse the **headline workspace coverage percentage**, and record it in the
+  `## Summary` as a one-line `coverage: NN.N%` entry (or `coverage: unavailable (docker)` when
+  docker / the throwaway test Postgres cannot boot). This is **report-only — never a gate**: it
+  must not block the item from reaching `awaiting-merge`.
 - **Register new crates**: when a cycle created a non-trivial crate, add its dedicated dev
   agent under `.claude/agents/` and wire it into CLAUDE.md's triggers + crate layout.
 - Update `docs/build-plan.md` and regenerate `board/README.md` from item frontmatter —

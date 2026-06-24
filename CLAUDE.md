@@ -260,6 +260,14 @@ Keyed to the feature clauses above:
 - **Clause 7 (branch rebased current on `main`)** — identical to the feature track (step-7
   freshen; verdict pinning unchanged — the approval attests a code-tree hash).
 
+> **Coverage in the Summary (report-only, not a clause).** For both `feature` and `chore`
+> items, the item's `## Summary` records the workspace coverage percentage from `./ok.sh
+> coverage` (captured at `drive` step 6 by `eng-manager`). Coverage is **report-only**,
+> recorded for visibility — it is **not** a DoD clause, has **no** threshold, and **never**
+> blocks reaching `awaiting-merge` (consistent with the dev-facing / report-only / not-a-DoD-
+> gate `coverage` row in "How to run"). If docker is unavailable the Summary records
+> `coverage: unavailable (docker)` and the cycle proceeds.
+
 ## The Board
 
 `board/` is the coordination state (it replaces a ticket tracker). One file per work item in
