@@ -2,7 +2,7 @@
 id: 0009
 title: Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary
 type: chore         # feature | chore
-status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: [0007]  # SATISFIED 2026-06-24: 0007 merged, `./ok.sh coverage` verb now on `main`
@@ -154,3 +154,10 @@ move a coverage number.
   governance chore — **NO worktree** is cut; `eng-manager` applies the edits directly on `main`,
   the cold `reviewer` reads the `main`-side diff + attests the chore invariant, verifier SKIPPED
   (chore). status: ready → working (in place on `main`).
+- 2026-06-24 [eng-manager] Built the three governance edits on `main` (commit `6b6e373`):
+  drive SKILL step 6 (run `./ok.sh coverage`, parse headline %, write `coverage: NN.N%` /
+  `coverage: unavailable (docker)` into `## Summary` every cycle, report-only); CLAUDE.md DoD
+  gate-neutral note; eng-manager charter bullet. Gates green: `fmt --check`, `lint`, `test` all
+  pass (docs/`.claude`-only). status: working → review. (Co-author trailers on `6c83e73`/`6b6e373`
+  corrected to `*@organized-koala.local` per git-standards — the dispatch's `noreply@anthropic.com`
+  is never correct in this repo; learned 0003/0004.)
