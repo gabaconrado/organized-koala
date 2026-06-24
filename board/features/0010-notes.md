@@ -155,3 +155,12 @@ into the working branch before 2/3 compile.
       branch `feature/0010-notes` cut from `main` 72c217b (carries the plan + ADR-0007, verified
       present in worktree). Docker capability confirmed UP (Risk #6 cleared). Building
       contract→server→tui per the slice order.
+- [x] 2026-06-24 [drive] Build complete (contract→server→tui, tests alongside). S1 `contract`
+      note module (`73fee78`); S1t contract tests ×11 (`6a1c980`). S2 server CRUD + migration
+      `20260612163049_notes` (up/down) + `.sqlx/` refresh (`f50416e`); S2t server integration
+      tests ×28 incl. profile-scoping + auth (`0e15b24`). S3+S4 TUI client/protocol + notes view,
+      `n` opens from the task list (`863b320`); S4t TUI `TestBackend` suite ×13 (`827246e`). Fix
+      `a3d8f2a`: S4t surfaced a real regression — adding `n: notes` grew `TASK_LIST_CAPTION` so the
+      pending caption+spinner clipped the cancel affordance at 80×24 (ADR-0006 §8.3); `tui-dev`
+      widened the bottom band to 3 rows + re-phrased both captions, no assertions weakened. All four
+      gates green at branch head: `./ok.sh build | test | lint --all-targets | fmt --check`.
