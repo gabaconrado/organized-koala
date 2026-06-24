@@ -2,7 +2,7 @@
 id: 0009
 title: Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary
 type: chore         # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: [0007]  # SATISFIED 2026-06-24: 0007 merged, `./ok.sh coverage` verb now on `main`
@@ -110,24 +110,24 @@ decision by definition).
 
 ## Acceptance criteria
 
-- [ ] **Gated on 0007.** Implementation does not begin until `0007` (the `./ok.sh coverage` verb)
-      is **merged to `main`**; `depends-on: [0007]` is honored.
-- [ ] `drive` SKILL **step 6** updated so `eng-manager` runs `./ok.sh coverage`, parses the
+- [x] **Gated on 0007.** Implementation did not begin until `0007` (the `./ok.sh coverage` verb)
+      was **merged to `main`** (verified `grep -c cmd_coverage ok.sh` == 2); `depends-on: [0007]` honored.
+- [x] `drive` SKILL **step 6** updated so `eng-manager` runs `./ok.sh coverage`, parses the
       headline coverage %, and writes it into the item's `## Summary` — on **every** cycle (feature
       and chore).
-- [ ] The coverage percentage **appears in the `## Summary`** of items by the time they reach
-      `awaiting-merge`.
-- [ ] **Report-only / no-gate preserved.** No threshold, no pass/fail, NOT added as a DoD clause;
+- [x] The coverage percentage **appears in the `## Summary`** of items by the time they reach
+      `awaiting-merge` (this item carries `coverage: 66.36% line` — the first to do so).
+- [x] **Report-only / no-gate preserved.** No threshold, no pass/fail, NOT added as a DoD clause;
       it never blocks reaching `awaiting-merge`. Consistent with 0007 + CLAUDE.md "How to run".
-- [ ] **No-docker fallback wording present:** Summary records `coverage: unavailable (docker)`
+- [x] **No-docker fallback wording present:** Summary records `coverage: unavailable (docker)`
       and the cycle still reaches `awaiting-merge` when docker/the test Postgres is unavailable.
-- [ ] `CLAUDE.md` Definition-of-done wording updated to describe the (non-gate) coverage Summary
+- [x] `CLAUDE.md` Definition-of-done wording updated to describe the (non-gate) coverage Summary
       capture; the "How to run" `coverage` row stays consistent.
-- [ ] `.claude/agents/eng-manager.md` charter updated to include the coverage capture in `##
+- [x] `.claude/agents/eng-manager.md` charter updated to include the coverage capture in `##
       Summary`.
-- [ ] **Chore invariant holds:** docs/`.claude`-only; no crate source, no `contract`/wire (#2),
+- [x] **Chore invariant holds:** docs/`.claude`-only; no crate source, no `contract`/wire (#2),
       no domain (#3), no product behaviour change. Applied **on `main`** with **no worktree**.
-- [ ] `./ok.sh test | lint | fmt --check` green (unchanged by this docs/`.claude`-only edit).
+- [x] `./ok.sh test | lint | fmt --check` green (unchanged by this docs/`.claude`-only edit).
 
 **Out of scope (would re-scope to `feature` via the scope guard):** any coverage **threshold** or
 DoD gate; per-crate coverage breakdowns or coverage diffs; CI wiring / coverage upload / report
@@ -176,6 +176,21 @@ move a coverage number.
   commit: 97b9794  (human-readable pointer; binding key is the code-hash)
   chore-invariant: ATTESTED (no behaviour / no contract-wire #2 / no domain-structure #3 change)
   ```
+
+- 2026-06-24 [eng-manager] Step 6 (learn + summarise) on `main`: filled `## Summary`; recorded
+  `coverage: 66.36% line (61.48% region)` from `./ok.sh coverage` (docker + throwaway Postgres
+  booted) — **first item Summary to carry a coverage line**, dogfooding the rule 0009 ships. Wrote
+  the `docs/handoff.md` 0009 entry and regenerated `board/README.md`. Process learning: the
+  `noreply@anthropic.com`-in-dispatch-prompt issue recurred (3rd time after 0003/0004), so added a
+  **dispatcher-side** "Dispatch discipline" note to the drive SKILL + a git-standards cross-ref
+  (prevention at prompt-authoring, not relying on each agent to override). Commits `0ae2d59`
+  (Summary), `45cd347` (handoff + dashboard + dispatch discipline).
+- 2026-06-24 [orchestrator] Step 5 (verify) **SKIPPED** — chore track, clause 4 N/A. Step 7
+  (freshen) **N/A** — `main`-only item, no branch; everything is already linear on `main`. Chore
+  DoD satisfied: tests/lint/fmt green (clauses 1–3); verifier skipped (4); no ADR (5 N/A);
+  `REVIEW-STATUS: approved` + chore invariant attested at code-hash `3fa0adef…` (6); no branch to
+  rebase (7). `./ok.sh code-hash HEAD` still `3fa0adef…` ⇒ the approval is live. status: review →
+  **awaiting-merge**. Cycle terminal — the human reviews the `main`-side diff and flips to `merged`.
 
 ## Summary
 
