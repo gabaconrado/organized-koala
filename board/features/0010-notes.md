@@ -174,3 +174,20 @@ into the working branch before 2/3 compile.
       a refresh); A8 no `chrono` in tui. Migration up/down paired + `ON DELETE CASCADE`. Caption
       `fix(tui)` in-scope (ADR-0006 §8.3), `rendering.rs:227` guard not weakened. No fix-now, no
       nits, no out-of-scope chore. Verdict valid while `./ok.sh code-hash HEAD` == the hash above.
+- [x] 2026-06-24 [verifier] **VERIFY-STATUS: verified** — code-hash
+      `46c1c60f1eb3865eb127a72502982827ebb09d65` (== reviewer hash; head sha `2a4074d`). Booted the
+      real stack via `./ok.sh up` (docker 29.5.3); migration `20260612163049_notes` applied
+      (`_sqlx_migrations.success=t`); `\d notes` confirms flat schema `id,profile_id,title,content,
+      created_at` (no `updated_at`), FK `ON DELETE CASCADE`, `(profile_id,created_at DESC)` index.
+      Live over the wire: create 201 (flat body, title trimmed, empty content ok; empty/whitespace
+      title → 400 `validation_failed`); list 200 bare array newest-first; get 200 / missing → 404
+      `not_found`; PATCH 200 in-place, `created_at` unchanged, no `updated_at`; delete 204 empty
+      body, re-delete → 404. Profile-scoping (#4): user B sees `[]`, A's note under B → 404
+      (never 403) for GET/PATCH/DELETE. Error bodies `{code,message}`; 401 `unauthenticated`
+      without auth. OTel: all five handler spans emitted (`server::handlers::notes`) with
+      user_id/profile_id/note_id attrs + create/update/delete events. `./ok.sh test` all green
+      (server notes 28, tui notes `TestBackend` 13, rendering 11). One stated inference: the
+      reqwest `HttpClient` path verified by structural equivalence (curl drove the wire; the
+      `tui` Client maps one-for-one + `tester`'s 13-test suite drives the trait), not a literal
+      live reqwest harness (would require editing read-only code) — not a coverage gap. Stack
+      torn down; worktree clean.
