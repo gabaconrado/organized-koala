@@ -191,3 +191,47 @@ into the working branch before 2/3 compile.
       `tui` Client maps one-for-one + `tester`'s 13-test suite drives the trait), not a literal
       live reqwest harness (would require editing read-only code) — not a coverage gap. Stack
       torn down; worktree clean.
+
+<!-- ─────────────────────────────  SUMMARY  ───────────────────────────── -->
+## Summary
+
+**Notes — the final domain feature — shipped end-to-end across all three crates** (the task
+surface's near-exact structural clone, governed by [ADR-0007][adr-0007]). A user can create
+(non-empty trimmed title, content may be empty), list newest-first, read, edit in place, and
+delete free-form notes, all scoped to the active profile.
+
+What shipped (on the branch):
+
+- **`contract`** — a new `note` module: `Note { id, title, content, created_at }`,
+  `CreateNoteRequest { title, content }`, `UpdateNoteRequest { title, content }`, reusing the
+  `{ code?, message }` error contract with **no** new `ErrorCode`. Flat (#3), no `updated_at`.
+- **`server`** — five CRUD routes under `/api/profiles/{id}/notes` (create 201 / list 200 bare
+  array newest-first / get 200 / update 200 in-place / delete 204), every query ownership-joined
+  so an unowned/missing profile or note id is `404 not_found` (never 403, #4). Reversible
+  migration `20260612163049_notes` (paired up/down; `ON DELETE CASCADE`, `(profile_id,
+  created_at DESC)` index) + `.sqlx/` refresh.
+- **`tui`** — five `Client` trait methods + `HttpClient` impls, `ClientRequest`/`Outcome`
+  variants (carrying `token` + `profile_id`) + worker arms, and a `Screen::Notes` view (list +
+  create/edit/delete sub-flows) opened by `n` from the task list. Stateless (#1): every view
+  derives from a server response; no `chrono` in `tui` (A8).
+- **`fix(tui)`** — a caption-layout regression surfaced by the TUI test suite: adding `n: notes`
+  grew `TASK_LIST_CAPTION` so the pending caption + in-flight spinner clipped the cancel
+  affordance at the 80×24 test viewport (ADR-0006 §8.3); the bottom band was widened to 3 rows
+  and both captions re-phrased with ` | ` separators, no assertions weakened.
+
+Tests in all three crates: `contract` note DTOs 11 (+ doctests), `server` notes integration 28
+(incl. profile-scoping + auth-required per route), `tui` `TestBackend` notes suite 13 (+
+rendering 11). `./ok.sh test | lint --all-targets | fmt --check` all green at branch head.
+
+**Verdicts** (both pinned to code-hash `46c1c60f1eb3865eb127a72502982827ebb09d65`):
+
+- **reviewer — REVIEW-STATUS: approved.** Hard constraints clear (#1/#2/#3/#4); DTOs only in
+  `contract`; no new `ErrorCode`; migration up/down paired + cascade; caption `fix(tui)`
+  in-scope.
+- **verifier — VERIFY-STATUS: verified.** Booted the real stack (`./ok.sh up`); migration
+  applied; flat schema confirmed; the full wire surface exercised live (shapes, status codes,
+  `{code,message}` error contract, profile-scoping → 404, all five OTel handler spans). The
+  reqwest `HttpClient` path verified by structural equivalence + the 13-test suite (one stated
+  inference, not a coverage gap).
+
+coverage: 68.24% line (62.99% region, 70.77% function) — report-only, not a gate.
