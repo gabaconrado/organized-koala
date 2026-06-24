@@ -18,6 +18,14 @@ logic in a `ScheduleWakeup` re-arm; it does not re-define the cycle.
 
 > Every step **recomputes state** from the Board (`board/features/*.md` frontmatter + Log) and
 > `git` (`git worktree list`, branch heads). There is no scratch state file.
+>
+> **Dispatch discipline — never hardcode a commit trailer into a dispatch prompt.** The
+> co-author footer identity is owned by `git-standards` (`<agent>@organized-koala.local`), and a
+> dispatched agent derives it from that skill — **not** from the prompt. Do **not** write a
+> `Co-authored-by:` line into any dispatch prompt: a hardcoded trailer gets copied verbatim, and
+> the recurring failure is a prompt carrying `noreply@anthropic.com` (never correct in this repo)
+> leaking into a real commit (learned 0003/0004, and again on 0009's dispatch). State the
+> committing agent's *role* if needed; let `git-standards` supply the trailer.
 
 ### 0. Feedback sweep (FIRST — outranks claiming new work)
 

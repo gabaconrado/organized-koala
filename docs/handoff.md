@@ -5,6 +5,75 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-24 (0009 — coverage capture wired into the cycle + each Summary; chore, `main`-only)
+
+The operator's process request — *"add the coverage run in the process, and report the code
+coverage percentage in the summary of the tasks when they are awaiting merge"* — shipped as a
+`main`-only governance `chore` (commit `6b6e373`, code-hash
+`3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd`). **No worktree was cut**: every edited file is home-#1
+shared state (drive SKILL, CLAUDE.md, the eng-manager agent def) that must never ride a feature
+branch, so `eng-manager` applied the edits directly on `main` and the orchestrator advanced status
+in place. It ran the **lighter chore DoD** — gates green + a cold reviewer approval **attesting the
+chore invariant** (code-path digest byte-identical to pre-0009 `cef68fe` ⇒ zero code delta) — and
+the **live verifier pass was correctly skipped** (chore clause 4 N/A).
+
+What shipped (three governance edits, all on `main`):
+
+- **`drive` SKILL step 6** — step 6 now runs `./ok.sh coverage`, parses the headline workspace
+  coverage %, and writes a `coverage: NN.N%` line into the item's `## Summary` (or
+  `coverage: unavailable (docker)` when docker / the throwaway test Postgres cannot boot). Runs on
+  **every** cycle (feature and chore); **report-only — never a gate**.
+- **`CLAUDE.md` Definition of done** — a short gate-neutral note: the Summary records the coverage
+  % for both `feature` and `chore`, for visibility only — not a clause, no threshold, never
+  blocking; docker-unavailable becomes `unavailable (docker)` and the cycle proceeds. Consistent
+  with the "How to run" `coverage` row.
+- **`.claude/agents/eng-manager.md` charter** — the Summary-filling bullet now explicitly includes
+  the coverage capture + `unavailable (docker)` fallback (report-only).
+
+**This cycle dogfoods the very feature 0009 introduces.** 0009's own `## Summary` is the **first
+item Summary to carry a coverage line**: `coverage: 66.36% line (61.48% region, 66.67% function)`,
+the headline `TOTAL` from a fresh `./ok.sh coverage` run (docker + throwaway test Postgres booted
+cleanly, same as `./ok.sh test` this cycle — nothing acquired, hard constraint #6 intact). Matches
+the ~66% line / ~61% region 0007 baseline; report-only, no target to hit.
+
+**0009 depended on 0007** (the `./ok.sh coverage` verb), which **merged first** — 0009 consumes
+that verb and could not start until it landed on `main` (`grep -c cmd_coverage ok.sh` == 2).
+
+Durable learnings:
+
+- **`drive` SKILL + `git-standards` (reinforcing learned 0003/0004).** The
+  `noreply@anthropic.com`-in-a-dispatch-prompt failure surfaced **again** on 0009: the dispatch
+  prompt hardcoded `Co-authored-by: … <noreply@anthropic.com>`, corrected to the
+  `*@organized-koala.local` form per git-standards (the footer identity is owned by that skill,
+  never copied from a prompt; `<noreply@anthropic.com>` is never correct in this repo). Because
+  this is now a **third recurrence**, the durable fix moved to the *dispatcher* side: a new
+  **"Dispatch discipline"** note in `drive`'s Procedure preamble — never write a `Co-authored-by:`
+  line into a dispatch prompt; state the committing agent's role and let `git-standards` supply the
+  trailer — plus a cross-referencing one-liner appended to `git-standards`. The agent-side rule was
+  already correct; the gap was that prompts kept injecting the wrong trailer, so the prevention
+  belongs where the prompt is authored.
+- **No new ADR, no new crate, no new dev agent, no new CLAUDE.md hard-constraint.** A chore makes no
+  contract/domain decision; the coverage metric is already operator-sanctioned (0007) and stays
+  report-only. The three-home model, chore DoD, scope guard, and verdict-pinning all behaved as
+  written.
+
+Process note worth keeping (not an edit): a `main`-only governance chore has **no worktree and no
+branch**, so step 6's "coverage line is committed on the branch (home #2)" guidance resolves to
+"on `main`" for this item — the Summary lives on `main` alongside the rest of the change. The
+SKILL/CLAUDE.md wording already states this explicitly, so it needed no correction; recorded here
+as the worked example of the `main`-only path through the new step-6 rule.
+
+**Homes.** Everything is on `main` (this is a `main`-only item): the three governance edits
+(`6b6e373`), this `docs/handoff.md` entry (+ the "What works right now" snapshot refreshed for the
+0009 state), the `drive`/`git-standards` dispatch-discipline edits, the item's `## Summary`
+(home 1 for a `main`-only item — there is no branch), and the regenerated `board/README.md` (home 3).
+`branch: null` / `worktree: null` stay. The orchestrator flips 0009 to `awaiting-merge` in place on
+`main` after this step.
+
+**Free pickup noted (mintable `chore`):** none this cycle.
+
+---
+
 ## Handoff — 2026-06-23 (0007 — report-only `./ok.sh coverage` verb; chore, lighter DoD)
 
 The operator-sanctioned coverage follow-up (captured in the 2026-06-12 0003 handoff, item #2,
@@ -1008,8 +1077,8 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   `tui/src/main.rs` stale-doc-comment fix) ran mint → claim → build → invariant-attesting cold
   review → verify skipped → `awaiting-merge`, then fast-forwarded to `main` (code-hash
   `401ad3de59c4cc7e33c3ebf8308c171d80659e4e`); the chore lane needed zero process correction.
-- **The account-global Pomodoro focus timer is at `awaiting-merge` on its branch** (0008, the
-  first Focus-phase feature; live-verified, branch-owned, not yet merged): a new `contract` `timer`
+- **The account-global Pomodoro focus timer is MERGED on `main`** (0008, the
+  first Focus-phase feature; live-verified): a new `contract` `timer`
   module (`TimerConfig`, `UpdateTimerConfigRequest`, the tagged `TimerSession` enum carrying
   `ends_at` + `server_now`), five account-global `/api/timer/...` server endpoints keyed on
   `user_id` (config get/update, session get/start/stop) with a reversible migration creating
@@ -1028,8 +1097,9 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   the 0008-R1 end state, both pinned to code-hash `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` on
   `feature/0008-pomodoro-timer` (the original 0008 build was approved + verified at
   `708ee8d0085ce9b3af68eb7e1b76dbe56a6185da`, voided when the re-entry moved the tree).
-- **The report-only `./ok.sh coverage` verb is at `awaiting-merge` on its branch** (0007, a
-  `chore`; branch-owned, not yet merged): `cargo llvm-cov --workspace --summary-only`, reusing
+  Fast-forwarded to `main` at `c32f0ad`; worktree + branch removed.
+- **The report-only `./ok.sh coverage` verb is MERGED on `main`** (0007, a
+  `chore`): `cargo llvm-cov --workspace --summary-only`, reusing
   `cmd_test`'s live-DB wiring (throwaway test Postgres booted + torn down on a `RETURN` trap), in
   the no-arg usage/help. **No threshold, not a DoD gate** — purely reported (operator-sanctioned
   shape: coverage visible, not a brittle bar). Baseline at implementation: ~66% line / ~66%
@@ -1037,4 +1107,15 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   ran the lighter chore DoD: gates green + a cold reviewer **approved** attesting the chore
   invariant, pinned to code-hash `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` on
   `feature/0007-ok-coverage-verb`; the live verifier pass was correctly **skipped**. The 0003
-  "sanctioned follow-up" is now consumed.
+  "sanctioned follow-up" is now consumed. Fast-forwarded to `main` at `6860b28`; worktree + branch
+  removed.
+- **Coverage is now captured in the cycle and recorded in each item's Summary** (0009, a
+  `main`-only governance `chore`, at `awaiting-merge` on `main` after this step): `drive` step 6
+  runs `./ok.sh coverage`, parses the headline workspace coverage %, and writes a `coverage: NN.N%`
+  line (or `coverage: unavailable (docker)`) into the item's `## Summary` on **every** cycle
+  (feature and chore). **Report-only — never a gate** (no threshold, not a DoD clause, never blocks
+  `awaiting-merge`); consistent with the "How to run" `coverage` row and 0007. Three governance
+  edits (drive SKILL, CLAUDE.md DoD note, eng-manager charter), applied directly on `main` with **no
+  worktree**; cold reviewer **approved** with the chore invariant attested (code-hash
+  `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd`), live verifier **skipped**. 0009's own Summary is the
+  first to carry a coverage line: 66.36% line / 61.48% region / 66.67% function.
