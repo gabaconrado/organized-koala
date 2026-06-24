@@ -2,7 +2,7 @@
 id: 0009
 title: Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary
 type: chore         # feature | chore
-status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: [0007]  # SATISFIED 2026-06-24: 0007 merged, `./ok.sh coverage` verb now on `main`
@@ -191,6 +191,8 @@ move a coverage number.
   `REVIEW-STATUS: approved` + chore invariant attested at code-hash `3fa0adef…` (6); no branch to
   rebase (7). `./ok.sh code-hash HEAD` still `3fa0adef…` ⇒ the approval is live. status: review →
   **awaiting-merge**. Cycle terminal — the human reviews the `main`-side diff and flips to `merged`.
+- 2026-06-24 [human] Reviewed the `main`-side diff and authorized merge. status: awaiting-merge →
+  **merged** (no branch ff-merge — `main`-only governance item; the change is already on `main`).
 
 ## Summary
 

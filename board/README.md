@@ -38,7 +38,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0006](./features/0006-tui-mainrs-stale-doccomment.md) | Fix stale doc comment in `tui/src/main.rs` | chore | merged | low | — | — (merged) |
 | [0007](./features/0007-ok-coverage-verb.md) | Add a reported-only `./ok.sh coverage` verb (cargo-llvm-cov, no threshold) | chore | merged | low | — | — (merged) |
 | [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | merged | medium | — | — (merged) |
-| [0009](./features/0009-coverage-in-cycle-and-summary.md) | Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary | chore | awaiting-merge | low | 0007 (merged ✓) | — (main-only governance; no worktree) |
+| [0009](./features/0009-coverage-in-cycle-and-summary.md) | Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary | chore | merged | low | 0007 (merged ✓) | — (main-only governance; no worktree) |
 
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
@@ -73,9 +73,10 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > authorized the close; re-freshened onto current `main` (code-hash unchanged → verdict carried
 > forward), fast-forwarded to `main` at `6860b28`; worktree + branch removed.
 >
-> **0009 — coverage in the cycle + in each Summary — `awaiting-merge`** (a `chore`,
-> operator-requested; a **`main`-only governance change, no worktree** — its `main` status is the
-> live status). `drive` step 6 now runs `./ok.sh coverage`, parses the headline %, and records it in
+> **0009 — coverage in the cycle + in each Summary — MERGED.** (a `chore`,
+> operator-requested; a **`main`-only governance change, no worktree** — already on `main`, so the
+> human's close is a status flip, not a branch ff-merge). `drive` step 6 now runs
+> `./ok.sh coverage`, parses the headline %, and records it in
 > each item's `## Summary` by `awaiting-merge` — for **all** items (feature + chore). **Report-only,
 > never a gate** (consistent with 0007); if docker is unavailable the Summary records
 > `coverage: unavailable (docker)` and the cycle still completes. **No ADR** (DoD-wording
