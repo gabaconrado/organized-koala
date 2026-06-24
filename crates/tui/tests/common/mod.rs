@@ -27,8 +27,8 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use contract::{
-    CreateTaskRequest, LoginRequest, Profile, RegisterRequest, SessionResponse, Task, TimerConfig,
-    TimerSession, UpdateTimerConfigRequest,
+    CreateNoteRequest, CreateTaskRequest, LoginRequest, Note, Profile, RegisterRequest,
+    SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest, UpdateTimerConfigRequest,
 };
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -75,6 +75,33 @@ pub enum Call {
         profile_id: String,
         task_id: String,
     },
+    ListNotes {
+        token: String,
+        profile_id: String,
+    },
+    CreateNote {
+        token: String,
+        profile_id: String,
+        title: String,
+        content: String,
+    },
+    GetNote {
+        token: String,
+        profile_id: String,
+        note_id: String,
+    },
+    UpdateNote {
+        token: String,
+        profile_id: String,
+        note_id: String,
+        title: String,
+        content: String,
+    },
+    DeleteNote {
+        token: String,
+        profile_id: String,
+        note_id: String,
+    },
     GetTimerConfig {
         token: String,
     },
@@ -106,6 +133,11 @@ struct Inner {
     tasks: RefCell<VecDeque<ClientResult<Vec<Task>>>>,
     create: RefCell<VecDeque<ClientResult<Task>>>,
     close: RefCell<VecDeque<ClientResult<Task>>>,
+    notes: RefCell<VecDeque<ClientResult<Vec<Note>>>>,
+    create_note: RefCell<VecDeque<ClientResult<Note>>>,
+    get_note: RefCell<VecDeque<ClientResult<Note>>>,
+    update_note: RefCell<VecDeque<ClientResult<Note>>>,
+    delete_note: RefCell<VecDeque<ClientResult<()>>>,
     timer_config: RefCell<VecDeque<ClientResult<TimerConfig>>>,
     update_timer_config: RefCell<VecDeque<ClientResult<TimerConfig>>>,
     timer_session: RefCell<VecDeque<ClientResult<TimerSession>>>,
@@ -150,6 +182,21 @@ impl FakeClient {
     }
     pub fn push_close(&self, r: ClientResult<Task>) {
         self.inner.close.borrow_mut().push_back(r);
+    }
+    pub fn push_notes(&self, r: ClientResult<Vec<Note>>) {
+        self.inner.notes.borrow_mut().push_back(r);
+    }
+    pub fn push_create_note(&self, r: ClientResult<Note>) {
+        self.inner.create_note.borrow_mut().push_back(r);
+    }
+    pub fn push_get_note(&self, r: ClientResult<Note>) {
+        self.inner.get_note.borrow_mut().push_back(r);
+    }
+    pub fn push_update_note(&self, r: ClientResult<Note>) {
+        self.inner.update_note.borrow_mut().push_back(r);
+    }
+    pub fn push_delete_note(&self, r: ClientResult<()>) {
+        self.inner.delete_note.borrow_mut().push_back(r);
     }
     pub fn push_timer_config(&self, r: ClientResult<TimerConfig>) {
         self.inner.timer_config.borrow_mut().push_back(r);
@@ -240,6 +287,64 @@ impl Client for FakeClient {
         pop(&self.inner.close, "close_task")
     }
 
+    fn list_notes(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Note>> {
+        self.inner.calls.borrow_mut().push(Call::ListNotes {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+        });
+        pop(&self.inner.notes, "list_notes")
+    }
+
+    fn create_note(
+        &self,
+        token: &str,
+        profile_id: &str,
+        req: &CreateNoteRequest,
+    ) -> ClientResult<Note> {
+        self.inner.calls.borrow_mut().push(Call::CreateNote {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+            title: req.title.clone(),
+            content: req.content.clone(),
+        });
+        pop(&self.inner.create_note, "create_note")
+    }
+
+    fn get_note(&self, token: &str, profile_id: &str, note_id: &str) -> ClientResult<Note> {
+        self.inner.calls.borrow_mut().push(Call::GetNote {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+            note_id: note_id.to_owned(),
+        });
+        pop(&self.inner.get_note, "get_note")
+    }
+
+    fn update_note(
+        &self,
+        token: &str,
+        profile_id: &str,
+        note_id: &str,
+        req: &UpdateNoteRequest,
+    ) -> ClientResult<Note> {
+        self.inner.calls.borrow_mut().push(Call::UpdateNote {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+            note_id: note_id.to_owned(),
+            title: req.title.clone(),
+            content: req.content.clone(),
+        });
+        pop(&self.inner.update_note, "update_note")
+    }
+
+    fn delete_note(&self, token: &str, profile_id: &str, note_id: &str) -> ClientResult<()> {
+        self.inner.calls.borrow_mut().push(Call::DeleteNote {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+            note_id: note_id.to_owned(),
+        });
+        pop(&self.inner.delete_note, "delete_note")
+    }
+
     fn get_timer_config(&self, token: &str) -> ClientResult<TimerConfig> {
         self.inner.calls.borrow_mut().push(Call::GetTimerConfig {
             token: token.to_owned(),
@@ -309,6 +414,30 @@ fn run_request(client: &FakeClient, request: ClientRequest) -> Outcome {
             profile_id,
             task_id,
         } => Outcome::CloseTask(client.close_task(&token, &profile_id, &task_id)),
+        ClientRequest::ListNotes { token, profile_id } => {
+            Outcome::ListNotes(client.list_notes(&token, &profile_id))
+        }
+        ClientRequest::CreateNote {
+            token,
+            profile_id,
+            req,
+        } => Outcome::CreateNote(client.create_note(&token, &profile_id, &req)),
+        ClientRequest::GetNote {
+            token,
+            profile_id,
+            note_id,
+        } => Outcome::GetNote(client.get_note(&token, &profile_id, &note_id)),
+        ClientRequest::UpdateNote {
+            token,
+            profile_id,
+            note_id,
+            req,
+        } => Outcome::UpdateNote(client.update_note(&token, &profile_id, &note_id, &req)),
+        ClientRequest::DeleteNote {
+            token,
+            profile_id,
+            note_id,
+        } => Outcome::DeleteNote(client.delete_note(&token, &profile_id, &note_id)),
         ClientRequest::GetTimerConfig { token } => {
             Outcome::GetTimerConfig(client.get_timer_config(&token))
         }
@@ -406,6 +535,19 @@ pub fn done_task(id: &str, title: &str, created_at: &str, closed_at: &str) -> Ta
         "closed_at": closed_at,
     });
     serde_json::from_value(json).expect("valid task json")
+}
+
+/// Build a [`Note`] from canonical wire JSON (so its `chrono` timestamp is parsed by the
+/// `contract` derive). `created_at` is supplied so tests can pin newest-first ordering
+/// deterministically.
+pub fn note(id: &str, title: &str, content: &str, created_at: &str) -> Note {
+    let json = serde_json::json!({
+        "id": id,
+        "title": title,
+        "content": content,
+        "created_at": created_at,
+    });
+    serde_json::from_value(json).expect("valid note json")
 }
 
 /// A [`TimerConfig`] with the given duration in minutes.
@@ -508,6 +650,7 @@ pub fn screen_name(app: &App) -> &'static str {
     match app.screen() {
         Screen::Auth(_) => "auth",
         Screen::TaskList(_) => "task_list",
+        Screen::Notes(_) => "notes",
         Screen::Offline { .. } => "offline",
     }
 }
