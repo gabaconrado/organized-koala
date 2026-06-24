@@ -176,3 +176,35 @@ move a coverage number.
   commit: 97b9794  (human-readable pointer; binding key is the code-hash)
   chore-invariant: ATTESTED (no behaviour / no contract-wire #2 / no domain-structure #3 change)
   ```
+
+## Summary
+
+Wired **report-only coverage capture into the development cycle** and made each Board item's
+`## Summary` carry the headline coverage number by the time it reaches `awaiting-merge`. Three
+governance edits, all home-#1 shared state:
+
+- **`drive` SKILL step 6 ("Learn + summarise")** — `eng-manager` now runs `./ok.sh coverage`,
+  parses the headline workspace coverage %, and writes a one-line `coverage: NN.N%` entry into the
+  item's `## Summary` (or `coverage: unavailable (docker)` when docker / the throwaway test
+  Postgres cannot boot). Runs on **every** cycle (feature and chore); **report-only — never a
+  gate**, so it never blocks reaching `awaiting-merge`.
+- **`CLAUDE.md` Definition of done** — a short, gate-neutral note: the Summary records the
+  `./ok.sh coverage` percentage for both `feature` and `chore` items, for visibility only — not a
+  DoD clause, no threshold, never blocking; docker-unavailable records `unavailable (docker)` and
+  the cycle proceeds. Not numbered as a clause; consistent with the "How to run" `coverage` row.
+- **`.claude/agents/eng-manager.md` charter** — the Summary-filling responsibility now explicitly
+  includes the coverage capture + the `unavailable (docker)` fallback (report-only).
+
+**Classification:** `chore` — docs/`.claude`-only, no crate source, no `contract`/wire (#2), no
+domain-structure (#3), no product behaviour. **`main`-only governance change — NO worktree was
+cut** (every edited file is home-#1 shared state that must never ride a feature branch). Applied
+directly on `main` by `eng-manager`; the orchestrator advanced status in place. Cold `reviewer`
+**approved** at code-hash `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd` with the **chore invariant
+attested** (code-path digest byte-identical to pre-0009 `cef68fe` ⇒ zero code delta); the live
+`verifier` pass was **skipped** (chore track, clause 4 N/A).
+
+**Depended on 0007** (the `./ok.sh coverage` verb), which **merged to `main` first** — this item
+consumes that verb and could not start until it landed.
+
+coverage: 66.36% line (61.48% region, 66.67% function) — headline `TOTAL` from `./ok.sh coverage`.
+This is the **first item to carry a coverage line**, dogfooding the very rule it introduces.
