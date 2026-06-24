@@ -2,7 +2,7 @@
 id: 0010
 title: Notes — full feature (contract module, migration, server CRUD, TUI views)
 type: feature      # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0007 lands on `main` with this item's plan; no in-flight Board item gates it
@@ -147,3 +147,11 @@ into the working branch before 2/3 compile.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0007]: ../../docs/adr/0007-notes-wire-contract.md
+
+<!-- ─────────────────────────────  LOG / COMMENTS  ───────────────────────────── -->
+## Log / comments
+
+- [x] 2026-06-24 [drive] Claimed `ready`→`working`. Worktree `.claude/worktrees/0010-notes`
+      branch `feature/0010-notes` cut from `main` 72c217b (carries the plan + ADR-0007, verified
+      present in worktree). Docker capability confirmed UP (Risk #6 cleared). Building
+      contract→server→tui per the slice order.
