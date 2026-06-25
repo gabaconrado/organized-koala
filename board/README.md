@@ -40,7 +40,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | merged | medium | — | — (merged) |
 | [0009](./features/0009-coverage-in-cycle-and-summary.md) | Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary | chore | merged | low | 0007 (merged ✓) | — (main-only governance; no worktree) |
 | [0010](./features/0010-notes.md) | Notes — full feature (contract module, migration, server CRUD, TUI views) | feature | merged | medium | — | — (merged) |
-| [0011](./features/0011-task-update-delete-reopen.md) | Task update + delete + reopen — generalize close into PATCH (breaking) | feature | ready (branch: awaiting-merge) | medium | — | feature/0011-task-update-delete-reopen |
+| [0011](./features/0011-task-update-delete-reopen.md) | Task update + delete + reopen — generalize close into PATCH (breaking) | feature | merged | medium | — | — (merged) |
 | [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | ready | medium | — | — (unclaimed) |
 
 > **0010 — Notes — MERGED.** The final missing
@@ -56,9 +56,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > unchanged → verdicts carried forward), fast-forwarded to `main` at `754e876`; worktree + branch
 > removed.
 >
-> **0011 — task update/delete/reopen — AWAITING-MERGE on `feature/0011-task-update-delete-reopen`,
-> re-rebased onto post-0010 `main` and re-approved + re-verified** (live status on the branch; the
-> `main` snapshot stays frozen at the claim `ready` until the human's ff-merge). The one-way task
+> **0011 — task update/delete/reopen — MERGED.** The one-way task
 > `close` generalized into full edit / toggle-done / reopen / delete — a
 > **breaking** change ([ADR-0008](../docs/adr/0008-task-mutation-generalization.md), ref ADR-0005
 > §5/§8) that **removes** the `POST .../tasks/{id}/close` route (clean removal, single in-repo
@@ -74,15 +72,20 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > reviewer **re-approved** (cold re-review confirming the union merge preserves both the Notes and
 > task-mutation surfaces), verifier **re-verified** live (the earlier cross-worktree shared-volume
 > migration-history conflict is gone — 0011's tree now legitimately carries the `notes` migration).
-> Coverage 68.24% line (report-only; now reflects the merged tree). This parallel-feature re-verify
-> is recorded as a new CLAUDE.md gotcha (alongside the cross-worktree volume gotcha + a `platform-dev`
-> per-worktree-isolation follow-up).
+> Coverage 68.24% line (report-only). This parallel-feature re-verify is recorded as a new CLAUDE.md
+> gotcha (alongside the cross-worktree volume gotcha + a `platform-dev` per-worktree-isolation
+> follow-up). After re-verify, the operator authorized a doc-only README fix (`close` → `update/delete`
+> in the `tui` crate README) with the re-review/re-verify cycle **explicitly waived** — that commit
+> moved the code-hash `ee5047c9…` → `97cbc025523bdff1907e9552fd3636d3a874b589`, so the verdicts are
+> carried forward by operator authorization. Operator authorized the close; fast-forwarded to `main`
+> at `9635608`; worktree + branch removed.
 >
 > **0012 — READY (planned, unclaimed).** The last domain feature completing organized-koala — Profiles
 > create/update/delete + TUI switcher — born on `main` with its governing ADR-0009 (profile mutations).
 > 0012's full delete-cascade test wants the `notes` table to exist — now satisfied on `main`
 > (0010 merged); `depends-on` was left `[]` because 0012's *code* never depended on 0010, only its
-> cascade *test* did. With 0010 merged and 0011 awaiting merge, 0012 is the remaining `ready` item.
+> cascade *test* did. With 0010 and 0011 merged, 0012 is the **only** remaining `ready` item — the
+> final feature before organized-koala is complete.
 >
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
