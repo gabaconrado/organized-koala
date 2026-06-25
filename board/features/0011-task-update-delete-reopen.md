@@ -290,6 +290,21 @@ ordering (2 before 3) suffices.
       byte-identical, both verdicts carry forward untouched (no relabelling). `fmt --check | lint`
       green on the rebased tree (test byte-identical to the just-verified tree). Board-only commit —
       does not retrigger review. `review` → `awaiting-merge`.
+- [x] 2026-06-25 [drive] **Operator-authorized doc fix (re-review/re-verify explicitly waived).**
+      Corrected the stale `crates/tui/README.md:15` client-surface line ("list/add/**close**
+      tasks" → "list/add/**update/delete** tasks") that the reviewer flagged as a non-blocking
+      pre-existing nit — it described the pre-0011 surface. Committed `6c1fb8e` (`docs(tui):
+      correct client surface…`). **Markdown-only**: no source, behaviour, `contract` (#2), or
+      domain (#3) change, so DoD clauses 1–3 (`test | lint | fmt --check`) are unaffected (cargo
+      touches only `.rs`). But `crates/tui/README.md` *is* inside the code-hash digest (`git
+      ls-tree … crates`), so this commit **moves the code-hash**
+      `ee5047c9abf1e4196ed1933655a61fcf41148bcb` → `97cbc025523bdff1907e9552fd3636d3a874b589`,
+      which by "Verdict pinning" would normally void the `approved`/`verified` verdicts and force
+      re-entry to review+verify. **The operator explicitly authorized skipping that cycle for this
+      doc-only delta**, so the reviewer/verifier verdicts above are **carried forward by operator
+      authorization** to code-hash `97cbc025…` (their pinned hash still reads `ee5047c9…`, the
+      immediate pre-fix tree they actually attested). Item stays `awaiting-merge`; no code/test
+      commit follows, so no re-review is otherwise triggered.
 
 ## Summary
 
