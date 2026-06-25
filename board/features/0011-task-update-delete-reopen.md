@@ -2,7 +2,7 @@
 id: 0011
 title: Task update + delete + reopen — generalize close into PATCH (breaking)
 type: feature      # feature | chore
-status: blocked         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0008 lands on `main` with this plan; independent of 0010/0012 (different files)
@@ -212,16 +212,31 @@ ordering (2 before 3) suffices.
       throwaway test Postgres): full suite green incl. server tasks 20 + profile_isolation 6, contract
       task 21, TUI TestBackend tasks 8 (+full suite) — ADR-0003 clause-4 TestBackend confirmation
       holds, but this is **not** a substitute for the live pass.
-- [ ] 2026-06-25 [drive] **BLOCKED pending operator decision (DoD clause 4 / #6).** The live verifier
-      pass cannot run while the shared `deploy_postgres-data` volume carries 0010's `notes` migration.
-      Question for the operator: **(a)** authorize resetting/removing the `deploy_postgres-data` Docker
-      volume (destroys local dev DB data — throwaway; recreated + re-migrated on next `./ok.sh up`)
-      so 0011's stack can boot for the live pass, **or (b)** have `platform-dev` make concurrent
-      worktrees
-      use isolated compose project names / volumes (a shared-infra fix on `main`) so verifiers never
-      collide on a shared volume, **or (c)** merge 0010 first (which brings `notes` onto `main`; 0011
-      then rebases and its tree includes that migration, removing the mismatch). Code reviewer-approved
-      at code-hash `e66426f0…`; only the live pass remains. STOP for human intervention.
+- [x] 2026-06-25 [drive] **BLOCKED pending operator decision (DoD clause 4 / #6) — RESOLVED.** The
+      live verifier pass could not run while the shared `deploy_postgres-data` volume carried 0010's
+      `notes` migration. Operator authorized **option (a)**: reset the `deploy_postgres-data` Docker
+      volume. Orchestrator removed the volume (`docker volume rm deploy_postgres-data`); the next
+      `./ok.sh up` recreated it clean and re-applied 0011's migration tree from scratch (ending at
+      `20260612163048_timer`, no `notes`). Verifier re-ran — see the verified verdict below. Item
+      unblocked back to `review` and proceeding to summarise + freshen.
+- [x] 2026-06-25 [verifier] **VERIFY-STATUS: verified** (clean-volume re-run) — code-hash
+      `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf` (== reviewer hash; last code sha `6c3b987`; confirmed
+      identical before/after). `./ok.sh up` booted clean: migrate one-shot exited cleanly, server
+      healthy on `:8080`, `_sqlx_migrations` ends at `20260612163048_timer` (no `notes`, A7).
+      **All 8 live flows RAN (nothing inferred), quoting real request/response:** (1) PATCH
+      title-only / desc-only / multi-field → 200, only supplied fields change; (2) reopen
+      round-trip — `{status:done}` → `closed_at` non-null, then `{status:open}` → `closed_at:null`;
+      (3) empty patch
+      `{}` → 200
+      unchanged; (4) `{title:"   "}` → `400 {"code":"validation_failed","message":"title must not be
+      empty"}`; (5) DELETE → 204, second DELETE → `404 not_found`, PATCH on deleted id → 404; (6) cross-
+      profile PATCH+DELETE under another user's profile → `404 not_found` (never 403), victim task
+      unchanged, missing id → 404, unauthenticated → 401; (7) old `POST …/close` → 404; (8) error
+      contract `{code,message}` on all failures + OTel spans `patch_task`/`delete_task` exported
+      (`service.name organized-koalad`, ids only — no titles/bodies/tokens). TUI `TestBackend` suite
+      confirmed green (ADR-0003 clause 4): tui tasks 8 + full suite, server tasks 20 + profile_isolation
+      6, contract task 21, all doctests. No gaps. Stack torn down (`./ok.sh down`), clean volume
+      preserved. Verdict valid while `./ok.sh code-hash HEAD` == the hash above.
 
 ## Summary
 
