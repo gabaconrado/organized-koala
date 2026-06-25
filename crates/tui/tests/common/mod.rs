@@ -36,7 +36,8 @@ use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use tui::app::{
     AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, Dispatch,
-    EditTaskState, Event, Outcome, RequestId, Screen, TaskListState,
+    EditTaskState, Event, Outcome, ProfileForm, ProfilesMode, ProfilesState, RequestId, Screen,
+    TaskListState,
 };
 use tui::client::{Client, ClientError, ClientResult};
 
@@ -897,5 +898,59 @@ pub fn offline_screen_pending() -> Screen {
     Screen::Offline {
         message: "the server is unreachable: connection refused".to_owned(),
         pending: Some(RequestId(0)),
+    }
+}
+
+/// A profile-switcher screen listing two profiles, the bare list mode, idle. The selected entry is
+/// the first profile.
+pub fn profiles_screen() -> Screen {
+    Screen::Profiles(ProfilesState {
+        profiles: vec![profile("p1", "work"), profile("p2", "personal")],
+        selected: Some(0),
+        mode: ProfilesMode::List,
+        message: None,
+        pending: None,
+    })
+}
+
+/// A profile-switcher screen with a request outstanding (bare list mode).
+pub fn profiles_screen_pending() -> Screen {
+    match profiles_screen() {
+        Screen::Profiles(mut state) => {
+            state.pending = Some(RequestId(0));
+            Screen::Profiles(state)
+        }
+        other => other,
+    }
+}
+
+/// A profile-switcher screen with the create sub-flow open (a text-entry context).
+pub fn profiles_screen_creating() -> Screen {
+    match profiles_screen() {
+        Screen::Profiles(mut state) => {
+            state.mode = ProfilesMode::Creating(ProfileForm {
+                name: String::new(),
+                error: None,
+            });
+            Screen::Profiles(state)
+        }
+        other => other,
+    }
+}
+
+/// A profile-switcher screen with the rename sub-flow open (a text-entry context), prefilled.
+pub fn profiles_screen_renaming() -> Screen {
+    match profiles_screen() {
+        Screen::Profiles(mut state) => {
+            state.mode = ProfilesMode::Renaming {
+                profile_id: "p1".to_owned(),
+                form: ProfileForm {
+                    name: "work".to_owned(),
+                    error: None,
+                },
+            };
+            Screen::Profiles(state)
+        }
+        other => other,
     }
 }

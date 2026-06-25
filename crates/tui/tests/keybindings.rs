@@ -16,7 +16,8 @@ use tui::app::Event;
 use tui::terminal::map_key;
 
 use common::{
-    auth_screen, auth_screen_pending, offline_screen, offline_screen_pending, task_list_screen,
+    auth_screen, auth_screen_pending, offline_screen, offline_screen_pending, profiles_screen,
+    profiles_screen_creating, profiles_screen_pending, profiles_screen_renaming, task_list_screen,
     task_list_screen_adding, task_list_screen_editing, task_list_screen_pending,
 };
 
@@ -194,6 +195,15 @@ fn task_list_command_keys() {
     );
     assert_eq!(map(&screen, key(KeyCode::Char('r'))), Some(Event::Refresh),);
     assert_eq!(map(&screen, key(KeyCode::Char('q'))), Some(Event::Quit));
+    // `n` opens the notes view; `s` opens the profile switcher (Assumption A7).
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('n'))),
+        Some(Event::OpenNotes),
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('s'))),
+        Some(Event::OpenProfiles),
+    );
     // An unbound printable key on the task list is ignored.
     assert_eq!(map(&screen, key(KeyCode::Char('z'))), None);
 }
@@ -346,5 +356,95 @@ fn r_is_not_a_command_on_the_auth_screen() {
     assert_eq!(
         map(&auth_screen(), key(KeyCode::Char('r'))),
         Some(Event::Char('r')),
+    );
+}
+
+// ---- Profile switcher (ADR-0009 §5 — `s` opens it; a/e/x/r/Enter/Esc on the idle list) ----
+
+#[test]
+fn profile_switcher_list_command_keys() {
+    // On the idle switcher list: `a` create, `e` rename, `x` delete, `r` refresh, `q` quit, Enter
+    // picks the active profile (Submit), Up/Down navigate. Esc returns to the task list (Back),
+    // since the idle switcher list is not a sub-flow.
+    let screen = profiles_screen();
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('a'))),
+        Some(Event::BeginAddProfile),
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('e'))),
+        Some(Event::BeginRenameProfile),
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('x'))),
+        Some(Event::BeginDeleteProfile),
+    );
+    assert_eq!(map(&screen, key(KeyCode::Char('r'))), Some(Event::Refresh));
+    assert_eq!(map(&screen, key(KeyCode::Char('q'))), Some(Event::Quit));
+    assert_eq!(map(&screen, key(KeyCode::Enter)), Some(Event::Submit));
+    assert_eq!(map(&screen, key(KeyCode::Down)), Some(Event::Next));
+    assert_eq!(map(&screen, key(KeyCode::Up)), Some(Event::Prev));
+    // Idle switcher list: Esc navigates back to the task list, not quit.
+    assert_eq!(map(&screen, key(KeyCode::Esc)), Some(Event::Back));
+    // An unbound printable key is ignored.
+    assert_eq!(map(&screen, key(KeyCode::Char('z'))), None);
+}
+
+#[test]
+fn profile_create_sub_flow_types_command_letters_literally() {
+    // Once the create sub-flow is open the switcher is a text-entry context, so the command
+    // letters — including the global timer keys p/d — are typed literally. Enter submits, Esc
+    // cancels the sub-flow (not quit/back), Backspace edits.
+    let screen = profiles_screen_creating();
+    for c in ['a', 'e', 'x', 'r', 'q', 'p', 'd'] {
+        assert_eq!(
+            map(&screen, key(KeyCode::Char(c))),
+            Some(Event::Char(c)),
+            "{c:?} must be literal text in the create-profile form",
+        );
+    }
+    assert_eq!(map(&screen, key(KeyCode::Enter)), Some(Event::Submit));
+    assert_eq!(map(&screen, key(KeyCode::Esc)), Some(Event::Cancel));
+    assert_eq!(
+        map(&screen, key(KeyCode::Backspace)),
+        Some(Event::Backspace),
+    );
+}
+
+#[test]
+fn profile_rename_sub_flow_types_command_letters_literally() {
+    // The rename sub-flow is likewise a text-entry context; Esc cancels it rather than navigating.
+    let screen = profiles_screen_renaming();
+    for c in ['a', 'e', 'x', 'r', 'q', 'p', 'd'] {
+        assert_eq!(
+            map(&screen, key(KeyCode::Char(c))),
+            Some(Event::Char(c)),
+            "{c:?} must be literal text in the rename-profile form",
+        );
+    }
+    assert_eq!(map(&screen, key(KeyCode::Esc)), Some(Event::Cancel));
+}
+
+#[test]
+fn profile_switcher_esc_cancels_while_pending() {
+    // A request in flight makes Esc mean Cancel (abandon), exactly as on the other screens.
+    assert_eq!(
+        map(&profiles_screen_pending(), key(KeyCode::Esc)),
+        Some(Event::Cancel),
+    );
+}
+
+#[test]
+fn global_timer_keys_live_on_the_idle_switcher() {
+    // The switcher is a post-auth screen, so the global timer toggle/edit keys are live on the idle
+    // list (they are suppressed only inside a text-entry sub-flow, covered above).
+    let screen = profiles_screen();
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('p'))),
+        Some(Event::ToggleTimer),
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('d'))),
+        Some(Event::BeginEditDuration),
     );
 }

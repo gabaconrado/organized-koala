@@ -15,6 +15,8 @@ const KNOWN_CODES: &[(ErrorCode, &str)] = &[
     (ErrorCode::NotFound, "not_found"),
     (ErrorCode::UsernameTaken, "username_taken"),
     (ErrorCode::EmailTaken, "email_taken"),
+    (ErrorCode::ProfileNameTaken, "profile_name_taken"),
+    (ErrorCode::LastProfile, "last_profile"),
     (ErrorCode::Internal, "internal"),
 ];
 
@@ -45,6 +47,60 @@ fn known_codes_round_trip_losslessly() {
         let back: ErrorCode = serde_json::from_str(&wire).unwrap();
         assert_eq!(&back, code);
     }
+}
+
+// --- ErrorCode: `From<&str>` parses every known wire string back to its variant. ---
+
+#[test]
+fn known_code_strings_parse_via_from_str() {
+    for (code, wire) in KNOWN_CODES {
+        assert_eq!(&ErrorCode::from(*wire), code, "From<&str> for {wire:?}");
+    }
+}
+
+// --- ErrorCode: the two ADR-0009 profile-conflict codes. ---
+
+#[test]
+fn profile_name_taken_code_uses_its_exact_wire_string() {
+    assert_eq!(ErrorCode::ProfileNameTaken.as_str(), "profile_name_taken");
+    assert!(ErrorCode::ProfileNameTaken.is_known());
+    assert_eq!(
+        ErrorCode::from("profile_name_taken"),
+        ErrorCode::ProfileNameTaken
+    );
+    let parsed: ErrorCode = serde_json::from_str(r#""profile_name_taken""#).unwrap();
+    assert_eq!(parsed, ErrorCode::ProfileNameTaken);
+    assert_eq!(
+        serde_json::to_string(&ErrorCode::ProfileNameTaken).unwrap(),
+        r#""profile_name_taken""#
+    );
+}
+
+#[test]
+fn last_profile_code_uses_its_exact_wire_string() {
+    assert_eq!(ErrorCode::LastProfile.as_str(), "last_profile");
+    assert!(ErrorCode::LastProfile.is_known());
+    assert_eq!(ErrorCode::from("last_profile"), ErrorCode::LastProfile);
+    let parsed: ErrorCode = serde_json::from_str(r#""last_profile""#).unwrap();
+    assert_eq!(parsed, ErrorCode::LastProfile);
+    assert_eq!(
+        serde_json::to_string(&ErrorCode::LastProfile).unwrap(),
+        r#""last_profile""#
+    );
+}
+
+#[test]
+fn the_two_profile_codes_are_distinct_and_not_unknown() {
+    assert_ne!(ErrorCode::ProfileNameTaken, ErrorCode::LastProfile);
+    // Neither newly-added code collides with the forward-compat Unknown bucket.
+    assert_ne!(
+        ErrorCode::ProfileNameTaken,
+        ErrorCode::Unknown("profile_name_taken".to_owned())
+    );
+    assert_ne!(
+        ErrorCode::LastProfile,
+        ErrorCode::Unknown("last_profile".to_owned())
+    );
 }
 
 // --- ErrorCode: unknown codes are tolerated (acceptance criterion). ---
