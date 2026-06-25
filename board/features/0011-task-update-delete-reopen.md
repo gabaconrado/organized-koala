@@ -6,11 +6,15 @@ status: ready           # inbox → planned → ready → working → review →
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0008 lands on `main` with this plan; independent of 0010/0012 (different files)
-branch: null
-worktree: null
+branch: feature/0011-task-update-delete-reopen
+worktree: .claude/worktrees/0011-task-update-delete-reopen
 created: 2026-06-24
-updated: 2026-06-24
+updated: 2026-06-25
 ---
+
+<!-- CLAIMED 2026-06-25 — this `main` copy is FROZEN at the claim snapshot. The branch
+     `feature/0011-task-update-delete-reopen` copy is authoritative until the human's ff-merge
+     brings the finished item back to `main`. Do not advance status here. -->
 
 ## Feature request
 
