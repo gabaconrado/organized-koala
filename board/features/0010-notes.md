@@ -2,14 +2,14 @@
 id: 0010
 title: Notes — full feature (contract module, migration, server CRUD, TUI views)
 type: feature      # feature | chore
-status: awaiting-merge           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0007 lands on `main` with this item's plan; no in-flight Board item gates it
 branch: feature/0010-notes
 worktree: .claude/worktrees/0010-notes
 created: 2026-06-24
-updated: 2026-06-24
+updated: 2026-06-25
 ---
 
 ## Feature request
@@ -194,6 +194,13 @@ into the working branch before 2/3 compile.
       relabelling). Dropped the `main`-only frozen-pointer comment that the rebase auto-merged into
       this authoritative branch copy. Gates re-run green on the rebased tree (`test | lint | fmt
       --check`). Board-only commit — does not retrigger review. → `awaiting-merge`.
+- [x] 2026-06-25 [human] Reviewed feature 0010 — looks good, authorized close/merge.
+- [x] 2026-06-25 [drive] Operator-authorized merge. Re-freshened onto `main` `91a2bab`
+      (the 0011 cycle's docs/board/`.claude` advance; no crate code on `main`). `./ok.sh code-hash`
+      at the rebased head is **unchanged at `46c1c60f1eb3865eb127a72502982827ebb09d65`** == the
+      attested reviewer/verifier hash ⇒ code byte-identical, both verdicts still valid. `fmt
+      --check` + `lint` green on the rebased tree. ff-merged into `main`; worktree removed.
+      → `merged`.
 
 <!-- ─────────────────────────────  SUMMARY  ───────────────────────────── -->
 ## Summary
