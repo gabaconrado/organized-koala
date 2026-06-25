@@ -208,6 +208,19 @@ Dependency edges: **1 → 2 → 3 → 4**; tests alongside. Slice 1 must merge b
       `#[allow]`; no secret leak. **No fix-now findings.** Nit (non-blocking, pre-existing, out of
       scope): `Session.token` is a bare `String` and `Session` derives `Debug` (JWT reachable via
       derived Debug) — predates 0012, unchanged here; candidate future chore.
+- [x] 2026-06-25 [verifier] **VERDICT: verified** — code-hash
+      `71fb7ecf327fbd42a14cb19456207885c782fe49` (code commit `e6afefd`). `./ok.sh up` booted clean
+      (Postgres healthy, one-shot `migrate` success — **no** 0011 migration-history conflict; all 6
+      migrations incl. `20260612163050_profile_name_unique` applied). RAN live against
+      `localhost:8080` (quoted): create `201`/trim/empty→`400 validation_failed`; duplicate→`409
+      profile_name_taken` + cross-account same-name `201` (per-account uniqueness); rename `200`,
+      unowned/cross-account→`404 not_found`; **cascade** create profile+task+note → `DELETE` `204`,
+      then DB-confirmed `tasks=0, notes=0, profile=0` + HTTP `404` (both children gone, #4);
+      last-profile delete→`409 last_profile` (account keeps ≥1); profile-scoping no cross-leak;
+      no-token→`401 unauthenticated`; every error body standard status + `{ code, message }`. OTel
+      spans **observed** in the collector (`create_profile`/`rename_profile`/`delete_profile`), not
+      inferred. TUI `TestBackend` suite confirmed present + green (`profiles.rs`, `keybindings.rs`)
+      per ADR-0003. No material gaps. Stack torn down clean.
 
 ## Summary
 
