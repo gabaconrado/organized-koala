@@ -33,6 +33,23 @@ audience: dev
   per verb. Keep "report-only" honest: such a verb prints its metric and **exits 0 regardless of
   the number** (no threshold, never wired into a DoD clause); a verb that can fail the build on a
   value is a gate, not a report, and that is a behaviour change requiring its own decision.
+- **EVERY DB-needing `ok.sh` verb self-boots the shared test Postgres — including `prepare`; an
+  ad-hoc out-of-band `DATABASE_URL` is the smell that the verb is incomplete** (learned 0012). The
+  0007 rule above applied to `coverage`; this generalizes it: `test`, `coverage`, **and
+  `prepare`** must each carry the *same* live-DB wiring (honour a caller-supplied `DATABASE_URL`,
+  else boot the throwaway test PG via the test compose file + tear it down on a `RETURN` trap).
+  `cmd_prepare` had been bare since the first scaffold (`cargo sqlx prepare --workspace`, no DB),
+  and every prior `.sqlx/` refresh leaned on a hand-set out-of-band `DATABASE_URL` — which the
+  session permission guard correctly denies (it is exactly the unsanctioned-side-channel that #6
+  forbids). A verb that only works when the caller hand-exports a connection string is **not
+  self-contained**: complete it (the gap is the verb, not the caller). **`prepare`-specific rule:
+  apply schema with the sqlx CLI, NOT the server binary.** Migrating via the `organized-koalad`
+  binary creates an **offline-build circularity** — on a feature branch the binary must *compile*
+  to run, but its compile depends on the very `.sqlx/` cache `prepare` is mid-refresh, so the
+  binary may not build yet. The sqlx CLI applies the embedded `migrations/` tree against the live
+  test PG with no dependence on the workspace compiling, breaking the cycle. (`cmd_test`/
+  `cmd_coverage` don't hit this because they don't refresh `.sqlx/`; `prepare` does, so it must use
+  the CLI.)
 
 ```bash
 #!/usr/bin/env bash
