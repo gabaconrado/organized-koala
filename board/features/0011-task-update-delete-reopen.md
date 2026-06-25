@@ -240,4 +240,33 @@ ordering (2 before 3) suffices.
 
 ## Summary
 
-_(filled by `eng-manager` at drive step 6)_
+Generalized the one-way task `close` into full task mutation. **Breaking change** ([ADR-0008][adr-0008],
+referencing ADR-0005 §5/§8): `POST .../tasks/{id}/close` is **removed**, not deprecated — with a single
+in-repo consumer (the TUI, migrated in the same item) a clean removal is correct under the
+`contract`-is-compatibility-authority / no-URI-versioning rule.
+
+**Shipped:**
+
+- **`contract`** — new `UpdateTaskRequest { title?, description?, status? }`, an all-optional partial-update
+  DTO (`skip_serializing_if = "Option::is_none"`); no `updated_at`, flat shape preserved (#3).
+- **`server`** — `PATCH /api/profiles/{id}/tasks/{task_id}` applying only the supplied fields via a
+  single static parameterized `UPDATE … RETURNING` (`COALESCE`/`CASE`): `status: done` → `closed_at`
+  set, `status: open` (reopen) → `closed_at` cleared to null, empty patch → 200 no-op, blank title →
+  400 `validation_failed`. `DELETE …/tasks/{task_id}` → 204, second/missing → 404. The `close_task`
+  handler and `…/close` route are gone. Both routes ownership-joined (`WHERE id=$1 AND profile_id=$2`),
+  unowned → 404 never 403 (#4). No migration (the `tasks` table already supports the update — A7).
+- **`tui`** — task list gains edit (`e`), toggle-done/reopen (`c`), and delete (`x`, two-step confirm);
+  all mutations chain a `ListTasks` refresh (stateless, #1). `client`/`protocol` `CloseTask` →
+  `UpdateTask`, plus `DeleteTask`.
+
+**Verdicts** — both pinned to code-hash `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf` (last code sha
+`6c3b987`):
+
+- `reviewer`: **approved** — all hard constraints clear (#1–#4), breaking change complete (no
+  `close`/`CloseTask` residue), no injection surface, no `#[allow]`.
+- `verifier`: **verified** (clean-volume re-run) — `./ok.sh up` booted clean; all 8 live flows ran
+  (PATCH partial/multi-field, reopen-clears-closed_at, empty-patch no-op, blank-title 400, DELETE
+  204→404, cross-profile/missing → 404, old `…/close` gone, error contract + `patch_task`/`delete_task`
+  OTel spans). TUI `TestBackend` suite green (ADR-0003 clause 4).
+
+coverage: 62.87%
