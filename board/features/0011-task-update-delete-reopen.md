@@ -305,14 +305,19 @@ in-repo consumer (the TUI, migrated in the same item) a clean removal is correct
   all mutations chain a `ListTasks` refresh (stateless, #1). `client`/`protocol` `CloseTask` →
   `UpdateTask`, plus `DeleteTask`.
 
-**Verdicts** — both pinned to code-hash `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf` (last code sha
-`6c3b987`):
+**Verdicts** — both **re-passed** at code-hash `ee5047c9abf1e4196ed1933655a61fcf41148bcb` after
+the re-rebase onto post-0010 `main` (the prior `e66426f0…`/`708ee8d0…` verdicts were **voided** when
+that rebase pulled the merged Notes feature into the `crates/` tree, changing the code-hash):
 
-- `reviewer`: **approved** — all hard constraints clear (#1–#4), breaking change complete (no
-  `close`/`CloseTask` residue), no injection surface, no `#[allow]`.
-- `verifier`: **verified** (clean-volume re-run) — `./ok.sh up` booted clean; all 8 live flows ran
-  (PATCH partial/multi-field, reopen-clears-closed_at, empty-patch no-op, blank-title 400, DELETE
-  204→404, cross-profile/missing → 404, old `…/close` gone, error contract + `patch_task`/`delete_task`
-  OTel spans). TUI `TestBackend` suite green (ADR-0003 clause 4).
+- `reviewer`: **approved** (cold re-review of the post-0010 re-rebase) — all hard constraints clear
+  (#1–#4), breaking change complete (no `close`/`CloseTask` residue), the union merge preserves both
+  the Notes (0010) and task-mutation (0011) surfaces, no injection surface, no `#[allow]`.
+- `verifier`: **verified** (live re-verify of the post-0010 re-rebase tree) — `./ok.sh up` booted
+  clean (the migration-history collision is resolved: 0011's tree now legitimately carries the
+  `20260612163049 notes` migration); all 8 live flows ran (PATCH partial/multi-field,
+  reopen-clears-closed_at, empty-patch no-op, blank-title 400, DELETE 204→404, cross-profile/missing
+  → 404, old `…/close` gone, error contract + `patch_task`/`delete_task` OTel spans). TUI `TestBackend`
+  suite green (ADR-0003 clause 4).
 
-coverage: 62.87%
+coverage: 68.24% (line; freshly measured on the merged tree — now reflects the Notes feature pulled
+in by the re-rebase. 62.99% region / 70.77% function.)
