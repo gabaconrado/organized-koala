@@ -27,9 +27,9 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use contract::{
-    CreateNoteRequest, CreateTaskRequest, LoginRequest, Note, Profile, RegisterRequest,
-    SessionResponse, Task, TaskStatus, TimerConfig, TimerSession, UpdateNoteRequest,
-    UpdateTaskRequest, UpdateTimerConfigRequest,
+    CreateNoteRequest, CreateProfileRequest, CreateTaskRequest, LoginRequest, Note, Profile,
+    RegisterRequest, SessionResponse, Task, TaskStatus, TimerConfig, TimerSession,
+    UpdateNoteRequest, UpdateProfileRequest, UpdateTaskRequest, UpdateTimerConfigRequest,
 };
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -60,6 +60,19 @@ pub enum Call {
     },
     ListProfiles {
         token: String,
+    },
+    CreateProfile {
+        token: String,
+        name: String,
+    },
+    UpdateProfile {
+        token: String,
+        profile_id: String,
+        name: String,
+    },
+    DeleteProfile {
+        token: String,
+        profile_id: String,
     },
     ListTasks {
         token: String,
@@ -142,6 +155,9 @@ struct Inner {
     register: RefCell<VecDeque<ClientResult<SessionResponse>>>,
     login: RefCell<VecDeque<ClientResult<SessionResponse>>>,
     profiles: RefCell<VecDeque<ClientResult<Vec<Profile>>>>,
+    create_profile: RefCell<VecDeque<ClientResult<Profile>>>,
+    update_profile: RefCell<VecDeque<ClientResult<Profile>>>,
+    delete_profile: RefCell<VecDeque<ClientResult<()>>>,
     tasks: RefCell<VecDeque<ClientResult<Vec<Task>>>>,
     create: RefCell<VecDeque<ClientResult<Task>>>,
     update: RefCell<VecDeque<ClientResult<Task>>>,
@@ -186,6 +202,15 @@ impl FakeClient {
     }
     pub fn push_profiles(&self, r: ClientResult<Vec<Profile>>) {
         self.inner.profiles.borrow_mut().push_back(r);
+    }
+    pub fn push_create_profile(&self, r: ClientResult<Profile>) {
+        self.inner.create_profile.borrow_mut().push_back(r);
+    }
+    pub fn push_update_profile(&self, r: ClientResult<Profile>) {
+        self.inner.update_profile.borrow_mut().push_back(r);
+    }
+    pub fn push_delete_profile(&self, r: ClientResult<()>) {
+        self.inner.delete_profile.borrow_mut().push_back(r);
     }
     pub fn push_tasks(&self, r: ClientResult<Vec<Task>>) {
         self.inner.tasks.borrow_mut().push_back(r);
@@ -269,6 +294,36 @@ impl Client for FakeClient {
             token: token.to_owned(),
         });
         pop(&self.inner.profiles, "list_profiles")
+    }
+
+    fn create_profile(&self, token: &str, req: &CreateProfileRequest) -> ClientResult<Profile> {
+        self.inner.calls.borrow_mut().push(Call::CreateProfile {
+            token: token.to_owned(),
+            name: req.name.clone(),
+        });
+        pop(&self.inner.create_profile, "create_profile")
+    }
+
+    fn rename_profile(
+        &self,
+        token: &str,
+        profile_id: &str,
+        req: &UpdateProfileRequest,
+    ) -> ClientResult<Profile> {
+        self.inner.calls.borrow_mut().push(Call::UpdateProfile {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+            name: req.name.clone(),
+        });
+        pop(&self.inner.update_profile, "rename_profile")
+    }
+
+    fn delete_profile(&self, token: &str, profile_id: &str) -> ClientResult<()> {
+        self.inner.calls.borrow_mut().push(Call::DeleteProfile {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+        });
+        pop(&self.inner.delete_profile, "delete_profile")
     }
 
     fn list_tasks(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Task>> {
@@ -434,6 +489,17 @@ fn run_request(client: &FakeClient, request: ClientRequest) -> Outcome {
         ClientRequest::ListProfiles { token } => {
             let result = client.list_profiles(&token);
             Outcome::ListProfiles { token, result }
+        }
+        ClientRequest::CreateProfile { token, req } => {
+            Outcome::CreateProfile(client.create_profile(&token, &req))
+        }
+        ClientRequest::UpdateProfile {
+            token,
+            profile_id,
+            req,
+        } => Outcome::UpdateProfile(client.rename_profile(&token, &profile_id, &req)),
+        ClientRequest::DeleteProfile { token, profile_id } => {
+            Outcome::DeleteProfile(client.delete_profile(&token, &profile_id))
         }
         ClientRequest::ListTasks { token, profile_id } => {
             Outcome::ListTasks(client.list_tasks(&token, &profile_id))
@@ -691,6 +757,7 @@ pub fn screen_name(app: &App) -> &'static str {
         Screen::Auth(_) => "auth",
         Screen::TaskList(_) => "task_list",
         Screen::Notes(_) => "notes",
+        Screen::Profiles(_) => "profiles",
         Screen::Offline { .. } => "offline",
     }
 }

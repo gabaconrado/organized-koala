@@ -12,8 +12,9 @@ through a `ratatui` `TestBackend` with the server mocked (ADR-0003), and so the 
 path can be exercised against a real server:
 
 - [`client`](src/client) — the HTTP boundary. A [`Client`](crate::client::Client) trait over
-  the server endpoints (register, login, list profiles, list/add/update/delete tasks, and a
-  health probe), implemented by [`HttpClient`](crate::client::HttpClient) on `reqwest`. The standard
+  the server endpoints (register, login, list/create/rename/delete profiles,
+  list/add/update/delete tasks and notes, the timer config/session, and a health probe),
+  implemented by [`HttpClient`](crate::client::HttpClient) on `reqwest`. The standard
   error body `{ code, message }` is mapped to a typed
   [`ClientError`](crate::client::ClientError) that preserves the machine-matchable `code`.
 - [`app`](src/app) — the app core. A screen state machine ([`App`](crate::app::App)) advanced
@@ -23,8 +24,10 @@ path can be exercised against a real server:
   [`apply_response`](crate::app::App::apply_response) folds a completed server
   [`ClientResponse`](crate::app::ClientResponse) back into state. The core holds **no** client
   and performs no I/O, so it is exhaustively unit-testable with no threads. Per-feature
-  submodules (`auth`, `task_add`, `task_list`) own their screen state; `app/mod.rs` keeps the
-  `App`/`Screen` wiring and the request/response protocol.
+  submodules (`auth`, `task_add`, `task_list`, `notes`, `profiles`) own their screen state;
+  `app/mod.rs` keeps the `App`/`Screen` wiring and the request/response protocol. Switching the
+  active profile is **client-side only** — picking a profile rebinds the in-memory active id and
+  re-scopes the reads; there is no server "switch" call and no persistence (#1, ADR-0009).
 - [`ui`](src/ui) — rendering. Pure draw functions from an [`App`](crate::app::App) onto a
   `ratatui` frame, including the in-flight spinner; no state lives here.
 - [`terminal`](src/terminal) — the crossterm driver. Owns raw-mode setup/teardown and the

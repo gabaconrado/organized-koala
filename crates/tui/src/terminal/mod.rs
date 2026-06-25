@@ -50,6 +50,7 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
         Screen::Auth(_) => true,
         Screen::TaskList(list) => list.adding.is_some() || list.editing.is_some(),
         Screen::Notes(notes) => notes.is_text_entry(),
+        Screen::Profiles(profiles) => profiles.is_text_entry(),
         Screen::Offline { .. } => false,
     }
 }
@@ -71,6 +72,11 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
 ///   `n` → [`Event::OpenNotes`], `r` → [`Event::Refresh`], `q` → [`Event::Quit`].
 /// - On the notes list (idle, not entering text): `a` → [`Event::BeginAddNote`], `e` →
 ///   [`Event::BeginEditNote`], `x` → [`Event::BeginDeleteNote`], `Esc` → [`Event::Back`].
+/// - On the task list: `s` → [`Event::OpenProfiles`] (open the switcher).
+/// - On the switcher list (idle, not entering text): `Enter` picks the selected profile (mapped to
+///   [`Event::Submit`], folded by the app core into a client-side re-scope), `a` →
+///   [`Event::BeginAddProfile`], `e` → [`Event::BeginRenameProfile`], `x` →
+///   [`Event::BeginDeleteProfile`], `Esc` → [`Event::Back`].
 /// - On any post-auth screen (not entering text): `p` → [`Event::ToggleTimer`], `d` →
 ///   [`Event::BeginEditDuration`] (the global timer controls, ADR-0006 §8.2).
 /// - On the offline screen: `r` → [`Event::Refresh`].
@@ -89,20 +95,22 @@ pub fn map_key(screen: &Screen, editing_duration: bool, key: KeyEvent) -> Option
         Screen::TaskList(list) if list.adding.is_some() || list.editing.is_some()
     );
     let in_notes_sub_flow = matches!(screen, Screen::Notes(notes) if notes.in_sub_flow());
+    let in_profiles_sub_flow = matches!(screen, Screen::Profiles(p) if p.in_sub_flow());
     let pending = is_pending(screen);
-    // A sub-flow (add/edit-task, a notes sub-flow, or duration-edit) or an in-flight request
-    // makes `Esc` mean cancel.
-    let in_sub_flow = in_task_form || in_notes_sub_flow || editing_duration;
+    // A sub-flow (add/edit-task, a notes/profiles sub-flow, or duration-edit) or an in-flight
+    // request makes `Esc` mean cancel.
+    let in_sub_flow = in_task_form || in_notes_sub_flow || in_profiles_sub_flow || editing_duration;
     let on_task_list = matches!(screen, Screen::TaskList(_));
     let on_notes = matches!(screen, Screen::Notes(_));
-    let post_auth = on_task_list || on_notes;
+    let on_profiles = matches!(screen, Screen::Profiles(_));
+    let post_auth = on_task_list || on_notes || on_profiles;
 
     match key.code {
         KeyCode::Esc => {
             if in_sub_flow || pending {
                 Some(Event::Cancel)
-            } else if on_notes {
-                // Idle notes list: `Esc` returns to the task list (Assumption A7).
+            } else if on_notes || on_profiles {
+                // Idle notes list / switcher: `Esc` returns to the task list (Assumption A7).
                 Some(Event::Back)
             } else {
                 Some(Event::Quit)
@@ -120,16 +128,25 @@ pub fn map_key(screen: &Screen, editing_duration: bool, key: KeyEvent) -> Option
         KeyCode::Char('x') if on_task_list => Some(Event::DeleteSelected),
         // `n` opens the notes view from the task list (Assumption A7).
         KeyCode::Char('n') if on_task_list => Some(Event::OpenNotes),
+        // `s` opens the profile switcher from the task list (Assumption A7).
+        KeyCode::Char('s') if on_task_list => Some(Event::OpenProfiles),
         // Notes-list commands (idle list, not a text-entry sub-flow): create / edit / delete.
         KeyCode::Char('a') if on_notes => Some(Event::BeginAddNote),
         KeyCode::Char('e') if on_notes => Some(Event::BeginEditNote),
         KeyCode::Char('x') if on_notes => Some(Event::BeginDeleteNote),
+        // Switcher-list commands (idle list, not a text-entry sub-flow): create / rename / delete.
+        KeyCode::Char('a') if on_profiles => Some(Event::BeginAddProfile),
+        KeyCode::Char('e') if on_profiles => Some(Event::BeginRenameProfile),
+        KeyCode::Char('x') if on_profiles => Some(Event::BeginDeleteProfile),
         // The global timer controls are live on every post-auth screen (not while a text-entry
         // sub-flow owns the keystroke — Assumption B4).
         KeyCode::Char('p') if post_auth => Some(Event::ToggleTimer),
         KeyCode::Char('d') if post_auth => Some(Event::BeginEditDuration),
         KeyCode::Char('r') => match screen {
-            Screen::TaskList(_) | Screen::Notes(_) | Screen::Offline { .. } => Some(Event::Refresh),
+            Screen::TaskList(_)
+            | Screen::Notes(_)
+            | Screen::Profiles(_)
+            | Screen::Offline { .. } => Some(Event::Refresh),
             Screen::Auth(_) => None,
         },
         KeyCode::Char('q') if post_auth => Some(Event::Quit),
@@ -143,6 +160,7 @@ fn is_pending(screen: &Screen) -> bool {
         Screen::Auth(auth) => auth.is_pending(),
         Screen::TaskList(list) => list.is_pending(),
         Screen::Notes(notes) => notes.is_pending(),
+        Screen::Profiles(profiles) => profiles.is_pending(),
         Screen::Offline { pending, .. } => pending.is_some(),
     }
 }

@@ -9,9 +9,9 @@
 pub mod worker;
 
 use contract::{
-    CreateNoteRequest, CreateTaskRequest, ErrorBody, ErrorCode, LoginRequest, Note, Profile,
-    RegisterRequest, SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest,
-    UpdateTaskRequest, UpdateTimerConfigRequest,
+    CreateNoteRequest, CreateProfileRequest, CreateTaskRequest, ErrorBody, ErrorCode, LoginRequest,
+    Note, Profile, RegisterRequest, SessionResponse, Task, TimerConfig, TimerSession,
+    UpdateNoteRequest, UpdateProfileRequest, UpdateTaskRequest, UpdateTimerConfigRequest,
 };
 
 /// A failure from a client call.
@@ -102,6 +102,26 @@ pub trait Client {
 
     /// `GET /api/profiles` — the authenticated user's profiles, newest-first.
     fn list_profiles(&self, token: &str) -> ClientResult<Vec<Profile>>;
+
+    /// `POST /api/profiles` — create a profile, returning the created [`Profile`] (`201`). A
+    /// duplicate per-account name is a `profile_name_taken` [`ClientError::Api`]; an empty (after
+    /// trim) name is `validation_failed`.
+    fn create_profile(&self, token: &str, req: &CreateProfileRequest) -> ClientResult<Profile>;
+
+    /// `PATCH /api/profiles/{profile_id}` — rename a profile, returning the updated [`Profile`]
+    /// (`200`). A duplicate per-account name is `profile_name_taken`; an unowned/missing profile is
+    /// `not_found`.
+    fn rename_profile(
+        &self,
+        token: &str,
+        profile_id: &str,
+        req: &UpdateProfileRequest,
+    ) -> ClientResult<Profile>;
+
+    /// `DELETE /api/profiles/{profile_id}` — delete a profile (`204`, no body); cascades its tasks
+    /// and notes server-side. Deleting the account's only remaining profile is a `last_profile`
+    /// [`ClientError::Api`]; an unowned/missing profile is `not_found`.
+    fn delete_profile(&self, token: &str, profile_id: &str) -> ClientResult<()>;
 
     /// `GET /api/profiles/{profile_id}/tasks` — the profile's tasks, newest-first.
     fn list_tasks(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Task>>;
@@ -306,6 +326,59 @@ impl Client for HttpClient {
         let status = resp.status();
         if status.is_success() {
             decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn create_profile(&self, token: &str, req: &CreateProfileRequest) -> ClientResult<Profile> {
+        let resp = self
+            .http
+            .post(self.url("/api/profiles"))
+            .bearer_auth(token)
+            .json(req)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn rename_profile(
+        &self,
+        token: &str,
+        profile_id: &str,
+        req: &UpdateProfileRequest,
+    ) -> ClientResult<Profile> {
+        let resp = self
+            .http
+            .patch(self.url(&format!("/api/profiles/{profile_id}")))
+            .bearer_auth(token)
+            .json(req)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn delete_profile(&self, token: &str, profile_id: &str) -> ClientResult<()> {
+        let resp = self
+            .http
+            .delete(self.url(&format!("/api/profiles/{profile_id}")))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            // `204 No Content` carries no body; success is the status alone.
+            Ok(())
         } else {
             Err(api_error(status, resp))
         }

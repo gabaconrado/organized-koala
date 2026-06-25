@@ -26,6 +26,17 @@ fn run<C: Client>(client: &C, request: ClientRequest) -> Outcome {
             let result = client.list_profiles(&token);
             Outcome::ListProfiles { token, result }
         }
+        ClientRequest::CreateProfile { token, req } => {
+            Outcome::CreateProfile(client.create_profile(&token, &req))
+        }
+        ClientRequest::UpdateProfile {
+            token,
+            profile_id,
+            req,
+        } => Outcome::UpdateProfile(client.rename_profile(&token, &profile_id, &req)),
+        ClientRequest::DeleteProfile { token, profile_id } => {
+            Outcome::DeleteProfile(client.delete_profile(&token, &profile_id))
+        }
         ClientRequest::ListTasks { token, profile_id } => {
             Outcome::ListTasks(client.list_tasks(&token, &profile_id))
         }

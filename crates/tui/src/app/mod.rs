@@ -12,6 +12,7 @@
 
 pub mod auth;
 pub mod notes;
+pub mod profiles;
 pub mod protocol;
 pub mod task_add;
 pub mod task_list;
@@ -19,6 +20,7 @@ pub mod timer;
 
 pub use auth::{AuthField, AuthMode, AuthState};
 pub use notes::{NoteForm, NotesMode, NotesState};
+pub use profiles::{ProfileForm, ProfilesMode, ProfilesState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
 pub use task_add::{AddTaskState, EditTaskState};
 pub use task_list::TaskListState;
@@ -57,8 +59,16 @@ pub enum Event {
     DeleteSelected,
     /// Open the notes view for the active profile (task list only).
     OpenNotes,
-    /// Return from the notes view to the task list (notes list, when idle).
+    /// Open the profile switcher (task list only).
+    OpenProfiles,
+    /// Return from a post-auth view (notes / switcher) to the task list, when idle.
     Back,
+    /// Begin the create-profile sub-flow (switcher list only).
+    BeginAddProfile,
+    /// Begin renaming the selected profile (switcher list only).
+    BeginRenameProfile,
+    /// Begin the delete-confirmation sub-flow for the selected profile (switcher list only).
+    BeginDeleteProfile,
     /// Begin the create-note sub-flow (notes list only).
     BeginAddNote,
     /// Begin editing the selected note (notes list only).
@@ -113,6 +123,8 @@ pub enum Screen {
     TaskList(TaskListState),
     /// The notes screen for the active profile.
     Notes(NotesState),
+    /// The profile switcher: lists the account's profiles, with pick-active + create/rename/delete.
+    Profiles(ProfilesState),
     /// The blocking "server unreachable" screen. Carries the message and the in-flight marker
     /// while a retry probe is outstanding.
     Offline {
@@ -128,7 +140,10 @@ impl Screen {
     /// keybindings are live). The auth and offline screens are excluded.
     #[must_use]
     fn is_post_auth(&self) -> bool {
-        matches!(self, Screen::TaskList(_) | Screen::Notes(_))
+        matches!(
+            self,
+            Screen::TaskList(_) | Screen::Notes(_) | Screen::Profiles(_)
+        )
     }
 }
 
@@ -211,6 +226,7 @@ impl App {
             Screen::Auth(auth) => auth.pending,
             Screen::TaskList(list) => list.pending,
             Screen::Notes(notes) => notes.pending,
+            Screen::Profiles(profiles) => profiles.pending,
             Screen::Offline { pending, .. } => *pending,
         }
     }
@@ -257,8 +273,19 @@ impl App {
             (Screen::TaskList(list), Event::OpenNotes) if list.adding.is_none() => {
                 return self.navigate_to_notes();
             }
+            (Screen::TaskList(list), Event::OpenProfiles) if list.adding.is_none() => {
+                return self.navigate_to_profiles();
+            }
             (Screen::Notes(notes), Event::Back) if !notes.in_sub_flow() => {
                 return self.navigate_to_tasks();
+            }
+            (Screen::Profiles(profiles), Event::Back) if !profiles.in_sub_flow() => {
+                return self.navigate_to_tasks();
+            }
+            // Pick-active: `Submit` on the idle switcher list rebinds the in-memory active profile
+            // and re-scopes the reads — no server "switch" call (#1, ADR-0009 §5).
+            (Screen::Profiles(profiles), Event::Submit) if !profiles.in_sub_flow() => {
+                return self.pick_active_profile();
             }
             _ => {}
         }
@@ -266,6 +293,7 @@ impl App {
             Screen::Auth(auth) => auth.handle_event(event),
             Screen::TaskList(list) => list.handle_event(event, self.session.as_ref()),
             Screen::Notes(notes) => notes.handle_event(event, self.session.as_ref()),
+            Screen::Profiles(profiles) => profiles.handle_event(event, self.session.as_ref()),
             Screen::Offline { pending, .. } => {
                 if pending.is_some() {
                     None
@@ -286,6 +314,36 @@ impl App {
         let session = self.session.clone()?;
         self.screen = Screen::Notes(NotesState::new(Vec::new()));
         Some(self.dispatch_screen(ClientRequest::ListNotes {
+            token: session.token,
+            profile_id: session.profile_id,
+        }))
+    }
+
+    /// Open the profile switcher and dispatch its profile-list load. The screen becomes an empty
+    /// `Profiles` placeholder carrying the in-flight marker; `apply_response` replaces it with the
+    /// populated list (so it derives entirely from the server response, #1).
+    fn navigate_to_profiles(&mut self) -> Option<Dispatch> {
+        let session = self.session.clone()?;
+        self.screen = Screen::Profiles(ProfilesState::new(Vec::new(), &session.profile_id));
+        Some(self.dispatch_screen(ClientRequest::ListProfiles {
+            token: session.token,
+        }))
+    }
+
+    /// Pick-active: rebind the in-memory active profile to the selected one and re-scope the reads
+    /// by navigating to its task list. This is **client-side only** — no server "switch" call and
+    /// no persistence (#1, Assumption A7). A no-op if nothing is selected or the session is gone.
+    fn pick_active_profile(&mut self) -> Option<Dispatch> {
+        let mut session = self.session.clone()?;
+        let Screen::Profiles(profiles) = &self.screen else {
+            return None;
+        };
+        let picked = profiles.selected_profile()?;
+        session.profile_id = picked.id.clone();
+        session.profile_name = picked.name.clone();
+        self.session = Some(session.clone());
+        self.screen = Screen::TaskList(TaskListState::new(Vec::new()));
+        Some(self.dispatch_screen(ClientRequest::ListTasks {
             token: session.token,
             profile_id: session.profile_id,
         }))
@@ -378,6 +436,7 @@ impl App {
             Screen::Auth(auth) => auth.pending = id,
             Screen::TaskList(list) => list.pending = id,
             Screen::Notes(notes) => notes.pending = id,
+            Screen::Profiles(profiles) => profiles.pending = id,
             Screen::Offline { pending, .. } => *pending = id,
         }
     }
@@ -401,6 +460,15 @@ impl App {
                 notes.pending = None;
                 match &mut notes.mode {
                     NotesMode::Creating(form) | NotesMode::Editing { form, .. } => {
+                        form.error = None;
+                    }
+                    _ => {}
+                }
+            }
+            Screen::Profiles(profiles) => {
+                profiles.pending = None;
+                match &mut profiles.mode {
+                    ProfilesMode::Creating(form) | ProfilesMode::Renaming { form, .. } => {
                         form.error = None;
                     }
                     _ => {}
@@ -440,6 +508,9 @@ impl App {
                     Outcome::Health(result) => self.apply_health(result),
                     Outcome::Register(result) | Outcome::Login(result) => self.apply_auth(result),
                     Outcome::ListProfiles { token, result } => self.apply_profiles(token, result),
+                    Outcome::CreateProfile(result) => self.apply_create_profile(result),
+                    Outcome::UpdateProfile(result) => self.apply_update_profile(result),
+                    Outcome::DeleteProfile(result) => self.apply_delete_profile(result),
                     Outcome::ListTasks(result) => self.apply_tasks(result),
                     Outcome::CreateTask(result) => self.apply_create(result),
                     Outcome::UpdateTask(result) => self.apply_update(result),
@@ -512,11 +583,17 @@ impl App {
         }
     }
 
+    /// Fold a `ListProfiles` response. While the switcher is open it is a list/refresh result that
+    /// repopulates the switcher (the active profile stays selected if still present); during the
+    /// post-auth bootstrap it establishes the session and chains the initial task load.
     fn apply_profiles(
         &mut self,
         token: String,
         result: crate::client::ClientResult<Vec<contract::Profile>>,
     ) -> Option<Dispatch> {
+        if matches!(self.screen, Screen::Profiles(_)) {
+            return self.apply_profiles_list(result);
+        }
         match result {
             Ok(profiles) => {
                 let Some(profile) = profiles.into_iter().next() else {
@@ -543,6 +620,220 @@ impl App {
                 self.set_screen_pending(None);
                 self.handle_post_auth_error(err);
                 None
+            }
+        }
+    }
+
+    /// Fold a switcher list/refresh response into the open switcher. On success it rebuilds the
+    /// list (keeping the active profile selected if still present), preserving an in-progress
+    /// create/rename sub-flow across the refresh; errors surface on the switcher.
+    fn apply_profiles_list(
+        &mut self,
+        result: crate::client::ClientResult<Vec<contract::Profile>>,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(profiles) => {
+                // Re-point the in-memory active profile if it is gone from the list (it was just
+                // deleted): pick the first remaining (#1, Assumption A7). No-op while it is present.
+                self.repoint_active(&profiles);
+                let preserved = match &self.screen {
+                    Screen::Profiles(state) => Some(state.mode.clone()),
+                    _ => None,
+                };
+                let active_id = self.active_profile_id();
+                let mut state = ProfilesState::new(profiles, &active_id);
+                if let Some(mode) = preserved
+                    && matches!(
+                        mode,
+                        ProfilesMode::Creating(_) | ProfilesMode::Renaming { .. }
+                    )
+                {
+                    state.mode = mode;
+                }
+                self.screen = Screen::Profiles(state);
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_post_auth_error(err);
+            }
+        }
+        None
+    }
+
+    /// The active profile id held in the in-memory session (empty if no session yet).
+    fn active_profile_id(&self) -> String {
+        self.session
+            .as_ref()
+            .map_or_else(String::new, |s| s.profile_id.clone())
+    }
+
+    /// Re-point the in-memory active profile to the first profile in `profiles` when the current
+    /// active id is no longer present in the list (it was just deleted) — keeping the TUI scoped to
+    /// a real namespace (#1, Assumption A7). A no-op while the active profile is still in the list;
+    /// the account always retains ≥1 profile (the last-profile delete is server-refused), so a
+    /// non-empty list is the norm here.
+    fn repoint_active(&mut self, profiles: &[contract::Profile]) {
+        let Some(session) = &mut self.session else {
+            return;
+        };
+        let still_present = profiles.iter().any(|p| p.id == session.profile_id);
+        if still_present {
+            return;
+        }
+        if let Some(first) = profiles.first() {
+            session.profile_id = first.id.clone();
+            session.profile_name = first.name.clone();
+        }
+    }
+
+    /// Fold a create-profile response. On success the create sub-flow closes and the switcher is
+    /// re-fetched from the server (#1); a duplicate-name (or other) error surfaces inline in the
+    /// open form.
+    fn apply_create_profile(
+        &mut self,
+        result: crate::client::ClientResult<contract::Profile>,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(_) => {
+                if let Screen::Profiles(profiles) = &mut self.screen {
+                    profiles.mode = ProfilesMode::List;
+                }
+                self.refresh_profiles()
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_profile_form_error(err);
+                None
+            }
+        }
+    }
+
+    /// Fold a rename-profile response. On success the rename sub-flow closes, the active profile's
+    /// cached name is refreshed if it was the one renamed, and the switcher is re-fetched (#1); a
+    /// duplicate-name (or other) error surfaces inline in the open form.
+    fn apply_update_profile(
+        &mut self,
+        result: crate::client::ClientResult<contract::Profile>,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(profile) => {
+                // Keep the in-memory session label current if the active profile was renamed.
+                if let Some(session) = &mut self.session
+                    && session.profile_id == profile.id
+                {
+                    session.profile_name = profile.name.clone();
+                }
+                if let Screen::Profiles(profiles) = &mut self.screen {
+                    profiles.mode = ProfilesMode::List;
+                }
+                self.refresh_profiles()
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_profile_form_error(err);
+                None
+            }
+        }
+    }
+
+    /// Fold a delete-profile response. On success the confirmation closes; if the deleted profile
+    /// was the active one the in-memory active profile is re-pointed to another from the refreshed
+    /// list (#1, Assumption A7). A `last_profile` (or other) error surfaces on the switcher.
+    fn apply_delete_profile(
+        &mut self,
+        result: crate::client::ClientResult<()>,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(()) => {
+                let deleted = if let Screen::Profiles(profiles) = &mut self.screen {
+                    let deleted = match &profiles.mode {
+                        ProfilesMode::ConfirmingDelete { profile_id, .. } => {
+                            Some(profile_id.clone())
+                        }
+                        _ => None,
+                    };
+                    profiles.mode = ProfilesMode::List;
+                    deleted
+                } else {
+                    None
+                };
+                // If the active profile was the one deleted, drop the cached id so the refreshed
+                // list re-points it to the first remaining profile (see `repoint_active`).
+                if let (Some(deleted), Some(session)) = (deleted, &mut self.session)
+                    && session.profile_id == deleted
+                {
+                    session.profile_id = String::new();
+                    session.profile_name = String::new();
+                }
+                self.refresh_profiles()
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_profile_delete_error(err);
+                None
+            }
+        }
+    }
+
+    /// Error routing for a delete: offline → blocking, `unauthenticated` → login, and a
+    /// `last_profile` refusal (or other error) surfaces inline on the switcher with a clear message
+    /// (the account must keep ≥1 namespace, ADR-0009 §4).
+    fn handle_profile_delete_error(&mut self, err: ClientError) {
+        if err.is_offline() {
+            self.go_offline(&err);
+            return;
+        }
+        if err.code() == Some(&ErrorCode::Unauthenticated) {
+            self.go_to_login();
+            return;
+        }
+        let message = if err.code() == Some(&ErrorCode::LastProfile) {
+            "cannot delete the last profile — the account must keep at least one".to_owned()
+        } else {
+            err.to_string()
+        };
+        if let Screen::Profiles(profiles) = &mut self.screen {
+            profiles.message = Some(message);
+        }
+    }
+
+    /// Re-dispatch a switcher list load after a successful mutation, chaining the in-flight marker
+    /// forward. Returns to login if the session vanished.
+    fn refresh_profiles(&mut self) -> Option<Dispatch> {
+        let Some(session) = self.session.clone() else {
+            self.set_screen_pending(None);
+            self.go_to_login();
+            return None;
+        };
+        Some(self.dispatch_screen(ClientRequest::ListProfiles {
+            token: session.token,
+        }))
+    }
+
+    /// Error routing for a create/rename: offline → blocking, `unauthenticated` → login, and a
+    /// duplicate-name (`profile_name_taken`) or validation error surfaces inline in the open form
+    /// so the user can correct it (mirror of [`Self::handle_note_form_error`]). The
+    /// [`ErrorCode::ProfileNameTaken`] case is rendered as a clear "name already in use" message.
+    fn handle_profile_form_error(&mut self, err: ClientError) {
+        if err.is_offline() {
+            self.go_offline(&err);
+            return;
+        }
+        if err.code() == Some(&ErrorCode::Unauthenticated) {
+            self.go_to_login();
+            return;
+        }
+        let message = if err.code() == Some(&ErrorCode::ProfileNameTaken) {
+            "a profile with that name already exists".to_owned()
+        } else {
+            err.to_string()
+        };
+        if let Screen::Profiles(profiles) = &mut self.screen {
+            match &mut profiles.mode {
+                ProfilesMode::Creating(form) | ProfilesMode::Renaming { form, .. } => {
+                    form.error = Some(message);
+                }
+                _ => profiles.message = Some(message),
             }
         }
     }
@@ -905,6 +1196,7 @@ impl App {
         match &mut self.screen {
             Screen::TaskList(list) => list.message = Some(message),
             Screen::Notes(notes) => notes.message = Some(message),
+            Screen::Profiles(profiles) => profiles.message = Some(message),
             Screen::Auth(auth) => auth.error = Some(message),
             Screen::Offline { .. } => {}
         }

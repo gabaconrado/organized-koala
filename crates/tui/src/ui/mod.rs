@@ -11,7 +11,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::app::{
-    App, AuthField, AuthMode, AuthState, NotesMode, NotesState, Screen, TaskListState, Timer,
+    App, AuthField, AuthMode, AuthState, NotesMode, NotesState, ProfilesMode, ProfilesState,
+    Screen, TaskListState, Timer,
 };
 use contract::{Note, TaskStatus, TimerSession};
 
@@ -24,14 +25,19 @@ const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 /// the in-flight spinner + ` (Esc to cancel)` affordance is appended — the wrapped caption stays
 /// within the bottom band at the 80×24 test viewport without clipping the cancel affordance
 /// (ADR-0006 §8.3, learned 0010).
-const TASK_LIST_CAPTION: &str =
-    "a: add | e: edit | c: done | x: del | n: notes | p: timer | d: dur | r: refresh | q: quit";
+const TASK_LIST_CAPTION: &str = "a: add | e: edit | c: done | x: del | n: notes | s: profiles | p: timer | d: dur | r: refresh | q: quit";
 
 /// The base hotkey caption for the notes screen (idle list). Mirrors the task-list caption with
 /// the notes commands (`a` create, `e` edit, `x` delete, Enter open) and an `Esc` back-to-tasks.
 /// Kept short enough that the caption plus the appended spinner + cancel affordance stays within
 /// the bottom band at the 80×24 viewport (ADR-0006 §8.3).
 const NOTES_CAPTION: &str = "a: add | e: edit | x: del | Enter: open | Esc: back | p: timer | d: dur | r: refresh | q: quit";
+
+/// The base hotkey caption for the profile switcher (idle list). `Enter` picks the selected
+/// profile (client-side re-scope; ADR-0009 §5). Kept short enough that the caption plus the
+/// appended spinner + cancel affordance stays within the bottom band at the 80×24 viewport
+/// (ADR-0006 §8.3, learned 0010).
+const PROFILES_CAPTION: &str = "Enter: switch | a: add | e: rename | x: del | Esc: back | p: timer | d: dur | r: refresh | q: quit";
 
 /// Height (rows) of the bottom band on a post-auth screen: the hotkey caption (which may wrap)
 /// on the left and the global timer widget on the right. Three rows so the wrapped caption plus
@@ -100,6 +106,10 @@ pub fn draw(frame: &mut Frame, app: &App, tick: u64) {
         Screen::Notes(notes) => {
             let profile = app.session().map_or("", |s| s.profile_name.as_str());
             draw_notes(frame, notes, app.timer(), profile, tick);
+        }
+        Screen::Profiles(profiles) => {
+            let active = app.session().map_or("", |s| s.profile_id.as_str());
+            draw_profiles(frame, profiles, app.timer(), active, tick);
         }
         Screen::Offline { message, pending } => {
             draw_offline(frame, message, pending.is_some(), tick);
@@ -460,6 +470,112 @@ fn notes_caption_base(notes: &NotesState, timer: &Timer) -> &'static str {
             NotesMode::ConfirmingDelete { .. } => "Enter: confirm delete  Esc: cancel",
             NotesMode::Viewing(_) => "Esc: back to list",
             NotesMode::List => NOTES_CAPTION,
+        }
+    }
+}
+
+/// Render the profile switcher: the account's profiles (the active one marked), or the open
+/// create/rename/delete sub-flow, plus the shared bottom row. `active_id` marks which row is the
+/// currently-scoped profile.
+fn draw_profiles(
+    frame: &mut Frame,
+    profiles: &ProfilesState,
+    timer: &Timer,
+    active_id: &str,
+    tick: u64,
+) {
+    let area = frame.area();
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(3),
+            Constraint::Length(2),
+            Constraint::Length(BOTTOM_BAND_ROWS),
+        ])
+        .split(area);
+
+    if let Some(slot) = chunks.first() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "organized-koala — profiles".to_owned(),
+                Style::default().add_modifier(Modifier::BOLD),
+            )),
+            *slot,
+        );
+    }
+
+    if let Some(slot) = chunks.get(1) {
+        let items: Vec<ListItem> = profiles
+            .profiles
+            .iter()
+            .map(|profile| {
+                // The active (currently-scoped) profile is marked so the switch target is clear.
+                let marker = if profile.id == active_id { "* " } else { "  " };
+                ListItem::new(Line::from(format!("{marker}{}", profile.name)))
+            })
+            .collect();
+        let widget = List::new(items)
+            .block(Block::default().borders(Borders::ALL).title("Profiles"))
+            .highlight_symbol("> ")
+            .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+        let mut state = ListState::default();
+        state.select(profiles.selected);
+        frame.render_stateful_widget(widget, *slot, &mut state);
+    }
+
+    if let Some(slot) = chunks.get(2) {
+        let text = if let Some(edit) = &timer.editing {
+            // The duration-edit sub-flow overlays the active screen's message line (ADR-0006 §8).
+            let err = edit.error.as_deref().unwrap_or("");
+            format!("Set duration (min): {}  {err}", edit.buffer)
+        } else {
+            profile_message_line(profiles)
+        };
+        frame.render_widget(
+            Paragraph::new(Span::raw(text)).wrap(Wrap { trim: true }),
+            *slot,
+        );
+    }
+
+    if let Some(slot) = chunks.get(3) {
+        let base = profiles_caption_base(profiles, timer);
+        let pending = profiles.is_pending() || timer.is_pending();
+        let caption = caption_with_spinner(base, pending, tick);
+        draw_bottom_row(frame, *slot, &caption, timer);
+    }
+}
+
+/// The message line for the switcher: the open create/rename form's name + inline error, the
+/// delete confirmation prompt, the timer message, or the screen's transient message (e.g. the
+/// `last_profile` refusal).
+fn profile_message_line(profiles: &ProfilesState) -> String {
+    match &profiles.mode {
+        ProfilesMode::Creating(form) => {
+            let err = form.error.as_deref().unwrap_or("");
+            format!("New profile — name: '{}'  {err}", form.name)
+        }
+        ProfilesMode::Renaming { form, .. } => {
+            let err = form.error.as_deref().unwrap_or("");
+            format!("Rename profile — name: '{}'  {err}", form.name)
+        }
+        ProfilesMode::ConfirmingDelete { name, .. } => {
+            format!("Delete profile '{name}'? Enter: confirm  Esc: cancel")
+        }
+        ProfilesMode::List => profiles.message.clone().unwrap_or_default(),
+    }
+}
+
+/// The base hotkey caption for the switcher, varying by the open sub-flow.
+fn profiles_caption_base(profiles: &ProfilesState, timer: &Timer) -> &'static str {
+    if timer.editing.is_some() {
+        "Enter: save  Esc: cancel"
+    } else {
+        match &profiles.mode {
+            ProfilesMode::Creating(_) | ProfilesMode::Renaming { .. } => "Enter: save  Esc: cancel",
+            ProfilesMode::ConfirmingDelete { .. } => "Enter: confirm delete  Esc: cancel",
+            ProfilesMode::List => PROFILES_CAPTION,
         }
     }
 }

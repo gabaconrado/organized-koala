@@ -9,9 +9,9 @@
 //! and the bearer token, never a live connection.
 
 use contract::{
-    CreateNoteRequest, CreateTaskRequest, LoginRequest, Note, Profile, RegisterRequest,
-    SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest, UpdateTaskRequest,
-    UpdateTimerConfigRequest,
+    CreateNoteRequest, CreateProfileRequest, CreateTaskRequest, LoginRequest, Note, Profile,
+    RegisterRequest, SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest,
+    UpdateProfileRequest, UpdateTaskRequest, UpdateTimerConfigRequest,
 };
 
 use crate::client::ClientResult;
@@ -38,6 +38,29 @@ pub enum ClientRequest {
     ListProfiles {
         /// The bearer token to authenticate with.
         token: String,
+    },
+    /// `POST /api/profiles` — create a profile (the switcher's create sub-flow).
+    CreateProfile {
+        /// The bearer token to authenticate with.
+        token: String,
+        /// The profile to create.
+        req: CreateProfileRequest,
+    },
+    /// `PATCH /api/profiles/{profile_id}` — rename a profile (the switcher's rename sub-flow).
+    UpdateProfile {
+        /// The bearer token to authenticate with.
+        token: String,
+        /// The profile to rename.
+        profile_id: String,
+        /// The new name.
+        req: UpdateProfileRequest,
+    },
+    /// `DELETE /api/profiles/{profile_id}` — delete a profile (the switcher's delete sub-flow).
+    DeleteProfile {
+        /// The bearer token to authenticate with.
+        token: String,
+        /// The profile to delete.
+        profile_id: String,
     },
     /// `GET /api/profiles/{profile_id}/tasks`.
     ListTasks {
@@ -170,6 +193,12 @@ pub enum Outcome {
         /// The profiles returned (or the error).
         result: ClientResult<Vec<Profile>>,
     },
+    /// Result of a [`ClientRequest::CreateProfile`] call.
+    CreateProfile(ClientResult<Profile>),
+    /// Result of a [`ClientRequest::UpdateProfile`] call.
+    UpdateProfile(ClientResult<Profile>),
+    /// Result of a [`ClientRequest::DeleteProfile`] call (`204` carries no body).
+    DeleteProfile(ClientResult<()>),
     /// Result of a [`ClientRequest::ListTasks`] call.
     ListTasks(ClientResult<Vec<Task>>),
     /// Result of a [`ClientRequest::CreateTask`] call.
