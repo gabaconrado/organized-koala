@@ -2,14 +2,14 @@
 id: 0012
 title: Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard)
 type: feature      # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0009 lands on `main` with this plan. See sequencing note re: 0010 (notes cascade).
-branch: null
-worktree: null
+branch: feature/0012-profiles-crud-and-switcher
+worktree: .claude/worktrees/0012-profiles-crud-and-switcher
 created: 2026-06-24
-updated: 2026-06-24
+updated: 2026-06-25
 ---
 
 <!-- CLAIMED 2026-06-25: branch feature/0012-profiles-crud-and-switcher (worktree cut from
@@ -159,3 +159,19 @@ Dependency edges: **1 → 2 → 3 → 4**; tests alongside. Slice 1 must merge b
 
 [adr-0009]: ../../docs/adr/0009-profile-mutations.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
+
+<!-- ─────────────────────────────  LOG / COMMENTS  ───────────────────────────── -->
+## Log / comments
+
+- [x] 2026-06-25 [drive] Claimed `ready`→`working`. Worktree
+      `.claude/worktrees/0012-profiles-crud-and-switcher` branch
+      `feature/0012-profiles-crud-and-switcher` cut from `main` b2c8b8b (carries the plan +
+      ADR-0009 + decisions index, verified present in the base commit and inside the worktree).
+      Docker capability confirmed UP (29.5.3; Risk #6 / hard-constraint #6 cleared). 0010 (notes)
+      is merged on `main`, so the `notes` table + its `ON DELETE CASCADE` exist for the
+      delete-cascade test. Building contract→server→tui per the slice order (1→2→3→4, tests
+      alongside).
+
+## Summary
+
+_(filled by `eng-manager` at step 6)_
