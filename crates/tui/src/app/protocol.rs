@@ -10,7 +10,8 @@
 
 use contract::{
     CreateNoteRequest, CreateTaskRequest, LoginRequest, Note, Profile, RegisterRequest,
-    SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest, UpdateTimerConfigRequest,
+    SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest, UpdateTaskRequest,
+    UpdateTimerConfigRequest,
 };
 
 use crate::client::ClientResult;
@@ -54,13 +55,25 @@ pub enum ClientRequest {
         /// The task to create.
         req: CreateTaskRequest,
     },
-    /// `POST /api/profiles/{profile_id}/tasks/{task_id}/close`.
-    CloseTask {
+    /// `PATCH /api/profiles/{profile_id}/tasks/{task_id}` — partial update (edit, toggle-done,
+    /// reopen).
+    UpdateTask {
         /// The bearer token to authenticate with.
         token: String,
         /// The profile namespace owning the task.
         profile_id: String,
-        /// The task to close.
+        /// The task to update.
+        task_id: String,
+        /// The fields to change (all-optional partial update).
+        req: UpdateTaskRequest,
+    },
+    /// `DELETE /api/profiles/{profile_id}/tasks/{task_id}`.
+    DeleteTask {
+        /// The bearer token to authenticate with.
+        token: String,
+        /// The profile namespace owning the task.
+        profile_id: String,
+        /// The task to delete.
         task_id: String,
     },
     /// `GET /api/profiles/{profile_id}/notes`.
@@ -161,8 +174,10 @@ pub enum Outcome {
     ListTasks(ClientResult<Vec<Task>>),
     /// Result of a [`ClientRequest::CreateTask`] call.
     CreateTask(ClientResult<Task>),
-    /// Result of a [`ClientRequest::CloseTask`] call.
-    CloseTask(ClientResult<Task>),
+    /// Result of a [`ClientRequest::UpdateTask`] call.
+    UpdateTask(ClientResult<Task>),
+    /// Result of a [`ClientRequest::DeleteTask`] call (`204` carries no body).
+    DeleteTask(ClientResult<()>),
     /// Result of a [`ClientRequest::ListNotes`] call.
     ListNotes(ClientResult<Vec<Note>>),
     /// Result of a [`ClientRequest::CreateNote`] call.

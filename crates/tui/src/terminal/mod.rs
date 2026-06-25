@@ -48,7 +48,7 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
     }
     match screen {
         Screen::Auth(_) => true,
-        Screen::TaskList(list) => list.adding.is_some(),
+        Screen::TaskList(list) => list.adding.is_some() || list.editing.is_some(),
         Screen::Notes(notes) => notes.is_text_entry(),
         Screen::Offline { .. } => false,
     }
@@ -66,8 +66,11 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
 /// - `Backspace` → [`Event::Backspace`].
 /// - `F2` (auth screen) → [`Event::ToggleAuthMode`].
 /// - In a text-entry context, a printable key → [`Event::Char`].
-/// - On the task list (not entering text): `a` → [`Event::BeginAddTask`], `c` →
-///   [`Event::CloseSelected`], `r` → [`Event::Refresh`], `q` → [`Event::Quit`].
+/// - On the task list (not entering text): `a` → [`Event::BeginAddTask`], `e` →
+///   [`Event::BeginEditTask`], `c` → [`Event::ToggleDone`], `x` → [`Event::DeleteSelected`],
+///   `n` → [`Event::OpenNotes`], `r` → [`Event::Refresh`], `q` → [`Event::Quit`].
+/// - On the notes list (idle, not entering text): `a` → [`Event::BeginAddNote`], `e` →
+///   [`Event::BeginEditNote`], `x` → [`Event::BeginDeleteNote`], `Esc` → [`Event::Back`].
 /// - On any post-auth screen (not entering text): `p` → [`Event::ToggleTimer`], `d` →
 ///   [`Event::BeginEditDuration`] (the global timer controls, ADR-0006 §8.2).
 /// - On the offline screen: `r` → [`Event::Refresh`].
@@ -81,12 +84,15 @@ pub fn map_key(screen: &Screen, editing_duration: bool, key: KeyEvent) -> Option
     }
 
     let text_entry = is_text_entry(screen, editing_duration);
-    let in_add_task = matches!(screen, Screen::TaskList(list) if list.adding.is_some());
+    let in_task_form = matches!(
+        screen,
+        Screen::TaskList(list) if list.adding.is_some() || list.editing.is_some()
+    );
     let in_notes_sub_flow = matches!(screen, Screen::Notes(notes) if notes.in_sub_flow());
     let pending = is_pending(screen);
-    // A sub-flow (add-task, a notes sub-flow, or duration-edit) or an in-flight request makes
-    // `Esc` mean cancel.
-    let in_sub_flow = in_add_task || in_notes_sub_flow || editing_duration;
+    // A sub-flow (add/edit-task, a notes sub-flow, or duration-edit) or an in-flight request
+    // makes `Esc` mean cancel.
+    let in_sub_flow = in_task_form || in_notes_sub_flow || editing_duration;
     let on_task_list = matches!(screen, Screen::TaskList(_));
     let on_notes = matches!(screen, Screen::Notes(_));
     let post_auth = on_task_list || on_notes;
@@ -109,7 +115,9 @@ pub fn map_key(screen: &Screen, editing_duration: bool, key: KeyEvent) -> Option
         KeyCode::F(2) if matches!(screen, Screen::Auth(_)) => Some(Event::ToggleAuthMode),
         KeyCode::Char(c) if text_entry => Some(Event::Char(c)),
         KeyCode::Char('a') if on_task_list => Some(Event::BeginAddTask),
-        KeyCode::Char('c') if on_task_list => Some(Event::CloseSelected),
+        KeyCode::Char('e') if on_task_list => Some(Event::BeginEditTask),
+        KeyCode::Char('c') if on_task_list => Some(Event::ToggleDone),
+        KeyCode::Char('x') if on_task_list => Some(Event::DeleteSelected),
         // `n` opens the notes view from the task list (Assumption A7).
         KeyCode::Char('n') if on_task_list => Some(Event::OpenNotes),
         // Notes-list commands (idle list, not a text-entry sub-flow): create / edit / delete.

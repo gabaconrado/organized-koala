@@ -20,7 +20,7 @@ pub mod timer;
 pub use auth::{AuthField, AuthMode, AuthState};
 pub use notes::{NoteForm, NotesMode, NotesState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
-pub use task_add::AddTaskState;
+pub use task_add::{AddTaskState, EditTaskState};
 pub use task_list::TaskListState;
 pub use timer::{DurationEditState, Timer};
 
@@ -47,8 +47,14 @@ pub enum Event {
     ToggleAuthMode,
     /// Begin the add-task input flow (task list only).
     BeginAddTask,
-    /// Close / mark-done the selected task (task list only).
-    CloseSelected,
+    /// Begin editing the selected task's title/description (task list only).
+    BeginEditTask,
+    /// Toggle the selected task between done and open (task list only): a done task is reopened,
+    /// an open task is marked done.
+    ToggleDone,
+    /// Begin (or, when already armed, confirm) deletion of the selected task (task list only). A
+    /// two-step confirm affordance: the first press arms, a second confirms.
+    DeleteSelected,
     /// Open the notes view for the active profile (task list only).
     OpenNotes,
     /// Return from the notes view to the task list (notes list, when idle).
@@ -387,6 +393,9 @@ impl App {
                 if let Some(add) = &mut list.adding {
                     add.error = None;
                 }
+                if let Some(edit) = &mut list.editing {
+                    edit.error = None;
+                }
             }
             Screen::Notes(notes) => {
                 notes.pending = None;
@@ -433,7 +442,8 @@ impl App {
                     Outcome::ListProfiles { token, result } => self.apply_profiles(token, result),
                     Outcome::ListTasks(result) => self.apply_tasks(result),
                     Outcome::CreateTask(result) => self.apply_create(result),
-                    Outcome::CloseTask(result) => self.apply_close(result),
+                    Outcome::UpdateTask(result) => self.apply_update(result),
+                    Outcome::DeleteTask(result) => self.apply_delete(result),
                     Outcome::ListNotes(result) => self.apply_notes(result),
                     Outcome::CreateNote(result) => self.apply_create_note(result),
                     Outcome::GetNote(result) => self.apply_get_note(result),
@@ -588,22 +598,58 @@ impl App {
         }
     }
 
-    fn apply_close(
+    /// Fold a task update (edit / toggle-done / reopen) response. On success the task list is
+    /// re-fetched from the server so the rendered state derives from a server response (#1); a
+    /// blank-title rejection surfaces inline in the edit sub-flow, other errors on the list.
+    fn apply_update(
         &mut self,
         result: crate::client::ClientResult<contract::Task>,
     ) -> Option<Dispatch> {
-        self.set_screen_pending(None);
         match result {
-            Ok(updated) => {
-                if let Screen::TaskList(list) = &mut self.screen
-                    && let Some(slot) = list.tasks.iter_mut().find(|t| t.id == updated.id)
-                {
-                    *slot = updated;
+            Ok(_) => {
+                if let Screen::TaskList(list) = &mut self.screen {
+                    list.editing = None;
                 }
+                self.refresh_tasks()
             }
-            Err(err) => self.handle_post_auth_error(err),
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_update_task_error(err);
+                None
+            }
         }
-        None
+    }
+
+    /// Fold a task delete response. On success the list is re-fetched (#1); errors surface on the
+    /// list.
+    fn apply_delete(&mut self, result: crate::client::ClientResult<()>) -> Option<Dispatch> {
+        match result {
+            Ok(()) => {
+                if let Screen::TaskList(list) = &mut self.screen {
+                    list.confirming_delete = None;
+                }
+                self.refresh_tasks()
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_post_auth_error(err);
+                None
+            }
+        }
+    }
+
+    /// Re-dispatch a task-list load after a successful mutation, chaining the in-flight marker
+    /// forward. Returns to login if the session vanished.
+    fn refresh_tasks(&mut self) -> Option<Dispatch> {
+        let Some(session) = self.session.clone() else {
+            self.set_screen_pending(None);
+            self.go_to_login();
+            return None;
+        };
+        Some(self.dispatch_screen(ClientRequest::ListTasks {
+            token: session.token,
+            profile_id: session.profile_id,
+        }))
     }
 
     fn apply_notes(
@@ -877,6 +923,28 @@ impl App {
             && let Some(add) = &mut list.adding
         {
             add.error = Some(err.to_string());
+        }
+    }
+
+    /// Map an error from a task update: offline → blocking, `unauthenticated` → login. A
+    /// validation (blank-title) error surfaces inline in the edit sub-flow if one is open;
+    /// otherwise (a toggle/reopen with no sub-flow) it surfaces on the list.
+    fn handle_update_task_error(&mut self, err: ClientError) {
+        if err.is_offline() {
+            self.go_offline(&err);
+            return;
+        }
+        if err.code() == Some(&ErrorCode::Unauthenticated) {
+            self.go_to_login();
+            return;
+        }
+        let message = err.to_string();
+        if let Screen::TaskList(list) = &mut self.screen {
+            if let Some(edit) = &mut list.editing {
+                edit.error = Some(message);
+            } else {
+                list.message = Some(message);
+            }
         }
     }
 

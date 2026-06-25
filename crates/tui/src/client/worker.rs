@@ -34,11 +34,17 @@ fn run<C: Client>(client: &C, request: ClientRequest) -> Outcome {
             profile_id,
             req,
         } => Outcome::CreateTask(client.create_task(&token, &profile_id, &req)),
-        ClientRequest::CloseTask {
+        ClientRequest::UpdateTask {
             token,
             profile_id,
             task_id,
-        } => Outcome::CloseTask(client.close_task(&token, &profile_id, &task_id)),
+            req,
+        } => Outcome::UpdateTask(client.update_task(&token, &profile_id, &task_id, &req)),
+        ClientRequest::DeleteTask {
+            token,
+            profile_id,
+            task_id,
+        } => Outcome::DeleteTask(client.delete_task(&token, &profile_id, &task_id)),
         ClientRequest::ListNotes { token, profile_id } => {
             Outcome::ListNotes(client.list_notes(&token, &profile_id))
         }

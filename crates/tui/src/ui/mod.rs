@@ -18,13 +18,14 @@ use contract::{Note, TaskStatus, TimerSession};
 /// The frames of the in-flight spinner, cycled by the poll loop's tick counter.
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 
-/// The base hotkey caption for the task-list screen (idle, not adding). The global timer keys
-/// (`p`, `d`) are shown on every post-auth screen so they are discoverable (ADR-0006 §8.2).
-/// `|`-separated so each command sits between word boundaries that the caption wrap can break
-/// on cleanly. The phrasing is chosen so that — once the in-flight spinner + ` (Esc to cancel)`
-/// affordance is appended — neither `p: start/stop timer` nor the cancel affordance straddles a
-/// wrap boundary at the 80×24 viewport, keeping the cancel affordance visible (ADR-0006 §8.3).
-const TASK_LIST_CAPTION: &str = "a: add | c: mark done | p: start/stop timer | n: notes | Up/Down: move | r: refresh | d: set duration | q: quit";
+/// The base hotkey caption for the task-list screen (idle, not in a sub-flow). The global timer
+/// keys (`p`, `d`) are shown on every post-auth screen so they are discoverable (ADR-0006 §8.2).
+/// ` | `-separated so wrap points fall on separators. The phrasing is kept compact so that — once
+/// the in-flight spinner + ` (Esc to cancel)` affordance is appended — the wrapped caption stays
+/// within the bottom band at the 80×24 test viewport without clipping the cancel affordance
+/// (ADR-0006 §8.3, learned 0010).
+const TASK_LIST_CAPTION: &str =
+    "a: add | e: edit | c: done | x: del | n: notes | p: timer | d: dur | r: refresh | q: quit";
 
 /// The base hotkey caption for the notes screen (idle list). Mirrors the task-list caption with
 /// the notes commands (`a` create, `e` edit, `x` delete, Enter open) and an `Esc` back-to-tasks.
@@ -292,6 +293,19 @@ fn draw_task_list(
                 "Add task — {field}: title='{}' desc='{}'  {err}",
                 add.title, add.description
             )
+        } else if let Some(edit) = &list.editing {
+            let field = if edit.on_title {
+                "Title"
+            } else {
+                "Description"
+            };
+            let err = edit.error.as_deref().unwrap_or("");
+            format!(
+                "Edit task — {field}: title='{}' desc='{}'  {err}",
+                edit.title, edit.description
+            )
+        } else if list.confirming_delete.is_some() {
+            "Delete this task? Press x again to confirm, any other key to cancel.".to_owned()
         } else if let Some(msg) = &timer.message {
             msg.clone()
         } else {
@@ -306,7 +320,7 @@ fn draw_task_list(
     if let Some(slot) = chunks.get(3) {
         let base = if timer.editing.is_some() {
             "Enter: save  Esc: cancel"
-        } else if list.adding.is_some() {
+        } else if list.adding.is_some() || list.editing.is_some() {
             "Enter: save  Tab: switch field  Esc: cancel"
         } else {
             TASK_LIST_CAPTION

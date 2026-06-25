@@ -11,7 +11,7 @@ pub mod worker;
 use contract::{
     CreateNoteRequest, CreateTaskRequest, ErrorBody, ErrorCode, LoginRequest, Note, Profile,
     RegisterRequest, SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest,
-    UpdateTimerConfigRequest,
+    UpdateTaskRequest, UpdateTimerConfigRequest,
 };
 
 /// A failure from a client call.
@@ -114,9 +114,21 @@ pub trait Client {
         req: &CreateTaskRequest,
     ) -> ClientResult<Task>;
 
-    /// `POST /api/profiles/{profile_id}/tasks/{task_id}/close` — close a task, returning the
-    /// updated [`Task`] (status `done`, `closed_at` set). Idempotent server-side.
-    fn close_task(&self, token: &str, profile_id: &str, task_id: &str) -> ClientResult<Task>;
+    /// `PATCH /api/profiles/{profile_id}/tasks/{task_id}` — apply a partial update (title,
+    /// description, and/or status) to a task, returning the updated [`Task`]. Setting
+    /// `status: done` sets `closed_at`; `status: open` (reopen) clears it. A blank title is a
+    /// `validation_failed` [`ClientError::Api`]; a missing/unowned task is `not_found`.
+    fn update_task(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        req: &UpdateTaskRequest,
+    ) -> ClientResult<Task>;
+
+    /// `DELETE /api/profiles/{profile_id}/tasks/{task_id}` — delete a task (`204`, no body). A
+    /// missing/unowned task is a `not_found` [`ClientError::Api`].
+    fn delete_task(&self, token: &str, profile_id: &str, task_id: &str) -> ClientResult<()>;
 
     /// `GET /api/profiles/{profile_id}/notes` — the profile's notes, newest-first.
     fn list_notes(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Note>>;
@@ -335,16 +347,39 @@ impl Client for HttpClient {
         }
     }
 
-    fn close_task(&self, token: &str, profile_id: &str, task_id: &str) -> ClientResult<Task> {
+    fn update_task(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        req: &UpdateTaskRequest,
+    ) -> ClientResult<Task> {
         let resp = self
             .http
-            .post(self.url(&format!("/api/profiles/{profile_id}/tasks/{task_id}/close")))
+            .patch(self.url(&format!("/api/profiles/{profile_id}/tasks/{task_id}")))
             .bearer_auth(token)
+            .json(req)
             .send()
             .map_err(offline)?;
         let status = resp.status();
         if status.is_success() {
             decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn delete_task(&self, token: &str, profile_id: &str, task_id: &str) -> ClientResult<()> {
+        let resp = self
+            .http
+            .delete(self.url(&format!("/api/profiles/{profile_id}/tasks/{task_id}")))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            // `204 No Content`: success carries no body to decode.
+            Ok(())
         } else {
             Err(api_error(status, resp))
         }
