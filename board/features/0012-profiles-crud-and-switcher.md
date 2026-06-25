@@ -2,7 +2,7 @@
 id: 0012
 title: Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard)
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0009 lands on `main` with this plan. See sequencing note re: 0010 (notes cascade).
@@ -221,6 +221,14 @@ Dependency edges: **1 → 2 → 3 → 4**; tests alongside. Slice 1 must merge b
       spans **observed** in the collector (`create_profile`/`rename_profile`/`delete_profile`), not
       inferred. TUI `TestBackend` suite confirmed present + green (`profiles.rs`, `keybindings.rs`)
       per ADR-0003. No material gaps. Stack torn down clean.
+- [x] 2026-06-25 [drive] **Step-7 freshen + → awaiting-merge.** Rebased onto `main` (which advanced
+      only in docs/`.claude`/`board/README.md`: eng-manager's handoff `6202efe`, bash-standards
+      `c440259`, dashboard `c64850e`). `./ok.sh code-hash` at the rebased head is unchanged at
+      `71fb7ecf327fbd42a14cb19456207885c782fe49` (== the attested hash), so the code is byte-identical
+      and the **approved + verified verdicts carry forward untouched — no re-review** (board-only
+      commit). Re-ran the gates on the rebased tree: `./ok.sh fmt --check | lint | test` all green
+      (full workspace suite, 0 failures). Branch is now current on `main`; DoD clauses 1–7 all hold.
+      **STOP** — terminal at `awaiting-merge`; the human performs the final ff-merge.
 
 ## Summary
 
