@@ -161,6 +161,20 @@ verifier blocks and the **operator authorizes** resetting `deploy_postgres-data`
 `COMPOSE_PROJECT_NAME` (e.g. derived from the worktree slug) so concurrent branches never share
 migration history or a volume — which removes the failure mode entirely.
 
+**Gotcha — merging one of two parallel `awaiting-merge` features voids the trailing one's verdicts
+(learned 0011).** When two independent features both sit at `awaiting-merge` and the operator merges
+one, rebasing the second onto the new `main` pulls the **just-merged feature's files into the
+second's `crates/` tree**. That changes the second's `./ok.sh code-hash` (a whole-`crates/`-tree
+digest, **not** per-feature), so per "Verdict pinning" its `approved`/`verified` verdicts are
+**voided** and it must **re-enter review + verify** — even though the two features never touched the
+same behaviour (0011 task-mutation vs. 0010 Notes are functionally independent). This is **not** the
+docs-only step-7 freshen (which preserves the digest and carries verdicts forward untouched); it is
+a code-changing rebase. The conflicts land in the files **both** features extended — enum variants,
+trait methods, worker/dispatch arms, key handling, captions — resolved as a **union** preserving both
+surfaces. **Plan for it:** merge parallel features in a deliberate order and **budget a
+re-review/re-verify pass for the trailing one**; do not treat its earlier sign-off as still valid
+after the rebase.
+
 > Open design item for the first ADR: **timer authority** — `#1` implies the server owns the
 > Pomodoro countdown and the TUI only renders it. The `architect` settles this in ADR-0002.
 

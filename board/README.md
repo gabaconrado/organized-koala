@@ -56,9 +56,10 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > unchanged → verdicts carried forward), fast-forwarded to `main` at `754e876`; worktree + branch
 > removed.
 >
-> **0011 — task update/delete/reopen — AWAITING-MERGE on `feature/0011-task-update-delete-reopen`**
-> (live status on the branch; the `main` snapshot stays frozen at the claim `ready` until the human's
-> ff-merge). The one-way task `close` generalized into full edit / toggle-done / reopen / delete — a
+> **0011 — task update/delete/reopen — AWAITING-MERGE on `feature/0011-task-update-delete-reopen`,
+> re-rebased onto post-0010 `main` and re-approved + re-verified** (live status on the branch; the
+> `main` snapshot stays frozen at the claim `ready` until the human's ff-merge). The one-way task
+> `close` generalized into full edit / toggle-done / reopen / delete — a
 > **breaking** change ([ADR-0008](../docs/adr/0008-task-mutation-generalization.md), ref ADR-0005
 > §5/§8) that **removes** the `POST .../tasks/{id}/close` route (clean removal, single in-repo
 > consumer). A new `contract` `UpdateTaskRequest { title?, description?, status? }` (all-optional
@@ -66,11 +67,16 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > (`COALESCE`/`CASE`: done sets `closed_at`, open clears it, empty patch a 200 no-op, blank title →
 > 400) + `DELETE …/tasks/{id}` (204 / 404), both ownership-joined → `404` never 403 (#4), **no
 > migration**; the TUI gains edit/toggle/delete keys (`e`/`c`/`x`, two-step confirm), stateless (#1).
-> Reviewer **approved** + verifier **verified**, both pinned to code-hash
-> `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf`; coverage 62.87% line (report-only). The first verify
-> run hit a cross-worktree shared docker volume migration-history conflict (0010's `notes` migration
-> in the shared `deploy_postgres-data`); re-ran green after an operator-authorized volume reset
-> (now a CLAUDE.md gotcha + a `platform-dev` per-worktree-isolation follow-up).
+> **After 0010 merged, 0011 was re-rebased onto post-0010 `main`** — that rebase pulled the merged
+> Notes feature into 0011's `crates/` tree, **changing its code-hash**
+> `e66426f0…` → `ee5047c9abf1e4196ed1933655a61fcf41148bcb` and voiding the prior verdicts (per
+> verdict-pinning, `code-hash` is a whole-`crates/`-tree digest). Both **re-passed** at `ee5047c9…`:
+> reviewer **re-approved** (cold re-review confirming the union merge preserves both the Notes and
+> task-mutation surfaces), verifier **re-verified** live (the earlier cross-worktree shared-volume
+> migration-history conflict is gone — 0011's tree now legitimately carries the `notes` migration).
+> Coverage 68.24% line (report-only; now reflects the merged tree). This parallel-feature re-verify
+> is recorded as a new CLAUDE.md gotcha (alongside the cross-worktree volume gotcha + a `platform-dev`
+> per-worktree-isolation follow-up).
 >
 > **0012 — READY (planned, unclaimed).** The last domain feature completing organized-koala — Profiles
 > create/update/delete + TUI switcher — born on `main` with its governing ADR-0009 (profile mutations).

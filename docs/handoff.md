@@ -5,6 +5,52 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-25 (0011 re-cycle — re-rebased onto post-0010 `main`, re-reviewed + re-verified)
+
+The operator merged **0010 (Notes)** to `main`, then **0011 was re-rebased onto post-0010 `main`**
+(`5ad5ba9`). Unlike the prior docs-only step-7 freshen, this rebase **changed code**: it pulled the
+entire Notes feature into 0011's `crates/` tree, with real conflicts in the TUI (`app/mod.rs`,
+`protocol.rs`, `client/mod.rs`, `client/worker.rs`, `terminal/mod.rs`, `ui/mod.rs`) and the test
+helpers — exactly the files both features extended. They were resolved as a **union** preserving both
+surfaces: 0011's breaking removal (`CloseTask`/`close_task`/`CloseSelected` dropped) plus
+`UpdateTask`/`DeleteTask` and the Notes variants all kept; the `map_key` caption merged to carry all
+keys with `BOTTOM_BAND_ROWS = 3`.
+
+Because `./ok.sh code-hash` is a whole-`crates/`-tree digest (not per-feature), pulling Notes in
+**changed 0011's code-hash** `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf` →
+`ee5047c9abf1e4196ed1933655a61fcf41148bcb`, which per the verdict-pinning rule **voided** the prior
+`approved`/`verified` verdicts — so 0011 **re-entered review + verify** even though task-mutation and
+Notes never touched the same behaviour. Both **re-passed** at the new hash `ee5047c9…`: reviewer
+**approved** (cold re-review confirming the union merge preserves both surfaces), verifier
+**verified** (live re-boot — the earlier cross-worktree migration-history collision is gone now that
+0011's tree legitimately carries the `20260612163049 notes` migration; all 8 task flows ran). Stopped
+again at the AI-terminal `awaiting-merge` on the branch, awaiting the human's merge.
+
+coverage: **68.24% line** (62.99% region / 70.77% function), freshly measured on the merged tree —
+now **reflects the Notes feature** the re-rebase pulled in (the pre-rebase 0011 snapshot was lower;
+this figure matches 0010's because the tree now contains both). Report-only — never a gate.
+
+**Durable learning recorded (the load-bearing one this re-cycle).** When two independent features
+both sit at `awaiting-merge` and one merges, rebasing the second onto the new `main` pulls the merged
+feature's files into the second's `crates/` tree, **changing its code-hash and voiding its
+approved/verified verdicts** — forcing a re-review/re-verify on a feature that changed no behaviour
+of its own. Recorded as a new CLAUDE.md gotcha (near the cross-worktree volume gotcha). **Plan for
+it:**
+merge parallel `awaiting-merge` features in a deliberate order and budget a re-review/re-verify pass
+for the trailing one; the conflicts land in the files both features extended (enum variants, trait
+methods, worker/dispatch arms, key handling, captions), resolved as a union. **No new ADR** (ADR-0008
+already on `main`), **no new crate → no new dev agent**.
+
+**Homes.** Feature-local on the branch (home #2): the refreshed `## Summary` (coverage line +
+verdict-hash references updated to `ee5047c9…`), committed on `feature/0011-task-update-delete-reopen`
+(`915005c`; code-hash unchanged — Board-only). Cross-cutting/derived on `main` (homes #1/#3): this
+`docs/handoff.md` entry (+ the "What works right now" snapshot refreshed) and the new CLAUDE.md
+gotcha, plus the regenerated `board/README.md`. **`main`'s frozen copy of
+`board/features/0011-task-update-delete-reopen.md` stays untouched** at the claim snapshot until the
+human's merge.
+
+---
+
 ## Handoff — 2026-06-25 (0011 — task update/delete/reopen; `close` removed, breaking)
 
 The one-way task `close` was generalized into full task **edit / toggle-done / reopen / delete**.
@@ -1260,8 +1306,9 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   worktree**; cold reviewer **approved** with the chore invariant attested (code-hash
   `3fa0adefce8cd6d67ae716dae7a24ce6dbf9defd`), live verifier **skipped**. 0009's own Summary is the
   first to carry a coverage line: 66.36% line / 61.48% region / 66.67% function.
-- **Notes — the final domain feature — is at `awaiting-merge` on `feature/0010-notes`** (0010, a
-  `feature`, live-verified): the last missing flat feature, a near-exact structural clone of the
+- **Notes — the final domain feature — is `merged` on `main`** (0010, a
+  `feature`, live-verified; the operator performed the final merge): the last missing flat feature,
+  a near-exact structural clone of the
   task surface governed by [ADR-0007][adr-0007]. A new `contract` `note` module
   (`Note { id, title, content, created_at }`, `CreateNoteRequest`, `UpdateNoteRequest`, no new
   `ErrorCode`, no `updated_at` — flat #3); five profile-scoped server CRUD routes under
@@ -1272,18 +1319,21 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   opened by `n` from the task list, stateless (#1), reqwest client maps one-for-one to the wire.
   Tests in all three crates (`contract` 11, `server` 28, `tui` `TestBackend` 13). Reviewer
   **approved** + verifier **verified**, both pinned to code-hash
-  `46c1c60f1eb3865eb127a72502982827ebb09d65`; coverage 68.24% line. With Notes done, all four flat
+  `46c1c60f1eb3865eb127a72502982827ebb09d65`; coverage 68.24% line. With Notes merged, all four flat
   features (TODO, Pomodoro, Notes, Profiles) exist except Profiles CRUD (0012, still `ready`).
-- **Task update/delete/reopen is at `awaiting-merge` on `feature/0011-task-update-delete-reopen`**
-  (0011, a `feature`, live-verified): the one-way task `close` generalized into full edit / toggle-done
-  / reopen / delete — a **breaking** change ([ADR-0008][adr-0008-0011]) that **removes** the
+- **Task update/delete/reopen is at `awaiting-merge` on `feature/0011-task-update-delete-reopen`,
+  re-rebased onto post-0010 `main` and re-approved + re-verified** (0011, a `feature`, live-verified):
+  the one-way task `close` generalized into full edit / toggle-done / reopen / delete — a
+  **breaking** change ([ADR-0008][adr-0008-0011]) that **removes** the
   `POST .../tasks/{id}/close` route (clean removal, single in-repo consumer, ADR-0005 §8). A new
   `contract` `UpdateTaskRequest { title?, description?, status? }` (all-optional partial, no
   `updated_at`, #3); `PATCH …/tasks/{id}` via one static `UPDATE … RETURNING` (`COALESCE`/`CASE`:
   done→`closed_at` set, open→cleared, empty patch a 200 no-op, blank title → 400) + `DELETE …/tasks/{id}`
   (204 / 404), both ownership-joined → 404 never 403 (#4), **no migration**; the TUI gains edit/
-  toggle/delete keys (`e`/`c`/`x` with two-step confirm), stateless (#1). Reviewer **approved** +
-  verifier **verified**, both pinned to code-hash `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf`; coverage
-  62.87% line. (The first verify run hit a cross-worktree shared-volume migration-history conflict —
-  see the 0011 cycle entry above + the new CLAUDE.md gotcha; re-ran green after an operator-authorized
-  volume reset.) Profiles CRUD (0012) remains the last `ready` item.
+  toggle/delete keys (`e`/`c`/`x` with two-step confirm), stateless (#1). The re-rebase onto post-0010
+  `main` pulled the merged Notes feature into 0011's `crates/` tree, **changing its code-hash**
+  `e66426f0…` → `ee5047c9abf1e4196ed1933655a61fcf41148bcb` and voiding the prior verdicts; both
+  **re-passed** at `ee5047c9…` (reviewer re-approved, verifier re-verified live — the earlier
+  cross-worktree migration-history collision is gone now that 0011's tree carries the notes
+  migration). Coverage 68.24% line (now reflects the merged tree). Awaiting the human's merge.
+  Profiles CRUD (0012) remains the last `ready` item.
