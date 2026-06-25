@@ -136,7 +136,38 @@ cmd_rollback() {
   cargo run --bin "${SERVER_BIN}" -- rollback --steps "${steps}"
 }
 
-cmd_prepare()    { cargo sqlx prepare --workspace; }
+# Regenerate the .sqlx/ offline query cache. `cargo sqlx prepare` introspects every query
+# against a LIVE, schema-loaded DB, so it needs the same wiring as cmd_test: honour a
+# caller-provided DATABASE_URL, else boot the throwaway test Postgres and tear it down on a
+# RETURN trap. Schema must exist before prepare runs, but we apply it with the sqlx CLI
+# directly (not the server binary's migrate) — on a feature branch the server has uncached
+# queries and won't compile offline, which is the very thing prepare exists to fix (circular).
+# prepare/migrate must hit the DB, so SQLX_OFFLINE is forced false for those invocations
+# (the global default is true so the rest of the workspace compiles offline).
+cmd_prepare() {
+  if [[ -n "${DATABASE_URL:-}" ]]; then
+    echo "ok.sh: using caller-provided DATABASE_URL for .sqlx/ prepare" >&2
+    SQLX_OFFLINE=false cargo sqlx migrate run --source crates/server/migrations
+    SQLX_OFFLINE=false cargo sqlx prepare --workspace
+    return
+  fi
+
+  require_docker
+  require_test_compose
+
+  echo "ok.sh: starting throwaway test Postgres..." >&2
+  OK_TEST_PG_USER="${TEST_PG_USER}" OK_TEST_PG_PW="${TEST_PG_PW}" \
+    OK_TEST_PG_DB="${TEST_PG_DB}" OK_TEST_PG_PORT="${TEST_PG_PORT}" \
+    docker compose -f "${TEST_COMPOSE_FILE}" up -d --wait
+
+  # Always tear the test DB down, even if migrate/prepare fails.
+  trap 'OK_TEST_PG_USER="${TEST_PG_USER}" OK_TEST_PG_PW="${TEST_PG_PW}" OK_TEST_PG_DB="${TEST_PG_DB}" OK_TEST_PG_PORT="${TEST_PG_PORT}" docker compose -f "${TEST_COMPOSE_FILE}" down --volumes >/dev/null 2>&1 || true' RETURN
+
+  DATABASE_URL="${TEST_DATABASE_URL}" SQLX_OFFLINE=false \
+    cargo sqlx migrate run --source crates/server/migrations
+  DATABASE_URL="${TEST_DATABASE_URL}" SQLX_OFFLINE=false \
+    cargo sqlx prepare --workspace
+}
 
 cmd_up() {
   require_docker
