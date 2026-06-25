@@ -175,6 +175,24 @@ ordering (2 before 3) suffices.
       tests + 2 doctests). No `close_task`/`CloseTask`/`CloseSelected` residue in any `crates/*/src/`.
       All gates green at branch head `6c3b987`: `./ok.sh build | test | lint --all-targets |
       fmt --check`. Code-hash `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf`.
+- [x] 2026-06-25 [reviewer] **REVIEW-STATUS: approved** — code-hash
+      `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf` (head sha `6c3b987`, a human-readable pointer).
+      Mechanical gate green (test: contract task 21 + 16 doctests, server tasks 20 + profile_isolation
+      6 + auth/timer, tui tasks 8 + full suite + 2 doctests; lint --all-targets clean, no `#[allow]`;
+      fmt clean). All hard constraints clear: #2 `UpdateTaskRequest` only in `contract` (ADR-0008),
+      consumed by both sides; #3 flat — no new fields, **no `updated_at`** anywhere; #4 every PATCH/
+      DELETE ownership-joined `WHERE id=$1 AND profile_id=$2`, unowned/missing → 404 never 403, no
+      cross-profile leakage (profile_isolation asserts the write/delete didn't land); A6 breaking-
+      change complete — `close_task`/`POST .../close`/`CloseTask`/`CloseSelected` fully gone (grep
+      clean), `old_close_route_is_gone` asserts 404/405; A2 single static parameterized `UPDATE …
+      RETURNING` with `COALESCE`/`CASE` (no injection surface), done→COALESCE(closed_at,now()),
+      open→NULL, absent→untouched, empty-patch 200 no-op; A4 blank title → 400 `ValidationFailed`
+      (no new code), stored trimmed; A3 PATCH 200 / DELETE 204; #1 TUI stateless (mutations chain a
+      `ListTasks` refresh), no `chrono` dep (A8); no migration added, `.sqlx/` refreshed to match;
+      ADR-0003 TUI behaviour covered by green TestBackend suite. No fix-now blockers. **Nit (non-
+      blocking, chore candidate):** `crates/tui/README.md:15` still says "close tasks" — stale after
+      the migration (server README route table was correctly updated). Verdict valid while
+      `./ok.sh code-hash HEAD` == the hash above.
 
 ## Summary
 
