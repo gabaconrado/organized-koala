@@ -161,6 +161,20 @@ ordering (2 before 3) suffices.
       the slice order (1→2→3→4, tests alongside). Breaking change: `POST .../close` removed and
       replaced by `PATCH …/tasks/{id}` + `DELETE …/tasks/{id}`; TUI close path rewired in the same
       branch.
+- [x] 2026-06-25 [drive] Build complete (contract→server→tui, tests alongside). S1 `contract`
+      `UpdateTaskRequest { title?, description?, status? }` all-optional partial DTO + doctests
+      (`fdf25cb`); S1t contract tests ×5 → suite 21 (`094865b`). S2 server `patch_task`/`delete_task`,
+      single static `UPDATE … RETURNING` with `COALESCE`/`CASE` status↔closed_at coupling, ownership-
+      scoped `DELETE`, `close_task` + `POST .../close` route removed, `.sqlx/` refreshed (`b46a6a6`);
+      S2t server integration tests incl. reopen-clears-closed_at, empty-patch no-op, blank-title 400,
+      DELETE→204→404, profile-scoped 404, auth, old-close-route-gone, migrated close→PATCH
+      (`1fa1461`; tasks.rs 20, profile_isolation.rs 6). S3+S4 TUI client `update_task`/`delete_task`,
+      protocol `UpdateTask`/`DeleteTask`, keys `e` edit / `c` toggle-done(+reopen) / `x` delete with
+      two-step confirm, mutations chain a `ListTasks` refresh (stateless #1), caption re-budgeted for
+      80×24 (ADR-0006 §8.3) (`52904a4`); S4t TUI TestBackend suite migrated + new (`6c3b987`; tui 80
+      tests + 2 doctests). No `close_task`/`CloseTask`/`CloseSelected` residue in any `crates/*/src/`.
+      All gates green at branch head `6c3b987`: `./ok.sh build | test | lint --all-targets |
+      fmt --check`. Code-hash `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf`.
 
 ## Summary
 
