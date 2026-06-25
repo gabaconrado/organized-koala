@@ -2,7 +2,7 @@
 id: 0011
 title: Task update + delete + reopen — generalize close into PATCH (breaking)
 type: feature      # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0008 lands on `main` with this plan; independent of 0010/0012 (different files)
@@ -150,3 +150,18 @@ ordering (2 before 3) suffices.
 
 [adr-0008]: ../../docs/adr/0008-task-mutation-generalization.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
+
+## Log / comments
+
+- [x] 2026-06-25 [drive] Claimed `ready`→`working`. Worktree
+      `.claude/worktrees/0011-task-update-delete-reopen` branch
+      `feature/0011-task-update-delete-reopen` cut from `main` 61101e0 (carries the plan +
+      ADR-0008, verified present in the base commit and inside the worktree). Docker capability
+      confirmed UP (29.5.3; Risk #6 / hard-constraint #6 cleared). Building contract→server→tui per
+      the slice order (1→2→3→4, tests alongside). Breaking change: `POST .../close` removed and
+      replaced by `PATCH …/tasks/{id}` + `DELETE …/tasks/{id}`; TUI close path rewired in the same
+      branch.
+
+## Summary
+
+_(filled by `eng-manager` at drive step 6)_
