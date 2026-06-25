@@ -80,7 +80,7 @@ fn global_timer_widget_renders_on_the_task_list() {
     );
     // Criterion 7: the bottom-left caption lists the `p` start/stop hotkey (the help-menu entry).
     assert!(
-        text.contains("p: start/stop timer"),
+        text.contains("p: timer"),
         "the `p` toggle is listed in the hotkey caption:\n{text}",
     );
 }
@@ -294,7 +294,7 @@ fn in_flight_appends_a_spinner_without_replacing_the_caption() {
     // "working…" string), and the cancel affordance plus a trailing spinner glyph are appended.
     let text = render_at(&app, W, H, 1);
     assert!(
-        text.contains("p: start/stop timer"),
+        text.contains("p: timer"),
         "the hotkey caption is NOT replaced while in flight (no flicker):\n{text}",
     );
     assert!(
@@ -317,10 +317,7 @@ fn idle_caption_has_no_spinner_or_cancel_affordance() {
     // Contrast: with nothing in flight the caption is the bare hotkey list — no spinner, no cancel.
     let (_client, app) = logged_in_with_idle_timer(30);
     let text = render(&app, W, H);
-    assert!(
-        text.contains("p: start/stop timer"),
-        "caption present:\n{text}"
-    );
+    assert!(text.contains("p: timer"), "caption present:\n{text}");
     assert!(
         !text.contains("Esc to cancel"),
         "no cancel affordance when idle:\n{text}",
@@ -533,7 +530,7 @@ fn coarse_refresh_repulls_session_account_global() {
 #[test]
 fn timer_requests_are_account_global_not_profile_scoped() {
     // The highest-value account-global assertion (#4 / ADR-0002 §5): every timer request carries
-    // only the token, never a profile_id — unlike ListTasks/CreateTask/CloseTask. Exercise the full
+    // only the token, never a profile_id — unlike ListTasks/CreateTask/UpdateTask. Exercise the full
     // timer command surface (load, start, refresh, stop, update) and check the call shapes.
     let (client, mut app) = logged_in_with_idle_timer(30);
 

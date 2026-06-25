@@ -4,7 +4,8 @@
 //! - register and login flows reach the auto-selected profile's task list;
 //! - the add-task flow (Title + Description) posts a `CreateTaskRequest` and re-renders from the
 //!   server's fresh list;
-//! - mark-done sends the `…/close` request and the row re-renders from the returned `Task`;
+//! - mark-done issues `UpdateTask { status: done }` and the row re-renders from the server's
+//!   fresh list (statelessness: the success chains a `ListTasks` refresh);
 //! - statelessness (hard-constraint #1): every view derives from a server response — the
 //!   rendered list mirrors exactly what the server returned, never fabricated/cached data, and
 //!   each mutation triggers a server round-trip whose response drives the next render.
@@ -162,7 +163,7 @@ fn add_task_posts_request_then_refreshes_from_server() {
 // ---- mark-done flow ----
 
 #[test]
-fn mark_done_sends_close_and_rerenders_from_returned_task() {
+fn mark_done_issues_update_status_done_and_rerenders_from_server() {
     let open = open_task("t1", "Write tests", "2026-06-18T10:00:00Z");
     let client = FakeClient::new();
     client.push_login(Ok(session("jwt")));
@@ -178,18 +179,20 @@ fn mark_done_sends_close_and_rerenders_from_returned_task() {
         "starts undone:\n{before}"
     );
 
-    // Script the close response (status done, closed_at set).
+    // Script the update response (status done, closed_at set) and the chained refresh list — the
+    // success re-fetches so the view derives from a server response (#1).
     let closed = done_task(
         "t1",
         "Write tests",
         "2026-06-18T10:00:00Z",
         "2026-06-18T14:00:00Z",
     );
-    client.push_close(Ok(closed));
+    client.push_update(Ok(closed.clone()));
+    client.push_tasks(Ok(vec![closed]));
 
-    submit(&mut app, &client, Event::CloseSelected);
+    submit(&mut app, &client, Event::ToggleDone);
 
-    // The row was replaced in place from the server's returned Task.
+    // The row reflects the server's now-done task with no extra/duplicate row.
     let Screen::TaskList(list) = app.screen() else {
         panic!("task list");
     };
@@ -201,12 +204,45 @@ fn mark_done_sends_close_and_rerenders_from_returned_task() {
         "closed_at set from the server response",
     );
 
-    // The close call targeted the selected task id under the active profile.
+    // The update call targeted the selected task id under the active profile, carrying only the
+    // status field (toggle-done is a status-only patch — title/description absent).
     let calls = client.calls();
+    let update = calls
+        .iter()
+        .find_map(|c| match c {
+            Call::UpdateTask {
+                token,
+                profile_id,
+                task_id,
+                title,
+                description,
+                status,
+            } => Some((
+                token.clone(),
+                profile_id.clone(),
+                task_id.clone(),
+                title.clone(),
+                description.clone(),
+                *status,
+            )),
+            _ => None,
+        })
+        .expect("an update_task call was made");
+    assert_eq!(
+        update,
+        (
+            "jwt".to_owned(),
+            "p1".to_owned(),
+            "t1".to_owned(),
+            None,
+            None,
+            Some(TaskStatus::Done),
+        ),
+        "toggle-done is a status-only patch to the right task: {calls:?}",
+    );
     assert!(
-        matches!(calls.last(), Some(Call::CloseTask { token, profile_id, task_id })
-            if token == "jwt" && profile_id == "p1" && task_id == "t1"),
-        "close targeted the right task: {calls:?}",
+        matches!(calls.last(), Some(Call::ListTasks { .. })),
+        "a fresh list fetch follows the update (statelessness): {calls:?}",
     );
 
     // After: the rendered marker flipped to done.

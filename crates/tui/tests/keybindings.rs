@@ -17,7 +17,7 @@ use tui::terminal::map_key;
 
 use common::{
     auth_screen, auth_screen_pending, offline_screen, offline_screen_pending, task_list_screen,
-    task_list_screen_adding, task_list_screen_pending,
+    task_list_screen_adding, task_list_screen_editing, task_list_screen_pending,
 };
 
 fn key(code: KeyCode) -> KeyEvent {
@@ -179,14 +179,46 @@ fn task_list_command_keys() {
         map(&screen, key(KeyCode::Char('a'))),
         Some(Event::BeginAddTask),
     );
+    // `e` begins the edit sub-flow; `c` toggles done/reopen; `x` arms/confirms delete (slice 4).
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('e'))),
+        Some(Event::BeginEditTask),
+    );
     assert_eq!(
         map(&screen, key(KeyCode::Char('c'))),
-        Some(Event::CloseSelected),
+        Some(Event::ToggleDone),
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('x'))),
+        Some(Event::DeleteSelected),
     );
     assert_eq!(map(&screen, key(KeyCode::Char('r'))), Some(Event::Refresh),);
     assert_eq!(map(&screen, key(KeyCode::Char('q'))), Some(Event::Quit));
     // An unbound printable key on the task list is ignored.
     assert_eq!(map(&screen, key(KeyCode::Char('z'))), None);
+}
+
+#[test]
+fn edit_task_flow_types_command_letters_literally() {
+    // Once the edit sub-flow is open the task list is a text-entry context, so the command
+    // letters — including the new e/c/x mutation keys and the global timer keys p/d — are typed
+    // literally rather than triggering edit/toggle/delete or the timer toggle/edit.
+    let screen = task_list_screen_editing();
+    for c in ['a', 'c', 'e', 'x', 'r', 'q', 'p', 'd'] {
+        assert_eq!(
+            map(&screen, key(KeyCode::Char(c))),
+            Some(Event::Char(c)),
+            "{c:?} must be literal text while editing a task",
+        );
+    }
+    // Esc cancels the edit sub-flow (not quit); Enter submits; Tab switches field.
+    assert_eq!(map(&screen, key(KeyCode::Esc)), Some(Event::Cancel));
+    assert_eq!(map(&screen, key(KeyCode::Enter)), Some(Event::Submit));
+    assert_eq!(map(&screen, key(KeyCode::Tab)), Some(Event::Next));
+    assert_eq!(
+        map(&screen, key(KeyCode::Backspace)),
+        Some(Event::Backspace)
+    );
 }
 
 #[test]

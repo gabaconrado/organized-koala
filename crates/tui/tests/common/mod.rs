@@ -28,14 +28,15 @@ use std::rc::Rc;
 
 use contract::{
     CreateNoteRequest, CreateTaskRequest, LoginRequest, Note, Profile, RegisterRequest,
-    SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest, UpdateTimerConfigRequest,
+    SessionResponse, Task, TaskStatus, TimerConfig, TimerSession, UpdateNoteRequest,
+    UpdateTaskRequest, UpdateTimerConfigRequest,
 };
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use tui::app::{
     AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, Dispatch,
-    Event, Outcome, RequestId, Screen, TaskListState,
+    EditTaskState, Event, Outcome, RequestId, Screen, TaskListState,
 };
 use tui::client::{Client, ClientError, ClientResult};
 
@@ -70,7 +71,18 @@ pub enum Call {
         title: String,
         description: String,
     },
-    CloseTask {
+    /// Captured `PATCH …/tasks/{id}` partial-update fields (edit / toggle-done / reopen), so a
+    /// test can assert exactly what the issued patch carried.
+    UpdateTask {
+        token: String,
+        profile_id: String,
+        task_id: String,
+        title: Option<String>,
+        description: Option<String>,
+        status: Option<TaskStatus>,
+    },
+    /// Captured `DELETE …/tasks/{id}` target.
+    DeleteTask {
         token: String,
         profile_id: String,
         task_id: String,
@@ -132,7 +144,8 @@ struct Inner {
     profiles: RefCell<VecDeque<ClientResult<Vec<Profile>>>>,
     tasks: RefCell<VecDeque<ClientResult<Vec<Task>>>>,
     create: RefCell<VecDeque<ClientResult<Task>>>,
-    close: RefCell<VecDeque<ClientResult<Task>>>,
+    update: RefCell<VecDeque<ClientResult<Task>>>,
+    delete: RefCell<VecDeque<ClientResult<()>>>,
     notes: RefCell<VecDeque<ClientResult<Vec<Note>>>>,
     create_note: RefCell<VecDeque<ClientResult<Note>>>,
     get_note: RefCell<VecDeque<ClientResult<Note>>>,
@@ -180,8 +193,11 @@ impl FakeClient {
     pub fn push_create(&self, r: ClientResult<Task>) {
         self.inner.create.borrow_mut().push_back(r);
     }
-    pub fn push_close(&self, r: ClientResult<Task>) {
-        self.inner.close.borrow_mut().push_back(r);
+    pub fn push_update(&self, r: ClientResult<Task>) {
+        self.inner.update.borrow_mut().push_back(r);
+    }
+    pub fn push_delete(&self, r: ClientResult<()>) {
+        self.inner.delete.borrow_mut().push_back(r);
     }
     pub fn push_notes(&self, r: ClientResult<Vec<Note>>) {
         self.inner.notes.borrow_mut().push_back(r);
@@ -278,13 +294,31 @@ impl Client for FakeClient {
         pop(&self.inner.create, "create_task")
     }
 
-    fn close_task(&self, token: &str, profile_id: &str, task_id: &str) -> ClientResult<Task> {
-        self.inner.calls.borrow_mut().push(Call::CloseTask {
+    fn update_task(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        req: &UpdateTaskRequest,
+    ) -> ClientResult<Task> {
+        self.inner.calls.borrow_mut().push(Call::UpdateTask {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+            task_id: task_id.to_owned(),
+            title: req.title.clone(),
+            description: req.description.clone(),
+            status: req.status,
+        });
+        pop(&self.inner.update, "update_task")
+    }
+
+    fn delete_task(&self, token: &str, profile_id: &str, task_id: &str) -> ClientResult<()> {
+        self.inner.calls.borrow_mut().push(Call::DeleteTask {
             token: token.to_owned(),
             profile_id: profile_id.to_owned(),
             task_id: task_id.to_owned(),
         });
-        pop(&self.inner.close, "close_task")
+        pop(&self.inner.delete, "delete_task")
     }
 
     fn list_notes(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Note>> {
@@ -409,11 +443,17 @@ fn run_request(client: &FakeClient, request: ClientRequest) -> Outcome {
             profile_id,
             req,
         } => Outcome::CreateTask(client.create_task(&token, &profile_id, &req)),
-        ClientRequest::CloseTask {
+        ClientRequest::UpdateTask {
             token,
             profile_id,
             task_id,
-        } => Outcome::CloseTask(client.close_task(&token, &profile_id, &task_id)),
+            req,
+        } => Outcome::UpdateTask(client.update_task(&token, &profile_id, &task_id, &req)),
+        ClientRequest::DeleteTask {
+            token,
+            profile_id,
+            task_id,
+        } => Outcome::DeleteTask(client.delete_task(&token, &profile_id, &task_id)),
         ClientRequest::ListNotes { token, profile_id } => {
             Outcome::ListNotes(client.list_notes(&token, &profile_id))
         }
@@ -718,6 +758,8 @@ pub fn task_list_screen() -> Screen {
         )],
         selected: Some(0),
         adding: None,
+        editing: None,
+        confirming_delete: None,
         message: None,
         pending: None,
     })
@@ -745,6 +787,31 @@ pub fn task_list_screen_adding() -> Screen {
             description: String::new(),
             error: None,
         }),
+        editing: None,
+        confirming_delete: None,
+        message: None,
+        pending: None,
+    })
+}
+
+/// A task-list screen with the edit-task sub-flow open (a text-entry context), pre-filled.
+pub fn task_list_screen_editing() -> Screen {
+    Screen::TaskList(TaskListState {
+        tasks: vec![open_task(
+            "00000000-0000-0000-0000-000000000001",
+            "a task",
+            "2026-06-18T10:00:00Z",
+        )],
+        selected: Some(0),
+        adding: None,
+        editing: Some(EditTaskState {
+            task_id: "00000000-0000-0000-0000-000000000001".to_owned(),
+            on_title: true,
+            title: "a task".to_owned(),
+            description: String::new(),
+            error: None,
+        }),
+        confirming_delete: None,
         message: None,
         pending: None,
     })

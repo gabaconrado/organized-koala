@@ -121,7 +121,11 @@ fn task_list_command_hint_and_add_flow_hint() {
     let app = logged_in_with(vec![open_task("t1", "task one", "2026-06-18T10:00:00Z")]);
     let text = render(&app, W, H);
     assert!(
-        text.contains("a: add") && text.contains("c: mark done") && text.contains("r: refresh"),
+        text.contains("a: add")
+            && text.contains("e: edit")
+            && text.contains("c: done")
+            && text.contains("x: del")
+            && text.contains("r: refresh"),
         "command hint:\n{text}",
     );
 
@@ -229,14 +233,14 @@ fn task_list_in_flight_appends_spinner_without_replacing_the_caption() {
     // trailing spinner + cancel affordance is appended (ADR-0006 §8.3 — no flicker).
     let mut app = logged_in_with(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
     let _dispatch = app
-        .handle_event(Event::CloseSelected)
-        .expect("close dispatches a request");
-    assert!(app.is_pending(), "task list in-flight after close");
+        .handle_event(Event::ToggleDone)
+        .expect("toggle-done dispatches a request");
+    assert!(app.is_pending(), "task list in-flight after toggle-done");
 
     let text = render(&app, W, H);
     // The command caption stays present (not replaced) — the regression guard.
     assert!(
-        text.contains("a: add") && text.contains("p: start/stop timer"),
+        text.contains("a: add") && text.contains("p: timer"),
         "the command caption is NOT replaced while pending:\n{text}",
     );
     assert!(

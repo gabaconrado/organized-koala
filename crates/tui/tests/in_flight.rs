@@ -36,10 +36,10 @@ fn logged_in(tasks: Vec<contract::Task>) -> (FakeClient, App) {
 fn refresh_while_pending_is_a_no_op() {
     let (client, mut app) = logged_in(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
 
-    // First close puts the list in-flight (we hold its dispatch, never driving it).
+    // First toggle-done puts the list in-flight (we hold its dispatch, never driving it).
     let first = app
-        .handle_event(Event::CloseSelected)
-        .expect("close dispatches");
+        .handle_event(Event::ToggleDone)
+        .expect("toggle-done dispatches");
     assert!(app.is_pending(), "in-flight after the first request");
     let calls_after_first = client.calls().len();
 
@@ -49,8 +49,8 @@ fn refresh_while_pending_is_a_no_op() {
         "refresh while pending dispatches nothing",
     );
     assert!(
-        app.handle_event(Event::CloseSelected).is_none(),
-        "a second close while pending dispatches nothing",
+        app.handle_event(Event::ToggleDone).is_none(),
+        "a second toggle-done while pending dispatches nothing",
     );
     assert!(app.is_pending(), "still the same single request in flight");
     assert_eq!(
@@ -59,8 +59,20 @@ fn refresh_while_pending_is_a_no_op() {
         "no extra server call while a request is already outstanding",
     );
 
-    // The single in-flight request still completes normally when its response arrives.
-    client.push_close(Ok(open_task("t1", "task", "2026-06-18T10:00:00Z")));
+    // The single in-flight request still completes normally when its response arrives. The
+    // update returns the now-done task; the success chains a list refresh.
+    client.push_update(Ok(common::done_task(
+        "t1",
+        "task",
+        "2026-06-18T10:00:00Z",
+        "2026-06-18T14:00:00Z",
+    )));
+    client.push_tasks(Ok(vec![common::done_task(
+        "t1",
+        "task",
+        "2026-06-18T10:00:00Z",
+        "2026-06-18T14:00:00Z",
+    )]));
     drive(&mut app, &client, first);
     assert!(!app.is_pending(), "settled after the one request completes");
 }
@@ -92,8 +104,8 @@ fn cancel_while_pending_clears_in_flight_and_restores_interactivity() {
     let (_client, mut app) = logged_in(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
 
     let _dispatch = app
-        .handle_event(Event::CloseSelected)
-        .expect("close dispatches");
+        .handle_event(Event::ToggleDone)
+        .expect("toggle-done dispatches");
     assert!(app.is_pending(), "in-flight before cancel");
 
     // Esc maps to Cancel while pending; it clears the marker and returns no new dispatch.
@@ -118,10 +130,10 @@ fn cancel_while_pending_clears_in_flight_and_restores_interactivity() {
 fn stale_response_after_cancel_is_dropped() {
     let (client, mut app) = logged_in(vec![open_task("t1", "Original", "2026-06-18T10:00:00Z")]);
 
-    // Begin a close; capture the dispatch the worker would run.
+    // Begin a toggle-done; capture the dispatch the worker would run.
     let dispatch = app
-        .handle_event(Event::CloseSelected)
-        .expect("close dispatches");
+        .handle_event(Event::ToggleDone)
+        .expect("toggle-done dispatches");
 
     // User cancels before the response arrives: the in-flight marker is cleared.
     assert!(app.handle_event(Event::Cancel).is_none());
@@ -129,7 +141,7 @@ fn stale_response_after_cancel_is_dropped() {
 
     // The abandoned request still ran on the (mocked) server and produces a response with the
     // now-stale RequestId. Applying it must be a no-op: the marker is gone, so the id mismatches.
-    client.push_close(Ok(common::done_task(
+    client.push_update(Ok(common::done_task(
         "t1",
         "Original",
         "2026-06-18T10:00:00Z",
@@ -145,7 +157,7 @@ fn stale_response_after_cancel_is_dropped() {
     assert_eq!(
         list.tasks.first().expect("task present").status,
         contract::TaskStatus::Open,
-        "the dropped stale close must not flip the task to done",
+        "the dropped stale update must not flip the task to done",
     );
     assert!(
         !app.is_pending(),
@@ -161,8 +173,8 @@ fn superseded_response_after_new_request_is_dropped() {
     let (client, mut app) = logged_in(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
 
     let first = app
-        .handle_event(Event::CloseSelected)
-        .expect("first close dispatches");
+        .handle_event(Event::ToggleDone)
+        .expect("first toggle-done dispatches");
     assert!(app.handle_event(Event::Cancel).is_none());
 
     // New request after cancel — gets a new RequestId, now the awaited one.
@@ -172,7 +184,7 @@ fn superseded_response_after_new_request_is_dropped() {
     assert!(app.is_pending());
 
     // The first (cancelled) request's response arrives late: dropped, the new request still awaited.
-    client.push_close(Ok(common::done_task(
+    client.push_update(Ok(common::done_task(
         "t1",
         "task",
         "2026-06-18T10:00:00Z",

@@ -117,11 +117,11 @@ fn unauthenticated_on_refresh_returns_to_login_and_drops_session() {
 }
 
 #[test]
-fn unauthenticated_on_close_returns_to_login() {
+fn unauthenticated_on_toggle_done_returns_to_login() {
     let (client, mut app) = logged_in(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
-    client.push_close(Err(api_err(ErrorCode::Unauthenticated, "token expired")));
+    client.push_update(Err(api_err(ErrorCode::Unauthenticated, "token expired")));
 
-    submit(&mut app, &client, Event::CloseSelected);
+    submit(&mut app, &client, Event::ToggleDone);
 
     assert!(matches!(app.screen(), Screen::Auth(_)));
     assert!(app.session().is_none());
