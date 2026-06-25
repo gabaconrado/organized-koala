@@ -1,6 +1,6 @@
-//! Profile-isolation tests (hard-constraint #4, ADR-0005 §4): a profile the caller does not
-//! own is indistinguishable from a nonexistent one — every cross-profile access is
-//! `404 not_found` (never 403, never a leak), across GET, POST, and the close path.
+//! Profile-isolation tests (hard-constraint #4, ADR-0005 §4, ADR-0008): a profile the caller
+//! does not own is indistinguishable from a nonexistent one — every cross-profile access is
+//! `404 not_found` (never 403, never a leak), across GET, POST, PATCH, and DELETE.
 
 #![cfg_attr(
     test,
@@ -15,7 +15,7 @@
 mod common;
 
 use axum::http::StatusCode;
-use common::{app, get_auth, post_json_auth, register, send};
+use common::{app, delete_auth, get_auth, patch_json_auth, post_json_auth, register, send};
 use contract::{ErrorCode, Task};
 use serde_json::json;
 use sqlx::PgPool;
@@ -74,10 +74,11 @@ async fn create_in_other_users_profile_is_404(pool: PgPool) {
     );
 }
 
-/// user B closing a task that exists in user A's profile → 404 `not_found`. The task id is
-/// real, so this proves ownership is checked at the profile gate, not merely task existence.
+/// user B PATCHing a task that exists in user A's profile → 404 `not_found`. The task id is
+/// real, so this proves ownership is checked at the profile gate, not merely task existence;
+/// and the cross-profile write must not have landed.
 #[sqlx::test]
-async fn close_other_users_task_is_404(pool: PgPool) {
+async fn patch_other_users_task_is_404(pool: PgPool) {
     let app = app(pool);
     let (alice, bob) = two_accounts(&app).await;
 
@@ -93,9 +94,13 @@ async fn close_other_users_task_is_404(pool: PgPool) {
     .await;
     let task: Task = created.parse();
 
-    // Bob, knowing both ids, tries to close it → 404, indistinguishable from nonexistent.
-    let close_path = format!("/api/profiles/{}/tasks/{}/close", alice.profile_id, task.id);
-    let res = send(&app, post_json_auth(&close_path, &bob.token, &json!({}))).await;
+    // Bob, knowing both ids, tries to mark it done → 404, indistinguishable from nonexistent.
+    let path = format!("/api/profiles/{}/tasks/{}", alice.profile_id, task.id);
+    let res = send(
+        &app,
+        patch_json_auth(&path, &bob.token, &json!({ "status": "done" })),
+    )
+    .await;
     assert_eq!(res.status, StatusCode::NOT_FOUND);
     res.expect_error(ErrorCode::NotFound);
 
@@ -112,6 +117,46 @@ async fn close_other_users_task_is_404(pool: PgPool) {
     assert_eq!(tasks.len(), 1);
     let only = tasks.first().expect("one task");
     assert_eq!(only.status, contract::TaskStatus::Open, "untouched");
+}
+
+/// user B deleting a task that exists in user A's profile → 404 `not_found`, and the task
+/// survives — ownership is checked at the profile gate, not merely task existence.
+#[sqlx::test]
+async fn delete_other_users_task_is_404(pool: PgPool) {
+    let app = app(pool);
+    let (alice, bob) = two_accounts(&app).await;
+
+    let created = send(
+        &app,
+        post_json_auth(
+            &format!("/api/profiles/{}/tasks", alice.profile_id),
+            &alice.token,
+            &json!({ "title": "alice's task", "description": "" }),
+        ),
+    )
+    .await;
+    let task: Task = created.parse();
+
+    let path = format!("/api/profiles/{}/tasks/{}", alice.profile_id, task.id);
+    let res = send(&app, delete_auth(&path, &bob.token)).await;
+    assert_eq!(res.status, StatusCode::NOT_FOUND);
+    res.expect_error(ErrorCode::NotFound);
+
+    // The task survives: bob's delete had no effect.
+    let alice_list = send(
+        &app,
+        get_auth(
+            &format!("/api/profiles/{}/tasks", alice.profile_id),
+            &alice.token,
+        ),
+    )
+    .await;
+    let tasks: Vec<Task> = alice_list.parse();
+    assert_eq!(
+        tasks.len(),
+        1,
+        "the cross-profile delete must not have landed"
+    );
 }
 
 /// requesting a syntactically-valid but nonexistent profile id → 404 `not_found`.

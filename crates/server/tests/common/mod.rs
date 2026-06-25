@@ -185,7 +185,7 @@ pub fn patch_json(path: &str, body: &Value) -> Request<Body> {
         .expect("request should build")
 }
 
-/// Build a DELETE request to `path` carrying a `Bearer` token.
+/// Build a bodyless DELETE request to `path` carrying a `Bearer` token.
 pub fn delete_auth(path: &str, token: &str) -> Request<Body> {
     Request::builder()
         .method("DELETE")
@@ -195,7 +195,7 @@ pub fn delete_auth(path: &str, token: &str) -> Request<Body> {
         .expect("request should build")
 }
 
-/// Build a DELETE request to `path` with no Authorization header.
+/// Build a bodyless DELETE request to `path` with no Authorization header.
 pub fn delete(path: &str) -> Request<Body> {
     Request::builder()
         .method("DELETE")
