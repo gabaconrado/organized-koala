@@ -2,7 +2,7 @@
 id: 0012
 title: Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard)
 type: feature      # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0009 lands on `main` with this plan. See sequencing note re: 0010 (notes cascade).
@@ -194,6 +194,20 @@ Dependency edges: **1 → 2 → 3 → 4**; tests alongside. Slice 1 must merge b
       auth; tui `profiles.rs` 0→16 + keybindings 20→25 (pick-active carries new id with no switch
       call, inline conflict codes, in-flight/stale-drop, active-repoint). All gates green at branch
       head `e6afefd`: `./ok.sh prepare | build | test | lint | fmt --check`.
+- [x] 2026-06-25 [reviewer] **REVIEW-STATUS: approved** — code-hash
+      `71fb7ecf327fbd42a14cb19456207885c782fe49` (code commit `e6afefd`; HEAD `d27856f` is
+      board-only). Mechanical gate clean (`build | test | lint | fmt --check` all green: contract
+      profile.rs 8 / error.rs 16, server profiles.rs 20, tui profiles.rs 16 / keybindings.rs 25).
+      No contract drift (#2: append-only error codes, `Unknown` fallback intact, `{ code, message }`
+      preserved, no DTO redefinition). All hard constraints hold (#1 client-side switch is in-memory
+      `Session.profile_id` rebinding, no server endpoint, zero persistence; #4 owner-scoped + FK
+      cascade; #3 no domain structure; #5 auth unchanged). Race-safety correct (DB unique-violation
+      mapped, no TOCTOU; atomic single-statement last-profile guard). Migration reversible with a
+      genuine `down`, correctly ordered after 0010. Headline cascade test asserts BOTH task and note
+      gone (DB count + 404). Conventional Commits + correct `@organized-koala.local` trailers; no
+      `#[allow]`; no secret leak. **No fix-now findings.** Nit (non-blocking, pre-existing, out of
+      scope): `Session.token` is a bare `String` and `Session` derives `Debug` (JWT reachable via
+      derived Debug) — predates 0012, unchanged here; candidate future chore.
 
 ## Summary
 
