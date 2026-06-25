@@ -2,7 +2,7 @@
 id: 0011
 title: Task update + delete + reopen — generalize close into PATCH (breaking)
 type: feature      # feature | chore
-status: review  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0008 lands on `main` with this plan; independent of 0010/0012 (different files)
@@ -283,6 +283,13 @@ ordering (2 before 3) suffices.
       exported ids-only (leak scan for titles/`Bearer`/`password` across telemetry → nothing). TUI
       `TestBackend` suite green (ADR-0003 clause 4). Stack torn down (`./ok.sh down`, volume intact).
       No gaps. Verdict valid while `./ok.sh code-hash HEAD` == the hash above.
+- [x] 2026-06-25 [drive] Step-7 freshen: rebased onto `main` `006719f` (eng-manager's re-cycle
+      learnings — CLAUDE.md gotcha + handoff + dashboard regen; docs/`board/README` only, no crate
+      code). `./ok.sh code-hash` at the rebased head is **unchanged at
+      `ee5047c9abf1e4196ed1933655a61fcf41148bcb`** == the re-passed reviewer/verifier hash ⇒ code
+      byte-identical, both verdicts carry forward untouched (no relabelling). `fmt --check | lint`
+      green on the rebased tree (test byte-identical to the just-verified tree). Board-only commit —
+      does not retrigger review. `review` → `awaiting-merge`.
 
 ## Summary
 
