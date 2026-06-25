@@ -5,6 +5,102 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-25 (0012 — Profiles create/update/delete + TUI switcher; the final domain feature)
+
+The **last domain feature** shipped: full profile management. Today's only profile surface was
+`GET /api/profiles` (list) plus the register-time default-profile bootstrap; 0012 adds create,
+rename, delete (with cascade) and a TUI profile-picker/switcher, governed by [ADR-0009][adr-0009]
+(profile mutations, referencing ADR-0005 §2/§4/§6 — the **two new error codes** are an append-only
+ADR event). Branch `feature/0012-profiles-crud-and-switcher` (code commit `e6afefd`, code-hash
+`71fb7ecf327fbd42a14cb19456207885c782fe49`); reviewer **approved** + verifier **verified**, both
+pinned to that hash. Stopped at the AI-terminal `awaiting-merge` on the branch.
+
+What shipped (on the branch, contract → server → tui):
+
+- **`contract`** (`7d0979a`) — `CreateProfileRequest { name }`, `UpdateProfileRequest { name }`,
+  and two **append-only** error codes `ErrorCode::ProfileNameTaken` / `ErrorCode::LastProfile`
+  (`Unknown` forward-compat fallback intact). No DTO redefinition (#2).
+- **`server`** (`9960653`) — `POST /api/profiles` (201), `PATCH /api/profiles/{id}` (200),
+  `DELETE /api/profiles/{id}` (204), owner-scoped. Race-safe DB unique-violation →
+  `409 profile_name_taken` (no TOCTOU); atomic single-statement last-profile guard →
+  `409 last_profile`; delete **cascades** tasks **and** notes via FK `ON DELETE CASCADE` (no app
+  fan-out, #4); unowned → `404`, blank name → `400`. Reversible `UNIQUE (user_id, name)` migration
+  `20260612163050_profile_name_unique` (ordered after 0010); `.sqlx/` refreshed.
+- **`tui`** (`5886060`) — `Client` create/rename/delete profile + `ClientRequest`/`Outcome` worker
+  arms; `Screen::Profiles` switcher opened by `s` (Enter = pick-active; `a`/`e`/`x` =
+  create/rename/delete). Switch is **client-side only** — rebinds the in-memory
+  `active_profile_id`, re-scopes subsequent task/note calls, **no** server endpoint, **no**
+  persistence (#1); deleting the active profile re-points to the first remaining;
+  `ProfileNameTaken`/`LastProfile` inline.
+- **Tests** (`e6afefd`) — contract `profile.rs` 8 / `error.rs` 16; server `profiles.rs` 20 incl.
+  the headline cascade test asserting **both** task AND note gone (DB count + 404), cross-account
+  same-name allowed, auth; tui `profiles.rs` 16 + `keybindings.rs` 25 (pick-active carries the new
+  id with **no** switch call, inline conflict codes, in-flight/stale-drop, active-repoint). All
+  gates green at `e6afefd`: `./ok.sh prepare | build | test | lint | fmt --check`.
+
+coverage: **66.91%** line (the headline `TOTAL` from a fresh `./ok.sh coverage` in the worktree;
+docker + throwaway test Postgres booted cleanly). Report-only — never a gate.
+
+**The load-bearing learning this cycle — `./ok.sh prepare` was never self-contained, and the
+permission guard surfaced the gap.** `cmd_prepare` had been bare since the first scaffold
+(`cargo sqlx prepare --workspace`, no DB wiring). Every prior server cycle that refreshed `.sqlx/`
+did so via an **ad-hoc out-of-band `DATABASE_URL`** pointed at some live PG — which this session's
+permission guard (correctly) denied, exposing that the verb itself had never carried its own DB.
+Slice 2 needed a `.sqlx/` refresh for 3 new compile-checked queries; `server-dev` **blocked rather
+than improvise** (#6). The operator authorized **Option A**: `platform-dev` made `cmd_prepare`
+self-contained on **`main`** (`3e0094b`) — boot the throwaway test PG → apply migrations **via the
+sqlx CLI** (deliberately **not** the server binary, which would hit the offline-build circularity
+on a feature branch whose `.sqlx/` is mid-refresh) → `cargo sqlx prepare` → teardown — mirroring
+`cmd_test` (0003) and `cmd_coverage` (0007). Validated by a zero-`.sqlx`-diff run on `main`. This
+**completes the "every DB-needing `ok.sh` verb self-boots the shared test PG" pattern** the 0007
+handoff first named in `bash-standards` — `test`, `coverage`, and now `prepare` all use the one
+`DATABASE_URL`/compose/`RETURN`-trap wiring. Recorded durably below (`bash-standards`).
+
+Verdicts (both @ code-hash `71fb7ecf327fbd42a14cb19456207885c782fe49`, code commit `e6afefd`):
+
+- **reviewer — REVIEW-STATUS: approved.** Gate clean; no contract drift (#2, append-only); all
+  hard constraints hold (#1 client-side in-memory switch, #4 owner-scoped + FK cascade, #3 no
+  domain structure, #5 auth unchanged); race-safety correct (DB unique-violation mapped, atomic
+  last-profile guard); migration reversible, ordered after 0010; headline cascade test asserts BOTH
+  children gone. No fix-now findings.
+- **verifier — VERDICT: verified.** `./ok.sh up` booted clean (no cross-worktree migration-history
+  conflict; all 6 migrations applied). RAN live against `localhost:8080`: create 201 / trim /
+  empty→`400`; duplicate→`409 profile_name_taken` + cross-account same-name 201; rename 200,
+  unowned→`404`; **cascade** delete → DB-confirmed `tasks=0, notes=0, profile=0` + HTTP 404 (#4);
+  last-profile→`409 last_profile`; no cross-leak; no-token→`401`; bodies standard status +
+  `{ code, message }`; OTel handler spans observed. TUI `TestBackend` suite present + green
+  (ADR-0003).
+
+Durable learnings: **one `bash-standards` addition** — the `cmd_prepare` pattern-completion (below).
+**No new ADR** (ADR-0009 already on `main` with the plan), **no new crate → no new dev agent** (the
+profile surface is modules inside the existing crates — `crates/contract/src/profile/`,
+`crates/server/src/handlers/profiles.rs`, `crates/tui/src/app/profiles.rs`, each already owned). **No
+new CLAUDE.md hard-constraint or gotcha** earned this cycle: the prepare gap is an infra/`ok.sh`
+discipline (its home is `bash-standards`, not a cross-cutting domain rule), and the
+cross-worktree-volume gotcha did **not** recur (a clean `./ok.sh up`).
+
+**Homes.** Feature-local on the branch (home #2): the item's `## Summary` (with the coverage line),
+committed on `feature/0012-profiles-crud-and-switcher` (`3fedcbe`; Board-only, code-hash unchanged).
+Cross-cutting/derived on `main` (homes #1/#3): this `docs/handoff.md` entry (+ the "What works right
+now" snapshot refreshed for the 0012 state), the `bash-standards` `cmd_prepare` learning, and the
+regenerated `board/README.md`. The `cmd_prepare` source change itself already landed on `main`
+(`3e0094b`, by `platform-dev`, mid-build). **`main`'s frozen copy of
+`board/features/0012-profiles-crud-and-switcher.md` stays untouched** at the claim snapshot
+(`ready`) until the human's merge. The orchestrator flips the branch status to `awaiting-merge`
+after this step.
+
+**Free pickup noted (mintable `chore`, low priority):** the reviewer flagged a pre-existing,
+out-of-scope nit — `Session.token` is a bare `String` and `Session` derives `Debug`, so the raw JWT
+is reachable via the derived `Debug` impl (e.g. if a `Session` is ever logged). Predates 0012 and is
+unchanged here; not fixed in-cycle because it would change the code-hash and void the approved +
+verified verdicts. The orchestrator may mint it as a `type: chore`, `priority: low` item carrying
+just a `## Feature request` (wrap `token` in a redacting newtype, or give `Session` a manual `Debug`
+that elides the token — mirroring the `contract` `Password` redacting-newtype pattern).
+
+[adr-0009]: ./adr/0009-profile-mutations.md
+
+---
+
 ## Handoff — 2026-06-25 (0011 re-cycle — re-rebased onto post-0010 `main`, re-reviewed + re-verified)
 
 The operator merged **0010 (Notes)** to `main`, then **0011 was re-rebased onto post-0010 `main`**
@@ -1321,19 +1417,35 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   **approved** + verifier **verified**, both pinned to code-hash
   `46c1c60f1eb3865eb127a72502982827ebb09d65`; coverage 68.24% line. With Notes merged, all four flat
   features (TODO, Pomodoro, Notes, Profiles) exist except Profiles CRUD (0012, still `ready`).
-- **Task update/delete/reopen is at `awaiting-merge` on `feature/0011-task-update-delete-reopen`,
-  re-rebased onto post-0010 `main` and re-approved + re-verified** (0011, a `feature`, live-verified):
-  the one-way task `close` generalized into full edit / toggle-done / reopen / delete — a
+- **Task update/delete/reopen is MERGED on `main`** (0011, a `feature`, live-verified): the
+  one-way task `close` generalized into full edit / toggle-done / reopen / delete — a
   **breaking** change ([ADR-0008][adr-0008-0011]) that **removes** the
   `POST .../tasks/{id}/close` route (clean removal, single in-repo consumer, ADR-0005 §8). A new
   `contract` `UpdateTaskRequest { title?, description?, status? }` (all-optional partial, no
   `updated_at`, #3); `PATCH …/tasks/{id}` via one static `UPDATE … RETURNING` (`COALESCE`/`CASE`:
   done→`closed_at` set, open→cleared, empty patch a 200 no-op, blank title → 400) + `DELETE …/tasks/{id}`
   (204 / 404), both ownership-joined → 404 never 403 (#4), **no migration**; the TUI gains edit/
-  toggle/delete keys (`e`/`c`/`x` with two-step confirm), stateless (#1). The re-rebase onto post-0010
-  `main` pulled the merged Notes feature into 0011's `crates/` tree, **changing its code-hash**
-  `e66426f0…` → `ee5047c9abf1e4196ed1933655a61fcf41148bcb` and voiding the prior verdicts; both
-  **re-passed** at `ee5047c9…` (reviewer re-approved, verifier re-verified live — the earlier
-  cross-worktree migration-history collision is gone now that 0011's tree carries the notes
-  migration). Coverage 68.24% line (now reflects the merged tree). Awaiting the human's merge.
-  Profiles CRUD (0012) remains the last `ready` item.
+  toggle/delete keys (`e`/`c`/`x` with two-step confirm), stateless (#1). It was re-rebased onto
+  post-0010 `main`, which pulled the merged Notes feature into its `crates/` tree, **changing its
+  code-hash** to `ee5047c9abf1e4196ed1933655a61fcf41148bcb` and forcing a re-review/re-verify (both
+  re-passed); an operator-authorized doc-only README fix then moved the hash to
+  `97cbc025523bdff1907e9552fd3636d3a874b589` (verdicts carried forward by authorization).
+  Fast-forwarded to `main` at `9635608`; worktree + branch removed.
+- **Profiles create/update/delete + TUI switcher is at `awaiting-merge` on
+  `feature/0012-profiles-crud-and-switcher`** (0012, a `feature`, live-verified — **the final
+  domain feature; organized-koala is now functionally complete**): the only profile surface was
+  list + register-time bootstrap; 0012 adds `POST /api/profiles` (201), `PATCH /api/profiles/{id}`
+  (200), `DELETE /api/profiles/{id}` (204) under [ADR-0009][adr-0009], plus a client-side TUI
+  switcher. New `contract` `CreateProfileRequest`/`UpdateProfileRequest` + two **append-only** error
+  codes `ProfileNameTaken`/`LastProfile`. Server: race-safe DB unique-violation → `409
+  profile_name_taken` (no TOCTOU); atomic last-profile guard → `409 last_profile` (account keeps ≥1
+  namespace); delete **cascades** the profile's tasks **and** notes via FK `ON DELETE CASCADE` (#4);
+  reversible `UNIQUE (user_id, name)` migration ordered after 0010. TUI `Screen::Profiles` switcher
+  (`s`; `a`/`e`/`x` create/rename/delete): **switch is client-side only** — rebinds the in-memory
+  `active_profile_id`, no server endpoint, no persistence (#1); deleting the active profile
+  re-points to the first remaining. Reviewer **approved** + verifier **verified** (live cascade
+  DB-confirmed `tasks=0, notes=0, profile=0` + 404), both pinned to code-hash
+  `71fb7ecf327fbd42a14cb19456207885c782fe49`; coverage 66.91% line. The cycle's load-bearing
+  learning — `./ok.sh prepare` is now self-contained (`3e0094b` on `main`), completing the
+  "every DB-needing `ok.sh` verb self-boots the shared test PG" pattern (`test`/`coverage`/`prepare`).
+  Awaiting the human's merge.
