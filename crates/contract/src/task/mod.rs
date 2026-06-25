@@ -1,4 +1,4 @@
-//! Task wire types: the flat TODO shape, its status, and the create request.
+//! Task wire types: the flat TODO shape, its status, and the create/update requests.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -104,4 +104,49 @@ pub struct CreateTaskRequest {
     pub title: String,
     /// Free-form task description; may be empty.
     pub description: String,
+}
+
+/// Request body for `PATCH /api/profiles/{profile_id}/tasks/{task_id}`.
+///
+/// An **all-optional partial update**: every field is `Option<_>`, and absent fields are
+/// omitted from the wire (`skip_serializing_if`), so a patch carries only the fields it
+/// changes. A `None` field is left untouched server-side; an empty patch (`{}`) is a no-op
+/// returning the task unchanged.
+///
+/// When `title` is present it must be non-empty after trimming (else `400 validation_failed`);
+/// `description`, if present, may be empty. Setting `status` to [`TaskStatus::Done`] sets
+/// `closed_at`; setting it to [`TaskStatus::Open`] (reopen) clears `closed_at`. On success the
+/// server returns `200` with the updated [`Task`].
+///
+/// # Examples
+///
+/// ```
+/// use contract::UpdateTaskRequest;
+///
+/// // A title-only patch: absent fields are omitted from the JSON entirely.
+/// let req = UpdateTaskRequest {
+///     title: Some("Refined title".to_owned()),
+///     description: None,
+///     status: None,
+/// };
+/// let json = serde_json::to_value(&req).unwrap();
+/// assert_eq!(json["title"], "Refined title");
+/// assert!(json.get("description").is_none());
+/// assert!(json.get("status").is_none());
+///
+/// // An empty patch serializes to `{}`.
+/// let empty = UpdateTaskRequest::default();
+/// assert_eq!(serde_json::to_string(&empty).unwrap(), "{}");
+/// ```
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateTaskRequest {
+    /// New task title; if present, must be non-empty after trimming (enforced server-side).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// New free-form description; if present, may be empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// New status; [`TaskStatus::Done`] sets `closed_at`, [`TaskStatus::Open`] clears it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<TaskStatus>,
 }
