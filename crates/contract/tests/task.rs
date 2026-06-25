@@ -5,7 +5,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 use chrono::{DateTime, Utc};
-use contract::{CreateTaskRequest, Task, TaskStatus};
+use contract::{CreateTaskRequest, Task, TaskStatus, UpdateTaskRequest};
 use serde_json::{Value, json};
 
 const TASK_ID: &str = "5f9a2c1e-0b3d-4e6f-8a1b-2c3d4e5f6a7b";
@@ -291,4 +291,84 @@ fn create_task_request_round_trips() {
     let reserialized: Value = serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
     let original: Value = serde_json::from_str(wire).unwrap();
     assert_eq!(reserialized, original);
+}
+
+// --- UpdateTaskRequest: all-optional partial patch (ADR-0007, slice 1 / A1). ---
+
+#[test]
+fn update_task_request_full_patch_round_trips() {
+    // All three fields set: serialize → deserialize is lossless.
+    let req = UpdateTaskRequest {
+        title: Some("Refined title".to_owned()),
+        description: Some("Refined description".to_owned()),
+        status: Some(TaskStatus::Done),
+    };
+    let wire = serde_json::to_string(&req).unwrap();
+    let back: UpdateTaskRequest = serde_json::from_str(&wire).unwrap();
+    assert_eq!(back, req);
+}
+
+#[test]
+fn update_task_request_title_only_omits_absent_fields() {
+    // A single-field patch serializes with ONLY that key present; absent `Option`s are skipped.
+    let req = UpdateTaskRequest {
+        title: Some("Refined title".to_owned()),
+        description: None,
+        status: None,
+    };
+    let json = serde_json::to_value(&req).unwrap();
+    assert_eq!(
+        json,
+        json!({
+            "title": "Refined title",
+        })
+    );
+    let object = json.as_object().unwrap();
+    assert!(object.contains_key("title"));
+    assert!(!object.contains_key("description"));
+    assert!(!object.contains_key("status"));
+}
+
+#[test]
+fn update_task_request_empty_patch_serializes_to_empty_object() {
+    // The default (no fields set) serializes to exactly `{}` — a no-op patch on the wire.
+    let req = UpdateTaskRequest::default();
+    assert_eq!(serde_json::to_string(&req).unwrap(), "{}");
+}
+
+#[test]
+fn update_task_request_status_only_reopen_round_trips() {
+    // A reopen-style patch carries only `status: open`; absent fields stay omitted, and it
+    // round-trips losslessly.
+    let req = UpdateTaskRequest {
+        title: None,
+        description: None,
+        status: Some(TaskStatus::Open),
+    };
+    let json = serde_json::to_value(&req).unwrap();
+    assert_eq!(
+        json,
+        json!({
+            "status": "open",
+        })
+    );
+    let wire = serde_json::to_string(&req).unwrap();
+    let back: UpdateTaskRequest = serde_json::from_str(&wire).unwrap();
+    assert_eq!(back, req);
+}
+
+#[test]
+fn update_task_request_deserializes_partial_object_with_absent_fields_none() {
+    // Deserializing a partial JSON object leaves absent fields `None` — a description-only patch.
+    let wire = json!({
+        "description": "just the description",
+    });
+    let req: UpdateTaskRequest = serde_json::from_value(wire).unwrap();
+    assert_eq!(req.description, Some("just the description".to_owned()));
+    assert!(req.title.is_none());
+    assert!(req.status.is_none());
+
+    // An empty object deserializes to the all-`None` default.
+    let empty: UpdateTaskRequest = serde_json::from_value(json!({})).unwrap();
+    assert_eq!(empty, UpdateTaskRequest::default());
 }
