@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post};
 use sqlx::PgPool;
 
 use crate::auth::Jwt;
@@ -62,8 +62,8 @@ pub fn router(state: AppState) -> Router {
             get(handlers::list_tasks).post(handlers::create_task),
         )
         .route(
-            "/api/profiles/{profile_id}/tasks/{task_id}/close",
-            post(handlers::close_task),
+            "/api/profiles/{profile_id}/tasks/{task_id}",
+            patch(handlers::patch_task).delete(handlers::delete_task),
         )
         .route(
             "/api/profiles/{profile_id}/notes",

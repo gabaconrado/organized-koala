@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE tasks SET status = 'done', closed_at = COALESCE(closed_at, now()) WHERE id = $1 AND profile_id = $2 RETURNING id, title, description, status, created_at, closed_at",
+  "query": "UPDATE tasks SET title = COALESCE($3, title), description = COALESCE($4, description), status = COALESCE($5, status), closed_at = CASE WHEN $5 = 'done' THEN COALESCE(closed_at, now()) WHEN $5 = 'open' THEN NULL ELSE closed_at END WHERE id = $1 AND profile_id = $2 RETURNING id, title, description, status, created_at, closed_at",
   "describe": {
     "columns": [
       {
@@ -37,7 +37,10 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -49,5 +52,5 @@
       true
     ]
   },
-  "hash": "2d03b9c7ff81ded3af8bd305a85825cab2bd9f9a0bd070fe617480ff24485c24"
+  "hash": "02016b1c0a8b0da1d4825078e4fd39042b629614c35cfbe32be3d8acc6a0b73d"
 }

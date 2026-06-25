@@ -29,7 +29,8 @@ carries its own schema and needs no `sqlx` CLI or checkout at runtime.
 | `GET` | `/api/profiles` | yes | list the caller's profiles |
 | `POST` | `/api/profiles/{pid}/tasks` | yes | create a task in an owned profile |
 | `GET` | `/api/profiles/{pid}/tasks` | yes | list a profile's tasks, newest-first |
-| `POST` | `/api/profiles/{pid}/tasks/{tid}/close` | yes | close a task (idempotent) |
+| `PATCH` | `/api/profiles/{pid}/tasks/{tid}` | yes | update a task (title/description/status; `done` sets `closed_at`, `open` reopens) |
+| `DELETE` | `/api/profiles/{pid}/tasks/{tid}` | yes | delete a task (`204`; second/unowned → `404`) |
 
 Every query is ownership-joined: a profile the caller does not own is indistinguishable from a
 nonexistent one (`404 not_found`, never `403`). Errors map to the standard HTTP status plus a

@@ -6,7 +6,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
-use contract::{CreateTaskRequest, Task, TaskStatus};
+use contract::{CreateTaskRequest, Task, TaskStatus, UpdateTaskRequest};
 use uuid::Uuid;
 
 use crate::app::AppState;
@@ -114,32 +114,90 @@ pub async fn create_task(
     Ok((StatusCode::CREATED, Json(task)))
 }
 
-/// `POST /api/profiles/{pid}/tasks/{tid}/close` → `200 Task`. Sets `status = done` and
-/// `closed_at = now`. Idempotent: re-closing a done task returns it unchanged (`closed_at`
-/// preserved). Unowned profile or missing task → 404.
+/// Map a wire [`TaskStatus`] to its stored string form (`open` / `done`).
+fn status_str(status: TaskStatus) -> &'static str {
+    match status {
+        TaskStatus::Open => "open",
+        TaskStatus::Done => "done",
+    }
+}
+
+/// `PATCH /api/profiles/{pid}/tasks/{tid}` → `200 Task`. Applies the supplied subset of
+/// `{title, description, status}` in place, leaving absent fields untouched. `status = done`
+/// sets `closed_at` (preserving an existing one, matching the old idempotent close);
+/// `status = open` (reopen) clears `closed_at`; an absent status leaves `closed_at` untouched.
+/// An empty patch is a no-op returning the task unchanged. If `title` is present it must be
+/// non-empty after trimming (else `400 validation_failed`) and is stored trimmed. Unowned
+/// profile or missing task → 404.
 #[tracing::instrument(skip_all, fields(user_id = %user.user_id, profile_id = %profile_id, task_id = %task_id))]
-pub async fn close_task(
+pub async fn patch_task(
     State(state): State<AppState>,
     user: AuthUser,
     Path((profile_id, task_id)): Path<(Uuid, Uuid)>,
+    Json(request): Json<UpdateTaskRequest>,
 ) -> ApiResult<Json<Task>> {
     assert_owned(&state, user.user_id, profile_id).await?;
 
-    // Idempotent: only an open task is mutated; a done task keeps its original closed_at.
+    // Validate + trim a supplied title; an absent title leaves the column untouched.
+    let title = request.title.as_deref().map(str::trim);
+    if title == Some("") {
+        return Err(ApiError::Validation("title must not be empty".to_owned()));
+    }
+    let status = request.status.map(status_str);
+
+    // Single static parameterized UPDATE: COALESCE leaves a NULL parameter's column untouched;
+    // the CASE couples status→closed_at (done preserves/sets it, open clears it, absent keeps
+    // it). No string interpolation — one sqlx-offline-checkable query.
     let row = sqlx::query_as!(
         TaskRow,
         "UPDATE tasks \
-         SET status = 'done', closed_at = COALESCE(closed_at, now()) \
+         SET title = COALESCE($3, title), \
+             description = COALESCE($4, description), \
+             status = COALESCE($5, status), \
+             closed_at = CASE \
+                 WHEN $5 = 'done' THEN COALESCE(closed_at, now()) \
+                 WHEN $5 = 'open' THEN NULL \
+                 ELSE closed_at \
+             END \
          WHERE id = $1 AND profile_id = $2 \
          RETURNING id, title, description, status, created_at, closed_at",
         task_id,
         profile_id,
+        title,
+        request.description.as_deref(),
+        status,
     )
     .fetch_optional(state.pool())
     .await?
     .ok_or(ApiError::NotFound)?;
 
     let task = row.into_task();
-    tracing::info!(task_id = %task.id, "closed task");
+    tracing::info!(task_id = %task.id, "updated task");
     Ok(Json(task))
+}
+
+/// `DELETE /api/profiles/{pid}/tasks/{tid}` → `204 No Content`. Ownership-scoped; a second
+/// delete or an unowned/missing task → `404 not_found`.
+#[tracing::instrument(skip_all, fields(user_id = %user.user_id, profile_id = %profile_id, task_id = %task_id))]
+pub async fn delete_task(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path((profile_id, task_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<StatusCode> {
+    assert_owned(&state, user.user_id, profile_id).await?;
+
+    let deleted = sqlx::query_scalar!(
+        "DELETE FROM tasks WHERE id = $1 AND profile_id = $2 RETURNING id",
+        task_id,
+        profile_id,
+    )
+    .fetch_optional(state.pool())
+    .await?;
+
+    if deleted.is_none() {
+        return Err(ApiError::NotFound);
+    }
+
+    tracing::info!(%task_id, "deleted task");
+    Ok(StatusCode::NO_CONTENT)
 }
