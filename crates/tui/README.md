@@ -12,8 +12,8 @@ through a `ratatui` `TestBackend` with the server mocked (ADR-0003), and so the 
 path can be exercised against a real server:
 
 - [`client`](src/client) — the HTTP boundary. A [`Client`](crate::client::Client) trait over
-  the server endpoints (register, login, list profiles, list/add/close tasks, and a health
-  probe), implemented by [`HttpClient`](crate::client::HttpClient) on `reqwest`. The standard
+  the server endpoints (register, login, list profiles, list/add/update/delete tasks, and a
+  health probe), implemented by [`HttpClient`](crate::client::HttpClient) on `reqwest`. The standard
   error body `{ code, message }` is mapped to a typed
   [`ClientError`](crate::client::ClientError) that preserves the machine-matchable `code`.
 - [`app`](src/app) — the app core. A screen state machine ([`App`](crate::app::App)) advanced
