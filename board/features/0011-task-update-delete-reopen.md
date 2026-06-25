@@ -2,7 +2,7 @@
 id: 0011
 title: Task update + delete + reopen — generalize close into PATCH (breaking)
 type: feature      # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0008 lands on `main` with this plan; independent of 0010/0012 (different files)
