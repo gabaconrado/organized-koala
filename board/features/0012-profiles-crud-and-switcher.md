@@ -167,6 +167,33 @@ Dependency edges: **1 → 2 → 3 → 4**; tests alongside. Slice 1 must merge b
       is merged on `main`, so the `notes` table + its `ON DELETE CASCADE` exist for the
       delete-cascade test. Building contract→server→tui per the slice order (1→2→3→4, tests
       alongside).
+- [x] 2026-06-25 [drive] **Mid-build infra unblock (operator-authorized, Option A).** Slice 2 added
+      3 new sqlx compile-checked queries needing a `.sqlx/` refresh, but `./ok.sh prepare` was bare
+      (`cargo sqlx prepare --workspace`, no DB wiring — unchanged since the first scaffold; prior
+      cycles refreshed `.sqlx/` via ad-hoc `DATABASE_URL`, which this session's guard denies).
+      `server-dev` correctly blocked rather than improvise (#6). Operator authorized completing the
+      verb: `platform-dev` made `cmd_prepare` self-contained on **`main`** (boots throwaway test PG,
+      applies migrations via the sqlx CLI, `cargo sqlx prepare`, tears down — mirrors `cmd_test`
+      (0003) / `cmd_coverage` (0007); validated with a zero-diff run on main). Branch rebased onto
+      the new `main`; the verb now works end-to-end in-worktree with no hand-wiring.
+- [x] 2026-06-25 [drive] Build complete (contract→server→tui, tests alongside). **S1 `contract`**
+      `CreateProfileRequest`/`UpdateProfileRequest` + `ErrorCode::ProfileNameTaken`/`LastProfile`
+      (append-only, `Unknown` fallback intact) (`7d0979a`). **S2 `server`** `create_profile`/
+      `rename_profile`/`delete_profile`: `POST`→201, `PATCH`→200 (dup→409 `profile_name_taken`,
+      unowned→404, empty→400), `DELETE`→204 (last→409 `last_profile`, unowned→404); race-safe
+      unique-violation mapping (no TOCTOU) + atomic single-statement last-profile guard; cascade via
+      FK `ON DELETE CASCADE` (tasks+notes, no app fan-out); reversible `UNIQUE (user_id, name)`
+      migration; `.sqlx/` refreshed (`9960653`). **S3+S4 `tui`** client `create/rename/delete_profile`
+      + `ClientRequest`/`Outcome` arms; `Screen::Profiles` switcher opened by `s` (Enter=pick-active,
+      a/e/x = create/rename/delete); pick-active re-scopes in-memory `active_profile_id` with **no**
+      server switch call + **no** persistence (#1); deleting the active profile re-points to first
+      remaining; `ProfileNameTaken`/`LastProfile` surfaced inline; 80×24 caption budget verified
+      (`5886060`). **Tests 1t/2t/4t** (`e6afefd`): contract profile DTO + error-code round-trips
+      (profile.rs 4→8, error.rs 12→16); server `profiles.rs` 0→20 incl. the headline cascade test
+      asserting **both** task AND note gone (direct DB count + 404), cross-account same-name allowed,
+      auth; tui `profiles.rs` 0→16 + keybindings 20→25 (pick-active carries new id with no switch
+      call, inline conflict codes, in-flight/stale-drop, active-repoint). All gates green at branch
+      head `e6afefd`: `./ok.sh prepare | build | test | lint | fmt --check`.
 
 ## Summary
 
