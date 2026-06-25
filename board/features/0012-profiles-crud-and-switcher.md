@@ -12,6 +12,10 @@ created: 2026-06-24
 updated: 2026-06-24
 ---
 
+<!-- CLAIMED 2026-06-25: branch feature/0012-profiles-crud-and-switcher (worktree cut from
+     b2c8b8b) is now authoritative for this item. This `main` copy is frozen at the claim
+     snapshot until the human's merge brings the finished item back. -->
+
 ## Feature request
 
 **Goal:** Complete profile management. Today the only profile surface is `GET /api/profiles`
