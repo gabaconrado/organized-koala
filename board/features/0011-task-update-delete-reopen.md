@@ -2,7 +2,7 @@
 id: 0011
 title: Task update + delete + reopen — generalize close into PATCH (breaking)
 type: feature      # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0008 lands on `main` with this plan; independent of 0010/0012 (different files)
@@ -240,6 +240,21 @@ ordering (2 before 3) suffices.
       frozen-pointer note left by the auto-merge (branch copy is authoritative). Re-ran the gates on
       the rebased tree: `./ok.sh fmt --check | lint | test` all green. Item stays at `review` →
       `awaiting-merge` (DoD complete). Board-only freshen — no re-review triggered.
+- [x] 2026-06-25 [drive] **Re-rebased onto post-0010 `main` (`5ad5ba9` — 0010 Notes merged) at
+      operator request.** This rebase pulled the entire Notes feature into the branch's `crates/`
+      tree, so unlike the prior docs-only freshen it **changed code**: real conflicts in the TUI
+      (`app/mod.rs`, `protocol.rs`, `client/mod.rs`, `client/worker.rs`, `terminal/mod.rs`,
+      `ui/mod.rs`) and the server + TUI test helpers (`tests/common/mod.rs`) where 0010's notes
+      additions met 0011's task-mutation changes. All resolved as a **union** preserving both
+      surfaces: `CloseTask`/`close_task`/`CloseSelected` dropped (0011's breaking removal),
+      `UpdateTask`/`DeleteTask` + notes variants both kept; the `map_key` caption merged to carry
+      all keys (`a e c x n` + notes commands) with `BOTTOM_BAND_ROWS = 3` retained (the safer band
+      for the longer merged caption). New code-hash **`ee5047c9abf1e4196ed1933655a61fcf41148bcb`**
+      ≠ the attested `e66426f0…`, so per CLAUDE.md "Verdict pinning" / drive step-7 the prior
+      `approved`+`verified` verdicts are **VOID** — item re-enters **review + verify**. Gates green
+      on the merged tree: `./ok.sh build | fmt --check | lint | test` (server tasks 20 + notes 28 +
+      profile_isolation 6, tui tasks 8 + keybindings 20 + rendering 11 + notes 13, contract task 21
+      + note 11). `awaiting-merge` → `review`.
 
 ## Summary
 
