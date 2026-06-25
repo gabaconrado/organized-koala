@@ -13,6 +13,6 @@ mod timer;
 pub use auth::{login, register};
 pub use health::healthz;
 pub use notes::{create_note, delete_note, get_note, list_notes, update_note};
-pub use profiles::list_profiles;
+pub use profiles::{create_profile, delete_profile, list_profiles, rename_profile};
 pub use tasks::{create_task, delete_task, list_tasks, patch_task};
 pub use timer::{get_config, get_session, start_session, stop_session, update_config};

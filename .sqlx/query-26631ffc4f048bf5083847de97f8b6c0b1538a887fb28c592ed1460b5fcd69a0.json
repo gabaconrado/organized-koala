@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM profiles WHERE id = $1 AND user_id = $2 AND (SELECT count(*) FROM profiles WHERE user_id = $2) > 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "26631ffc4f048bf5083847de97f8b6c0b1538a887fb28c592ed1460b5fcd69a0"
+}

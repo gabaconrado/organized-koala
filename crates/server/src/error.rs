@@ -31,6 +31,12 @@ pub enum ApiError {
     /// Registration email already exists (409 `email_taken`).
     #[error("email already taken")]
     EmailTaken,
+    /// Profile create/rename to a name the account already uses (409 `profile_name_taken`).
+    #[error("profile name already taken")]
+    ProfileNameTaken,
+    /// Refused delete of the account's only remaining profile (409 `last_profile`).
+    #[error("cannot delete the last profile")]
+    LastProfile,
     /// Unexpected server error (500 `internal`). The cause is logged, never sent to clients.
     #[error("internal error")]
     Internal(#[source] anyhow::Error),
@@ -69,6 +75,16 @@ impl ApiError {
                 StatusCode::CONFLICT,
                 ErrorCode::EmailTaken,
                 "email already taken".to_owned(),
+            ),
+            Self::ProfileNameTaken => (
+                StatusCode::CONFLICT,
+                ErrorCode::ProfileNameTaken,
+                "a profile with that name already exists".to_owned(),
+            ),
+            Self::LastProfile => (
+                StatusCode::CONFLICT,
+                ErrorCode::LastProfile,
+                "cannot delete the last profile".to_owned(),
             ),
             Self::Internal(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,

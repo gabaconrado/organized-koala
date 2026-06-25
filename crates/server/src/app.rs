@@ -56,7 +56,14 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(handlers::healthz))
         .route("/api/auth/register", post(handlers::register))
         .route("/api/auth/login", post(handlers::login))
-        .route("/api/profiles", get(handlers::list_profiles))
+        .route(
+            "/api/profiles",
+            get(handlers::list_profiles).post(handlers::create_profile),
+        )
+        .route(
+            "/api/profiles/{profile_id}",
+            patch(handlers::rename_profile).delete(handlers::delete_profile),
+        )
         .route(
             "/api/profiles/{profile_id}/tasks",
             get(handlers::list_tasks).post(handlers::create_task),
