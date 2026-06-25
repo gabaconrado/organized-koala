@@ -255,6 +255,20 @@ ordering (2 before 3) suffices.
       on the merged tree: `./ok.sh build | fmt --check | lint | test` (server tasks 20 + notes 28 +
       profile_isolation 6, tui tasks 8 + keybindings 20 + rendering 11 + notes 13, contract task 21
       + note 11). `awaiting-merge` → `review`.
+- [x] 2026-06-25 [reviewer] **REVIEW-STATUS: approved** — code-hash
+      `ee5047c9abf1e4196ed1933655a61fcf41148bcb` (head sha `94e08ec`, a human-readable pointer).
+      Cold re-review of the post-0010 re-rebase. Mechanical gate green (`fmt --check | lint | test`,
+      0 failed across every suite). Breaking change complete — no `close_task`/`CloseTask`/
+      `CloseSelected`/`apply_close` residue; route table is `.patch(patch_task).delete(delete_task)`.
+      **Union merge verified to preserve BOTH surfaces**: Notes (0010 — variants, worker arms,
+      HttpClient impls, `n` key, `NOTES_CAPTION`, routes) and task mutation (0011 — `UpdateTask`/
+      `DeleteTask`, `e`/`c`/`x` keys, `UpdateTaskRequest`). `map_key` dispatch unambiguous
+      (mutually-exclusive task-list vs notes guards; `text_entry` short-circuits); merged
+      `TASK_LIST_CAPTION` + `BOTTOM_BAND_ROWS = 3` consistent with the green rendering/keybinding
+      assertions. Hard constraints #1/#2/#3 (no `updated_at`)/#4 (404-not-403) all clear; PATCH is a
+      single static parameterized `UPDATE` (no injection); spans `skip_all` + ids-only (no secret
+      leak). One non-blocking pre-existing nit: stale `crates/tui/README.md:15` "close tasks" (not a
+      code path; chore candidate). Verdict valid while `./ok.sh code-hash HEAD` == the hash above.
 
 ## Summary
 
