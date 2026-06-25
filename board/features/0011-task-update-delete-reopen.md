@@ -269,6 +269,20 @@ ordering (2 before 3) suffices.
       single static parameterized `UPDATE` (no injection); spans `skip_all` + ids-only (no secret
       leak). One non-blocking pre-existing nit: stale `crates/tui/README.md:15` "close tasks" (not a
       code path; chore candidate). Verdict valid while `./ok.sh code-hash HEAD` == the hash above.
+- [x] 2026-06-25 [verifier] **VERIFY-STATUS: verified** — code-hash
+      `ee5047c9abf1e4196ed1933655a61fcf41148bcb` (== reviewer hash; head sha `3d508fc`). Live re-verify
+      of the post-0010 re-rebase tree. **The prior migration-history blocker is RESOLVED:** `./ok.sh
+      up` booted clean, migrate one-shot exited 0, `_sqlx_migrations` now includes
+      `20260612163049 notes` (success) with **no "previously applied but missing" collision** — 0011's
+      tree legitimately carries the notes migration now. **All 8 task flows + clean-boot RAN live
+      (nothing inferred):** PATCH title/desc/multi-field → 200 (only supplied fields change); reopen
+      round-trip `{done}`→`closed_at` non-null then `{open}`→`closed_at:null` (quoted); empty `{}`→200
+      no-op; `{title:"   "}`→`400 validation_failed`; DELETE→204, second→404, PATCH-on-deleted→404;
+      cross-profile PATCH+DELETE→404 (never 403), unauth→401, victim task unchanged; old
+      `POST …/close`→404; `{code,message}` on all failures + OTel `patch_task`/`delete_task` spans
+      exported ids-only (leak scan for titles/`Bearer`/`password` across telemetry → nothing). TUI
+      `TestBackend` suite green (ADR-0003 clause 4). Stack torn down (`./ok.sh down`, volume intact).
+      No gaps. Verdict valid while `./ok.sh code-hash HEAD` == the hash above.
 
 ## Summary
 
