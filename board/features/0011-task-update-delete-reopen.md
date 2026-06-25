@@ -2,7 +2,7 @@
 id: 0011
 title: Task update + delete + reopen — generalize close into PATCH (breaking)
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: blocked         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0008 lands on `main` with this plan; independent of 0010/0012 (different files)
@@ -193,6 +193,35 @@ ordering (2 before 3) suffices.
       blocking, chore candidate):** `crates/tui/README.md:15` still says "close tasks" — stale after
       the migration (server README route table was correctly updated). Verdict valid while
       `./ok.sh code-hash HEAD` == the hash above.
+- [x] 2026-06-25 [verifier] **VERIFY-STATUS: not-verified** — code-hash
+      `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf` (== reviewer hash; worktree head `1be3704`, a
+      Board-only commit; code-hash identical before/after). **Capability/environment blocker, NOT a
+      0011 defect.** `./ok.sh up` failed at the one-shot `organized-koalad migrate`: *"migration
+      20260612163049 was previously applied but is missing in the resolved migrations."* Root cause:
+      the persistent named volume `deploy_postgres-data` carries migration `20260612163049 (notes)`
+      from the concurrent **0010** worktree (same compose project name `deploy`, shared volume); 0011's
+      migration tree correctly ends at `20260612163048_timer` (A7 — task update/delete needs no
+      schema change). sqlx's strict migration-history consistency check then refuses to proceed and
+      the `run` service gates on `migrate`. The clean fix (`docker compose down -v` to reset the dev
+      volume) destroys another branch's local data, so the verifier's safety classifier denied it and
+      per #6 it was **not** worked around; stack torn down non-destructively, no scratch left.
+      **All 8 live flows NOT RUN** (PATCH partial/multi-field; reopen-clears-closed_at; empty-patch
+      no-op;
+      blank-title 400; DELETE 204→404; cross-profile/missing-id 404; old `…/close` route gone; error
+      contract + OTel spans) — not inferred. Confirmed at the tester layer only (`./ok.sh test` on the
+      throwaway test Postgres): full suite green incl. server tasks 20 + profile_isolation 6, contract
+      task 21, TUI TestBackend tasks 8 (+full suite) — ADR-0003 clause-4 TestBackend confirmation
+      holds, but this is **not** a substitute for the live pass.
+- [ ] 2026-06-25 [drive] **BLOCKED pending operator decision (DoD clause 4 / #6).** The live verifier
+      pass cannot run while the shared `deploy_postgres-data` volume carries 0010's `notes` migration.
+      Question for the operator: **(a)** authorize resetting/removing the `deploy_postgres-data` Docker
+      volume (destroys local dev DB data — throwaway; recreated + re-migrated on next `./ok.sh up`)
+      so 0011's stack can boot for the live pass, **or (b)** have `platform-dev` make concurrent
+      worktrees
+      use isolated compose project names / volumes (a shared-infra fix on `main`) so verifiers never
+      collide on a shared volume, **or (c)** merge 0010 first (which brings `notes` onto `main`; 0011
+      then rebases and its tree includes that migration, removing the mismatch). Code reviewer-approved
+      at code-hash `e66426f0…`; only the live pass remains. STOP for human intervention.
 
 ## Summary
 
