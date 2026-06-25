@@ -2,7 +2,7 @@
 id: 0011
 title: Task update + delete + reopen — generalize close into PATCH (breaking)
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0008 lands on `main` with this plan; independent of 0010/0012 (different files)
@@ -11,10 +11,6 @@ worktree: .claude/worktrees/0011-task-update-delete-reopen
 created: 2026-06-24
 updated: 2026-06-25
 ---
-
-<!-- CLAIMED 2026-06-25 — this `main` copy is FROZEN at the claim snapshot. The branch
-     `feature/0011-task-update-delete-reopen` copy is authoritative until the human's ff-merge
-     brings the finished item back to `main`. Do not advance status here. -->
 
 ## Feature request
 
@@ -237,6 +233,13 @@ ordering (2 before 3) suffices.
       confirmed green (ADR-0003 clause 4): tui tasks 8 + full suite, server tasks 20 + profile_isolation
       6, contract task 21, all doctests. No gaps. Stack torn down (`./ok.sh down`), clean volume
       preserved. Verdict valid while `./ok.sh code-hash HEAD` == the hash above.
+- [x] 2026-06-25 [drive] Step-7 freshen: rebased branch onto `main` (`91a2bab` — eng-manager's 0011
+      learnings + dashboard regen; docs/`.claude`/`board/README` only). Code-hash **unchanged** at
+      `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf` (== attested hash), so the `approved`+`verified`
+      verdicts carry forward untouched — no relabelling (CLAUDE.md "Verdict pinning"). Dropped `main`'s
+      frozen-pointer note left by the auto-merge (branch copy is authoritative). Re-ran the gates on
+      the rebased tree: `./ok.sh fmt --check | lint | test` all green. Item stays at `review` →
+      `awaiting-merge` (DoD complete). Board-only freshen — no re-review triggered.
 
 ## Summary
 
