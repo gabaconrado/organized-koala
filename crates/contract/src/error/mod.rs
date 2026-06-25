@@ -22,6 +22,10 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// assert_eq!(code, ErrorCode::NotFound);
 /// assert_eq!(code.as_str(), "not_found");
 ///
+/// let conflict: ErrorCode = serde_json::from_str(r#""profile_name_taken""#).unwrap();
+/// assert_eq!(conflict, ErrorCode::ProfileNameTaken);
+/// assert_eq!(ErrorCode::LastProfile.as_str(), "last_profile");
+///
 /// // Unknown codes are preserved, not rejected (forward-compatible).
 /// let future: ErrorCode = serde_json::from_str(r#""rate_limited""#).unwrap();
 /// assert_eq!(future, ErrorCode::Unknown("rate_limited".to_owned()));
@@ -42,6 +46,10 @@ pub enum ErrorCode {
     UsernameTaken,
     /// Registration email already exists (HTTP 409).
     EmailTaken,
+    /// Profile name already used by the account on create/rename (HTTP 409).
+    ProfileNameTaken,
+    /// Refused delete of the account's only remaining profile (HTTP 409).
+    LastProfile,
     /// Unexpected server error (HTTP 500); the message is generic.
     Internal,
     /// A code not known to this version of the crate. Carries the raw wire string so it
@@ -68,6 +76,8 @@ impl ErrorCode {
             Self::NotFound => "not_found",
             Self::UsernameTaken => "username_taken",
             Self::EmailTaken => "email_taken",
+            Self::ProfileNameTaken => "profile_name_taken",
+            Self::LastProfile => "last_profile",
             Self::Internal => "internal",
             Self::Unknown(raw) => raw,
         }
@@ -105,6 +115,8 @@ impl From<&str> for ErrorCode {
             "not_found" => Self::NotFound,
             "username_taken" => Self::UsernameTaken,
             "email_taken" => Self::EmailTaken,
+            "profile_name_taken" => Self::ProfileNameTaken,
+            "last_profile" => Self::LastProfile,
             "internal" => Self::Internal,
             other => Self::Unknown(other.to_owned()),
         }

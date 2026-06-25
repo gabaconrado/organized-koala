@@ -1,4 +1,4 @@
-//! Profile wire type. A profile is a namespace that owns its own tasks and notes.
+//! Profile wire types: the namespace shape and its create / update requests.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -37,4 +37,48 @@ pub struct Profile {
     pub name: String,
     /// Creation timestamp; serializes as RFC 3339 UTC (e.g. `"2026-06-11T12:00:00Z"`).
     pub created_at: DateTime<Utc>,
+}
+
+/// Request body for `POST /api/profiles`.
+///
+/// `name` must be non-empty after trimming (else `400 validation_failed`) and unique within
+/// the account (else `409 profile_name_taken`). On success the server returns `201` with the
+/// created [`Profile`].
+///
+/// # Examples
+///
+/// ```
+/// use contract::CreateProfileRequest;
+///
+/// let req = CreateProfileRequest { name: "work".to_owned() };
+/// let json = serde_json::to_value(&req).unwrap();
+/// assert_eq!(json["name"], "work");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateProfileRequest {
+    /// Profile name; must be non-empty after trimming and unique per account (enforced
+    /// server-side).
+    pub name: String,
+}
+
+/// Request body for `PATCH /api/profiles/{id}`.
+///
+/// Renames the profile: `name` must be non-empty after trimming (else `400 validation_failed`)
+/// and unique within the account (else `409 profile_name_taken`). On success the server returns
+/// `200` with the updated [`Profile`].
+///
+/// # Examples
+///
+/// ```
+/// use contract::UpdateProfileRequest;
+///
+/// let req = UpdateProfileRequest { name: "personal".to_owned() };
+/// let json = serde_json::to_value(&req).unwrap();
+/// assert_eq!(json["name"], "personal");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateProfileRequest {
+    /// Profile name; must be non-empty after trimming and unique per account (enforced
+    /// server-side).
+    pub name: String,
 }
