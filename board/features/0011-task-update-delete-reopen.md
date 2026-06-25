@@ -2,7 +2,7 @@
 id: 0011
 title: Task update + delete + reopen — generalize close into PATCH (breaking)
 type: feature      # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0008 lands on `main` with this plan; independent of 0010/0012 (different files)
@@ -305,6 +305,12 @@ ordering (2 before 3) suffices.
       authorization** to code-hash `97cbc025…` (their pinned hash still reads `ee5047c9…`, the
       immediate pre-fix tree they actually attested). Item stays `awaiting-merge`; no code/test
       commit follows, so no re-review is otherwise triggered.
+- [x] 2026-06-25 [human] Authorized close of feature 0011.
+- [x] 2026-06-25 [drive] **Operator-authorized merge.** Branch current on `main` (`006719f` an
+      ancestor of branch head `3836802`); DoD met — reviewer `approved` + verifier `verified`
+      (carried forward by operator authorization over the doc-only README fix, code-hash
+      `97cbc025523bdff1907e9552fd3636d3a874b589`); `test | lint | fmt --check` green. ff-merged into
+      `main`; worktree removed. `awaiting-merge` → merged.
 
 ## Summary
 
