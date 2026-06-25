@@ -224,4 +224,55 @@ Dependency edges: **1 → 2 → 3 → 4**; tests alongside. Slice 1 must merge b
 
 ## Summary
 
-_(filled by `eng-manager` at step 6)_
+Profile management completed: create / rename / delete plus a client-side TUI switcher — the
+last domain feature, completing organized-koala. Built contract → server → tui per
+[ADR-0009][adr-0009] (profile mutations, referencing ADR-0005 §2/§4/§6). Stopped at the
+AI-terminal `awaiting-merge` on the branch.
+
+What shipped (on the branch):
+
+- **`contract`** (`7d0979a`) — `CreateProfileRequest { name }` and `UpdateProfileRequest
+  { name }`; two **append-only** error codes `ErrorCode::ProfileNameTaken` and
+  `ErrorCode::LastProfile` (extend `as_str`/`From<&str>`, `Unknown` forward-compat fallback
+  intact). No DTO redefinition; `{ code, message }` contract preserved (#2).
+- **`server`** (`9960653`) — `POST /api/profiles` (201), `PATCH /api/profiles/{id}` (200),
+  `DELETE /api/profiles/{id}` (204), all owner-scoped on `AuthUser`. Race-safe DB
+  unique-violation → `409 profile_name_taken` (no TOCTOU pre-check); atomic single-statement
+  last-profile guard → `409 last_profile` (account keeps ≥1 namespace); unowned/missing →
+  `404 not_found`; blank name → `400 validation_failed`. Delete **cascades** the profile's
+  tasks **and** notes via FK `ON DELETE CASCADE` (no app fan-out, #4). Reversible
+  `UNIQUE (user_id, name)` migration `20260612163050_profile_name_unique` (paired up/down,
+  ordered after 0010); `.sqlx/` refreshed.
+- **`tui`** (`5886060`) — `Client` `create_profile`/`rename_profile`/`delete_profile` +
+  `ClientRequest`/`Outcome` worker arms; `Screen::Profiles` switcher opened by `s` (Enter =
+  pick-active; `a`/`e`/`x` = create/rename/delete). Switch is **client-side only** — rebinds
+  the in-memory `active_profile_id` and re-scopes subsequent task/note calls; **no** server
+  switch endpoint, **no** persistence (#1). Deleting the active profile re-points to the first
+  remaining. `ProfileNameTaken`/`LastProfile` surfaced inline.
+- **Tests** (`e6afefd`) — contract `profile.rs` 8 / `error.rs` 16; server `profiles.rs` 20
+  including the headline cascade test asserting **both** task AND note gone (DB count + 404),
+  cross-account same-name allowed, auth-required; tui `profiles.rs` 16 + `keybindings.rs` 25
+  (pick-active carries the new id with **no** switch call, inline conflict codes,
+  in-flight/stale-drop, active-repoint). All gates green at `e6afefd`:
+  `./ok.sh prepare | build | test | lint | fmt --check`.
+
+Verdicts (both pinned to code-hash `71fb7ecf327fbd42a14cb19456207885c782fe49`, code commit
+`e6afefd`):
+
+- **reviewer — REVIEW-STATUS: approved.** Mechanical gate clean; no contract drift (#2,
+  append-only); all hard constraints hold (#1 client-side in-memory switch, #4 owner-scoped +
+  FK cascade, #3 no domain structure, #5 auth unchanged); race-safety correct (DB
+  unique-violation mapped, atomic last-profile guard); migration reversible, ordered after
+  0010. No fix-now findings. Non-blocking pre-existing nit (out of scope): `Session.token` is a
+  bare `String` and `Session` derives `Debug` (JWT reachable via derived `Debug`) — candidate
+  future chore.
+- **verifier — VERDICT: verified.** `./ok.sh up` booted clean (no cross-worktree
+  migration-history conflict; all 6 migrations applied). RAN live against `localhost:8080`:
+  create 201 / trim / empty→`400`; duplicate→`409 profile_name_taken` + cross-account same-name
+  201; rename 200, unowned→`404`; **cascade** delete → DB-confirmed `tasks=0, notes=0,
+  profile=0` + HTTP 404 (#4); last-profile delete→`409 last_profile`; no cross-leak;
+  no-token→`401`; error bodies standard status + `{ code, message }`. OTel handler spans
+  observed in the collector. TUI `TestBackend` suite present + green (ADR-0003).
+
+coverage: 66.91% (headline `TOTAL` workspace line coverage from a fresh `./ok.sh coverage` in
+the worktree; docker + throwaway test Postgres booted cleanly). Report-only — never a gate.
