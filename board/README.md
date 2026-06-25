@@ -40,7 +40,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0008](./features/0008-pomodoro-timer.md) | Pomodoro focus timer — global duration config + start/stop session | feature | merged | medium | — | — (merged) |
 | [0009](./features/0009-coverage-in-cycle-and-summary.md) | Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary | chore | merged | low | 0007 (merged ✓) | — (main-only governance; no worktree) |
 | [0010](./features/0010-notes.md) | Notes — full feature (contract module, migration, server CRUD, TUI views) | feature | ready (branch: awaiting-merge) | medium | — | feature/0010-notes |
-| [0011](./features/0011-task-update-delete-reopen.md) | Task update + delete + reopen — generalize close into PATCH (breaking) | feature | ready | medium | — | — (unclaimed) |
+| [0011](./features/0011-task-update-delete-reopen.md) | Task update + delete + reopen — generalize close into PATCH (breaking) | feature | ready (branch: awaiting-merge) | medium | — | feature/0011-task-update-delete-reopen |
 | [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | ready | medium | — | — (unclaimed) |
 
 > **0010 — Notes — AWAITING-MERGE on `feature/0010-notes`** (live status on the branch; the
@@ -54,14 +54,27 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > server 28, tui `TestBackend` 13). Reviewer **approved** + verifier **verified**, both pinned to
 > code-hash `46c1c60f1eb3865eb127a72502982827ebb09d65`; coverage 68.24% line (report-only).
 >
-> **0011 / 0012 — READY (planned, unclaimed).** The remaining two domain features that complete
-> organized-koala, each born on `main` with its governing ADR (0011→ADR-0008 task mutation
-> generalization; 0012→ADR-0009 profile mutations). Operator locked the design forks: generalize
-> `close`→`PATCH` (task status open↔done, reopen clears `closed_at`); edit scope title+description;
-> **no `updated_at`** (stay flat, #3). Recommended claim order **0011 → 0012** — 0011 is independent
-> of 0010 (disjoint files), while 0012's full delete-cascade test wants the `notes` table (now built
-> on 0010's branch) to exist; `depends-on` is left `[]` because 0012's *code* does not depend on
-> 0010, only its cascade *test* does.
+> **0011 — task update/delete/reopen — AWAITING-MERGE on `feature/0011-task-update-delete-reopen`**
+> (live status on the branch; the `main` snapshot stays frozen at the claim `ready` until the human's
+> ff-merge). The one-way task `close` generalized into full edit / toggle-done / reopen / delete — a
+> **breaking** change ([ADR-0008](../docs/adr/0008-task-mutation-generalization.md), ref ADR-0005
+> §5/§8) that **removes** the `POST .../tasks/{id}/close` route (clean removal, single in-repo
+> consumer). A new `contract` `UpdateTaskRequest { title?, description?, status? }` (all-optional
+> partial, no `updated_at` — flat #3); `PATCH …/tasks/{id}` via one static `UPDATE … RETURNING`
+> (`COALESCE`/`CASE`: done sets `closed_at`, open clears it, empty patch a 200 no-op, blank title →
+> 400) + `DELETE …/tasks/{id}` (204 / 404), both ownership-joined → `404` never 403 (#4), **no
+> migration**; the TUI gains edit/toggle/delete keys (`e`/`c`/`x`, two-step confirm), stateless (#1).
+> Reviewer **approved** + verifier **verified**, both pinned to code-hash
+> `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf`; coverage 62.87% line (report-only). The first verify
+> run hit a cross-worktree shared docker volume migration-history conflict (0010's `notes` migration
+> in the shared `deploy_postgres-data`); re-ran green after an operator-authorized volume reset
+> (now a CLAUDE.md gotcha + a `platform-dev` per-worktree-isolation follow-up).
+>
+> **0012 — READY (planned, unclaimed).** The last domain feature completing organized-koala — Profiles
+> create/update/delete + TUI switcher — born on `main` with its governing ADR-0009 (profile mutations).
+> 0012's full delete-cascade test wants the `notes` table (built on 0010's branch) to exist;
+> `depends-on` is left `[]` because 0012's *code* does not depend on 0010, only its cascade *test*
+> does. With 0011 nearing merge, 0012 is the remaining `ready` item.
 >
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
