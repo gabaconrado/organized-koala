@@ -5,6 +5,68 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-25 (0011 — task update/delete/reopen; `close` removed, breaking)
+
+The one-way task `close` was generalized into full task **edit / toggle-done / reopen / delete**.
+This is a **breaking** contract change ([ADR-0008][adr-0008-0011], referencing ADR-0005 §5/§8): the
+`POST .../tasks/{id}/close` route is **removed**, not deprecated. With a single in-repo consumer (the
+TUI, migrated in the same item) and ADR-0005 §8 making `contract` the compatibility authority +
+forbidding URI versioning, a clean removal is the correct shape — there is no external client to keep
+a deprecated route alive for. Branch `feature/0011-task-update-delete-reopen`; reviewer
+**approved** + verifier **verified**, both pinned to code-hash
+`e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf` (last code
+sha `6c3b987`). Stopped at the AI-terminal `awaiting-merge` on the branch.
+
+What shipped (on the branch, contract → server → tui):
+
+- **`contract`** — `UpdateTaskRequest { title?, description?, status? }`, an all-optional partial-update
+  DTO (`skip_serializing_if = "Option::is_none"`); no `updated_at`, flat (#3).
+- **`server`** — `PATCH …/tasks/{task_id}` via a single static parameterized `UPDATE … RETURNING`
+  (`COALESCE`/`CASE`): `status: done` sets `closed_at`, `status: open` (reopen) clears it to null,
+  absent leaves it untouched, empty patch is a 200 no-op, blank title → 400 `validation_failed`.
+  `DELETE …/tasks/{task_id}` → 204, second/missing → 404. The `close_task` handler + `…/close` route
+  are gone. Both routes ownership-joined (`WHERE id=$1 AND profile_id=$2`), unowned → 404 never 403
+  (#4). **No migration** — the existing `tasks` table already supports the in-place update.
+- **`tui`** — task list gains edit (`e`), toggle-done/reopen (`c`), delete (`x`, two-step confirm);
+  all mutations chain a `ListTasks` refresh (stateless, #1); `client`/`protocol` `CloseTask` →
+  `UpdateTask` plus `DeleteTask`.
+
+coverage: **62.87%** line (the headline `TOTAL` from a fresh `./ok.sh coverage` in the worktree).
+Report-only — never a gate.
+
+**Cross-worktree infra gotcha (the load-bearing learning this cycle).** The live verifier's first run
+**failed to boot the stack** — and it was **not** a 0011 defect. Concurrent feature worktrees all use
+the **same docker compose project name (`deploy`)** and therefore share the **persistent named volume
+`deploy_postgres-data`**. That volume still carried 0010's `notes` migration (`20260612163049`), but
+0011's migration tree correctly ends at `20260612163048_timer` (0011 needs no schema change). sqlx's
+strict migration-history consistency check then refused to proceed — *"migration 20260612163049 was
+previously applied but is missing in the resolved migrations"* — and the `run` service, gated on the
+one-shot `migrate`, never came up. Per #6 the verifier did **not** work around it (the clean fix,
+`docker compose down -v`, would destroy another branch's local data). The operator authorized resetting
+the `deploy_postgres-data` volume; the next `./ok.sh up` recreated it clean and the verifier re-ran
+green. Recorded as a CLAUDE.md gotcha. **Recommended follow-up (a `platform-dev` concern):** give each
+worktree an isolated compose project name / volume (e.g. derive `COMPOSE_PROJECT_NAME` from the
+worktree slug) so concurrent branches never share migration history — this removes the failure mode
+rather than relying on an operator volume reset.
+
+**Homes.** Feature-local on the branch (home #2): the item's `## Summary` (with the coverage line),
+committed on `feature/0011-task-update-delete-reopen`. Cross-cutting/derived on `main` (homes #1/#3):
+this `docs/handoff.md` entry (+ the "What works right now" snapshot refreshed), the new CLAUDE.md
+gotcha, and the regenerated `board/README.md`. **`main`'s frozen copy of
+`board/features/0011-task-update-delete-reopen.md` stays untouched** at the claim snapshot until the
+human's merge. The orchestrator flips the branch status to `awaiting-merge` after the step-7 freshen.
+**No new ADR** (ADR-0008 already on `main` with the plan), **no new crate → no new dev agent**.
+
+**Free pickup noted (mintable `chore`, low priority):** the reviewer flagged `crates/tui/README.md:15`
+still says "list/add/**close** tasks" — stale after the close→update/delete migration (the server
+README route table was correctly updated). A doc-only fix; not touched here because it would change
+the code-hash and void the approved+verified verdicts. The orchestrator may mint it as a `type: chore`,
+`priority: low` item carrying just a `## Feature request` (update the line to reflect edit/toggle/delete).
+
+[adr-0008-0011]: ./adr/0008-task-mutation-generalization.md
+
+---
+
 ## Handoff — 2026-06-24 (0010 — Notes, the final domain feature, end-to-end across all three crates)
 
 The **last missing domain feature** shipped: Notes, a near-exact structural clone of the task
@@ -1212,3 +1274,16 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   **approved** + verifier **verified**, both pinned to code-hash
   `46c1c60f1eb3865eb127a72502982827ebb09d65`; coverage 68.24% line. With Notes done, all four flat
   features (TODO, Pomodoro, Notes, Profiles) exist except Profiles CRUD (0012, still `ready`).
+- **Task update/delete/reopen is at `awaiting-merge` on `feature/0011-task-update-delete-reopen`**
+  (0011, a `feature`, live-verified): the one-way task `close` generalized into full edit / toggle-done
+  / reopen / delete — a **breaking** change ([ADR-0008][adr-0008-0011]) that **removes** the
+  `POST .../tasks/{id}/close` route (clean removal, single in-repo consumer, ADR-0005 §8). A new
+  `contract` `UpdateTaskRequest { title?, description?, status? }` (all-optional partial, no
+  `updated_at`, #3); `PATCH …/tasks/{id}` via one static `UPDATE … RETURNING` (`COALESCE`/`CASE`:
+  done→`closed_at` set, open→cleared, empty patch a 200 no-op, blank title → 400) + `DELETE …/tasks/{id}`
+  (204 / 404), both ownership-joined → 404 never 403 (#4), **no migration**; the TUI gains edit/
+  toggle/delete keys (`e`/`c`/`x` with two-step confirm), stateless (#1). Reviewer **approved** +
+  verifier **verified**, both pinned to code-hash `e66426f0a6fcb9c0ba3f7e6baf1f3b606708a6cf`; coverage
+  62.87% line. (The first verify run hit a cross-worktree shared-volume migration-history conflict —
+  see the 0011 cycle entry above + the new CLAUDE.md gotcha; re-ran green after an operator-authorized
+  volume reset.) Profiles CRUD (0012) remains the last `ready` item.

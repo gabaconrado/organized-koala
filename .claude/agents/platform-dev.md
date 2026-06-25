@@ -30,6 +30,15 @@ You are the **platform-dev** for organized-koala.
   `organized-koalad migrate` / `rollback` (the binary owns the runtime mechanism) and are
   **never load-bearing at runtime**. Document them as dev-only in `ok.sh --help`.
 
+## Known follow-up
+
+- **Per-worktree stack isolation (recommended fix, learned 0011).** All worktrees currently share
+  one compose project name (`deploy`) and the persistent volume `deploy_postgres-data`, so a
+  `verifier` booting `./ok.sh up` on one branch inherits another branch's migration history and
+  sqlx's strict consistency check refuses to boot (see CLAUDE.md "Gotcha — concurrent worktrees").
+  When picked up: isolate each worktree's stack — derive `COMPOSE_PROJECT_NAME` (and thus the
+  volume) from the worktree slug — so concurrent branches never share migration history or data.
+
 ## Constraints
 
 - **Infrastructure only — you own no crate.** Cross-cutting Rust code (e.g. an observability

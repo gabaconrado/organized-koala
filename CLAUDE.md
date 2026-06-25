@@ -147,6 +147,20 @@ phase, including anything written into a dispatch prompt:
   `verified-with-gaps` covers genuinely-minor *inferred* sub-items, never "could not run it
   because a required tool was missing."
 
+**Gotcha — concurrent worktrees share one docker compose project + Postgres volume (learned 0011).**
+Every worktree's `./ok.sh up` uses the **same** compose project name (`deploy`) and therefore the
+**same** persistent named volume `deploy_postgres-data`. So a `verifier` booting the stack on worktree
+X inherits the **migration history left by worktree Y**: if Y applied a migration that does not exist
+in X's tree (e.g. 0010's `notes` migration vs. 0011, which adds no migration), sqlx's strict
+migration-history consistency check fails — *"migration NNNN was previously applied but is missing in
+the resolved migrations"* — the one-shot `migrate` errors and the `run` service (gated on it) never
+comes up. **This is an environment conflict, not a code defect**, and per **#6** it is **not** worked
+around: the clean reset (`docker compose down -v`) destroys another branch's local data, so the
+verifier blocks and the **operator authorizes** resetting `deploy_postgres-data` before the re-run.
+**Recommended durable fix (a `platform-dev` concern):** isolate each worktree's stack — a per-worktree
+`COMPOSE_PROJECT_NAME` (e.g. derived from the worktree slug) so concurrent branches never share
+migration history or a volume — which removes the failure mode entirely.
+
 > Open design item for the first ADR: **timer authority** — `#1` implies the server owns the
 > Pomodoro countdown and the TUI only renders it. The `architect` settles this in ADR-0002.
 
