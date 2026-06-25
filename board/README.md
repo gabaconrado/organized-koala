@@ -41,7 +41,8 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0009](./features/0009-coverage-in-cycle-and-summary.md) | Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary | chore | merged | low | 0007 (merged ✓) | — (main-only governance; no worktree) |
 | [0010](./features/0010-notes.md) | Notes — full feature (contract module, migration, server CRUD, TUI views) | feature | merged | medium | — | — (merged) |
 | [0011](./features/0011-task-update-delete-reopen.md) | Task update + delete + reopen — generalize close into PATCH (breaking) | feature | merged | medium | — | — (merged) |
-| [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | ready | medium | — | `feature/0012-profiles-crud-and-switcher` (active; live `awaiting-merge`) |
+| [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | merged | medium | — | — (merged) |
+| [0013](./features/0013-session-token-debug-leak.md) | Redact the JWT in `tui` `Session` — bare `String` reachable via derived `Debug` (rust-standards secret-leak violation) | chore | inbox | high | — | — |
 
 > **0010 — Notes — MERGED.** The final missing
 > domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
@@ -80,9 +81,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > carried forward by operator authorization. Operator authorized the close; fast-forwarded to `main`
 > at `9635608`; worktree + branch removed.
 >
-> **0012 — Profiles CRUD + switcher — at `awaiting-merge` on
-> `feature/0012-profiles-crud-and-switcher` (the `main` snapshot stays frozen at the `ready` claim;
-> the live status is on the branch).** The **last domain feature** — organized-koala is now
+> **0012 — Profiles CRUD + switcher — MERGED.** The **last domain feature** — organized-koala is now
 > functionally complete. Governed by [ADR-0009](../docs/adr/0009-profile-mutations.md) (profile
 > mutations, ref ADR-0005 §2/§4/§6 — two **append-only** error codes `ProfileNameTaken`/`LastProfile`).
 > `contract` `CreateProfileRequest`/`UpdateProfileRequest`; server `POST` (201) / `PATCH` (200) /
@@ -97,7 +96,18 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > pinned to code-hash `71fb7ecf327fbd42a14cb19456207885c782fe49`; coverage 66.91% line (report-only).
 > Load-bearing learning this cycle: `./ok.sh prepare` is now self-contained (`3e0094b` on `main`),
 > completing the "every DB-needing `ok.sh` verb self-boots the shared test PG" pattern
-> (`test`/`coverage`/`prepare`). Awaiting the human's merge.
+> (`test`/`coverage`/`prepare`). Operator authorized the close; fast-forwarded to `main` at
+> `685b4de` (linear, no merge commit); worktree + branch removed. The reviewer's pre-existing
+> `Session.token` bare-`String`/derived-`Debug` JWT-leak nit was promoted to **0013** (high chore).
+>
+> **0013 — Session JWT `Debug` leak — INBOX (high `chore`).** The `tui` `Session` holds the bearer
+> JWT as a bare `String` in a `#[derive(Debug)]` struct — a `rust-standards` *Sensitive data*
+> violation (a secret reachable from a derived `Debug` is a review-blocking leak). Introduced in
+> 0004 **after** the rule and the `contract::Password` redacting template already existed; missed by
+> 0004's author + reviewer and carried (diff-scoped cold review can't see pre-existing code) until
+> 0012's reviewer flagged it. Fix: hold the token as `secrecy::SecretString` (or a redacting newtype
+> à la `Password`), expose only at point of use; audit the protocol/worker types for the same.
+> Lighter chore DoD (no wire/#2, no domain/#3, no behaviour change beyond `Debug` rendering).
 >
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**

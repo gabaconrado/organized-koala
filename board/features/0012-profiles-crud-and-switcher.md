@@ -2,7 +2,7 @@
 id: 0012
 title: Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard)
 type: feature      # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # ADR-0009 lands on `main` with this plan. See sequencing note re: 0010 (notes cascade).
@@ -229,6 +229,12 @@ Dependency edges: **1 → 2 → 3 → 4**; tests alongside. Slice 1 must merge b
       commit). Re-ran the gates on the rebased tree: `./ok.sh fmt --check | lint | test` all green
       (full workspace suite, 0 failures). Branch is now current on `main`; DoD clauses 1–7 all hold.
       **STOP** — terminal at `awaiting-merge`; the human performs the final ff-merge.
+- [x] 2026-06-25 [human/drive] **Merged** (operator-authorized). Fast-forward merge of
+      `feature/0012-profiles-crud-and-switcher` into `main` at code-hash
+      `71fb7ecf327fbd42a14cb19456207885c782fe49` (linear history, no merge commit); approved +
+      verified verdicts valid at the merged head. Worktree removed, branch deleted. Reviewer's
+      pre-existing `Session.token` bare-`String`/derived-`Debug` leak nit promoted to a **high**-
+      priority chore (0013).
 
 ## Summary
 
