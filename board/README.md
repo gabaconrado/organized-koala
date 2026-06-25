@@ -41,7 +41,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0009](./features/0009-coverage-in-cycle-and-summary.md) | Run `./ok.sh coverage` in the drive cycle and record the % in each item's Summary | chore | merged | low | 0007 (merged ✓) | — (main-only governance; no worktree) |
 | [0010](./features/0010-notes.md) | Notes — full feature (contract module, migration, server CRUD, TUI views) | feature | merged | medium | — | — (merged) |
 | [0011](./features/0011-task-update-delete-reopen.md) | Task update + delete + reopen — generalize close into PATCH (breaking) | feature | merged | medium | — | — (merged) |
-| [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | ready | medium | — | — (unclaimed) |
+| [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | ready | medium | — | `feature/0012-profiles-crud-and-switcher` (active; live `awaiting-merge`) |
 
 > **0010 — Notes — MERGED.** The final missing
 > domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
@@ -80,12 +80,24 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > carried forward by operator authorization. Operator authorized the close; fast-forwarded to `main`
 > at `9635608`; worktree + branch removed.
 >
-> **0012 — READY (planned, unclaimed).** The last domain feature completing organized-koala — Profiles
-> create/update/delete + TUI switcher — born on `main` with its governing ADR-0009 (profile mutations).
-> 0012's full delete-cascade test wants the `notes` table to exist — now satisfied on `main`
-> (0010 merged); `depends-on` was left `[]` because 0012's *code* never depended on 0010, only its
-> cascade *test* did. With 0010 and 0011 merged, 0012 is the **only** remaining `ready` item — the
-> final feature before organized-koala is complete.
+> **0012 — Profiles CRUD + switcher — at `awaiting-merge` on
+> `feature/0012-profiles-crud-and-switcher` (the `main` snapshot stays frozen at the `ready` claim;
+> the live status is on the branch).** The **last domain feature** — organized-koala is now
+> functionally complete. Governed by [ADR-0009](../docs/adr/0009-profile-mutations.md) (profile
+> mutations, ref ADR-0005 §2/§4/§6 — two **append-only** error codes `ProfileNameTaken`/`LastProfile`).
+> `contract` `CreateProfileRequest`/`UpdateProfileRequest`; server `POST` (201) / `PATCH` (200) /
+> `DELETE` (204) under `/api/profiles`, owner-scoped: race-safe DB unique-violation → `409
+> profile_name_taken` (no TOCTOU), atomic last-profile guard → `409 last_profile` (account keeps ≥1
+> namespace), delete **cascades** tasks **and** notes via FK `ON DELETE CASCADE` (#4), reversible
+> `UNIQUE (user_id, name)` migration ordered after 0010. TUI `Screen::Profiles` switcher (`s`) where
+> **switch is client-side only** — rebinds the in-memory `active_profile_id`, no server endpoint, no
+> persistence (#1); deleting the active profile re-points to the first remaining. Tests: contract
+> 8 + 16, server 20 (headline cascade asserts BOTH task and note gone), tui 16 + keybindings 25. Reviewer
+> **approved** + verifier **verified** (live cascade DB-confirmed `tasks=0, notes=0, profile=0`), both
+> pinned to code-hash `71fb7ecf327fbd42a14cb19456207885c782fe49`; coverage 66.91% line (report-only).
+> Load-bearing learning this cycle: `./ok.sh prepare` is now self-contained (`3e0094b` on `main`),
+> completing the "every DB-needing `ok.sh` verb self-boots the shared test PG" pattern
+> (`test`/`coverage`/`prepare`). Awaiting the human's merge.
 >
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
