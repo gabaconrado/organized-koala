@@ -47,6 +47,10 @@ pub struct AuthState {
     pub password: String,
     /// Register profile-name input.
     pub profile_name: String,
+    /// The account identifier captured at submit time (the login identifier or registered
+    /// username), carried into the in-memory [`Session`](super::Session) for the post-auth title.
+    /// Client-side only, no new wire (ADR-0010 §2); empty until a successful auth submit.
+    pub account: String,
     /// Inline error message (e.g. validation or invalid credentials), if any.
     pub error: Option<String>,
     /// The in-flight request id while an auth call (or its chained post-auth load) is
@@ -64,6 +68,7 @@ impl AuthState {
             email: String::new(),
             password: String::new(),
             profile_name: String::new(),
+            account: String::new(),
             error: None,
             pending: None,
         }
