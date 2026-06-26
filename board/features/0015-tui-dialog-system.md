@@ -345,3 +345,10 @@ seam early but the suite goes green as 2/3 land). All five are within `crates/tu
   participating in `overlay_capturing_input()`. Replaced the three long `*_CAPTION` constants with
   one short `FOOTER_CAPTION` (movement, tab switch, `?`, `q`) + the unchanged spinner/cancel
   affordance. File: `crates/tui/src/ui/mod.rs`. Build + production-target lint + fmt green.
+- [x] 2026-06-26 [tui-dev] Slice 4: doc / module-comment touch-ups. `ui/mod.rs` module doc and
+  the message-line/dialog rustdoc describe dialogs-overlay-panes + message-band-carries-only-status;
+  `map_key` rustdoc describes the `?` key and the unified overlay-suppression rule and keeps the
+  note that `t` stays unbound for 0016 (0015 does not remap); `app/mod.rs` module doc names the
+  unified `overlay_capturing_input()` overlay model. Files: `crates/tui/src/app/mod.rs`,
+  `crates/tui/src/ui/mod.rs`, `crates/tui/src/terminal/mod.rs`. Production build/lint/fmt green
+  (existing `tests/` call the old `map_key` signature — those land in tester's slice 5).

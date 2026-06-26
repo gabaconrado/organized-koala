@@ -9,6 +9,11 @@
 //! into state. The whole interactive surface is driveable through a `ratatui` `TestBackend` with
 //! no client and no threads (ADR-0003 / ADR-0006). All state lives in memory for the process
 //! lifetime only (hard-constraint #1) — there is no on-disk or cross-run persistence.
+//!
+//! Add/edit/delete-confirm sub-flows, the timer duration edit, and the `?` help overlay are
+//! **input-capturing overlays** unified by [`App::overlay_capturing_input`] (ADR-0010 §3): while
+//! one owns input the terminal layer suppresses every global hotkey and routes `Esc` to
+//! [`Event::Cancel`]. They render as centred dialogs over the active pane.
 
 pub mod auth;
 pub mod main_view;
