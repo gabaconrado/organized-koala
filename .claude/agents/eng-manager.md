@@ -32,8 +32,13 @@ You are the **eng-manager** for organized-koala. You run at the **tail** of ever
   agent under `.claude/agents/` and wire it into CLAUDE.md's triggers + crate layout.
 - Update `docs/build-plan.md` and regenerate `board/README.md` from item frontmatter —
   including the `Type` column (`feature`/`chore`, rendering a missing `type:` as `feature`).
-- When recording a "free pickup" or out-of-scope nit in `docs/handoff.md`, note it as a
-  **mintable `chore`** so the orchestrator can file it directly (no `architect` plan needed).
+- **Capture out-of-scope follow-ups as ideas** (CLAUDE.md "Ideas backlog"). A "free pickup",
+  deferred polish, or suspected tech-debt this cycle surfaced that is **not** part of the finished
+  item goes into `board/ideas/NNNN-<slug>.md` on **`main`** (copy `board/ideas/TEMPLATE.md`;
+  `status: open`, `source:` = the item id, `raised-by: eng-manager`) — **not** smuggled into the
+  `## Summary` as a hidden TODO, and **not** auto-minted as a Board item (idea-first; direct minting
+  is reserved for the genuinely urgent). The human triages ideas later; an `accepted` idea is
+  promoted to a Board item at the next `drive` step 1. Note the same in `docs/handoff.md`.
 
 ## Constraints
 

@@ -43,6 +43,14 @@ If any exists, re-enter it **before** picking a new `ready` item:
 
 ### 1. Triage → plan
 
+**First, promote any accepted ideas.** Sweep `board/ideas/*.md` for `status: accepted` with
+`promoted-to: null` (the human's triage signal — see CLAUDE.md "Ideas backlog"). For each, create a
+real Board `inbox` item from the idea (a `feature` → it goes through `architect`/`plan` below; a
+clearly scope-limited `chore` → mint it directly per "Minting a `chore`"), then stamp the idea
+`promoted-to: NNNN`. Promotion edits both the idea (home #1) and the new Board item — **on `main`**,
+before any worktree is cut. An idea that is still `open` or `closed` is **not** promoted; ideas are
+never auto-advanced by the cycle.
+
 For the highest-priority `inbox` item: dispatch `architect` (runs the `plan` skill). It writes
 plan(s), sets `status: planned`, and after self-acceptance (optional `grill`) → `ready`. A large
 request may fan into several items.
@@ -62,6 +70,13 @@ minted chore carries only a `## Feature request` (the scoped change + acceptance
 `## Plan(s)`. It then claims and cycles exactly like any item (steps 2–8) on the **lighter chore
 DoD** (CLAUDE.md "Definition of done"). The minted chore item is born on `main` and committed
 there before its worktree is cut, same as a planned item.
+
+**Capture is idea-first, though (decided 2026-06-26).** Direct minting is now reserved for the
+**genuinely urgent** out-of-scope find (e.g. a security leak like 0013's JWT). For everything else —
+the "relevant but not urgent / worth thinking about" follow-ups a `reviewer`/`verifier`/`eng-manager`
+surfaces — the default is **not** to mint a Board item but to **file an idea** in `board/ideas/` for
+the human to triage later (see "Capturing follow-up ideas" below and CLAUDE.md "Ideas backlog").
+Even when you do fast-track an urgent mint, record an idea alongside so the trail is complete.
 
 ### 2. Claim + isolate
 
@@ -99,7 +114,10 @@ Dispatch `reviewer` (a fresh agent that did NOT write the code) to run the `revi
 reviewer is **read-only on everything** (code AND Board): it **reports** its findings +
 `REVIEW-STATUS: … <sha>` back to the orchestrator, which commits the verdict onto the item **on
 the branch** (feature-local). Fix-now findings go back to the owning dev agent on the same
-branch. Set `status: review` (committed on the branch). Re-review until `approved` at head — a
+branch. **Out-of-scope findings** the reviewer flags (a pre-existing nit, a nearby improvement,
+suspected tech-debt) are **not** dragged into this item: file each as an idea in `board/ideas/`
+(see "Capturing follow-up ideas" below) unless it is genuinely urgent. Set `status: review`
+(committed on the branch). Re-review until `approved` at head — a
 Board-only commit (status flip / verdict) does **not** require re-review; only a new code/test
 commit does. The verdict **pins to the code-tree hash** (`./ok.sh code-hash`), recorded with
 the last code sha for reference; it stays valid as long as `./ok.sh code-hash HEAD` equals the
@@ -130,7 +148,10 @@ both are read-only and report; the orchestrator does the branch-side Board commi
 
 Dispatch `eng-manager`: update agent/skill instructions and standards skills, add CLAUDE.md
 gotchas, register any new crate's dev agent, write the `docs/handoff.md` entry, and fill the
-item's `## Summary`. As part of filling the Summary, `eng-manager` runs **`./ok.sh coverage`**
+item's `## Summary`. **Also capture any follow-ups this cycle surfaced** that are out of scope of
+the item just finished — "free pickups", deferred polish, a gotcha worth a future fix — as ideas in
+`board/ideas/` on `main` (see "Capturing follow-up ideas" below), rather than smuggling them into
+the Summary as hidden TODOs. As part of filling the Summary, `eng-manager` runs **`./ok.sh coverage`**
 and parses the **headline workspace coverage percentage** from its summary output, then records
 it in the `## Summary` as a one-line `coverage: NN.N%` entry — or `coverage: unavailable
 (docker)` when docker / the throwaway test Postgres cannot boot. This runs on **every** cycle
@@ -197,3 +218,25 @@ ADR, and `REVIEW-STATUS: approved` **with the chore-invariant attestation** at t
 code-hash, branch rebased current per step 7. The human reads the
 Summary + diff and **manually merges** the branch (→ `merged`), which brings the finished item
 back to `main` atomically with the code, then removes the worktree. The AI never merges.
+
+## Capturing follow-up ideas (`board/ideas/`)
+
+Follow-ups that surface mid-cycle but are **out of scope** of the item being driven do **not**
+disrupt the loop and are **not** silently dropped: capture each as an **idea** in `board/ideas/`
+(spec + template in `board/ideas/README.md`; CLAUDE.md "Ideas backlog"). This is the **default**
+disposition for an out-of-scope find at any step — review (step 4), verify (step 5), or learn
+(step 6). Direct minting of a Board item is reserved for the **genuinely urgent** (a security leak
+like 0013's JWT); even then file an idea alongside.
+
+Mechanics:
+
+- **Home #1 — `main` only.** An idea is shared/cross-cutting future-work state, so write and commit
+  it to **`main`** from the main checkout — **never** onto a feature branch / inside the worktree
+  (the out-of-sync bug class). A docs-/board-only `main` commit; it does not touch any branch.
+- **One file, own sequence.** `board/ideas/NNNN-<slug>.md`, numbered independently of
+  `board/features/`. Copy `board/ideas/TEMPLATE.md`; set `status: open`, `source:` to the current
+  item id (or `adhoc`), `raised-by:` to the flagging role.
+- **No secrets** (same as the Board) — describe shape/behaviour; the pre-commit scan covers it.
+- **Hands off after filing.** An idea is `open` until the **human** triages it (`accepted` / `closed`).
+  The cycle never advances an idea; step 1 only **promotes** ideas the human has already marked
+  `accepted` into Board `inbox` items.

@@ -357,8 +357,9 @@ committed on a feature branch, leaving `main`'s scanner stale).
 
 1. **Shared / cross-cutting → committed to `main`, independently of any feature branch.** This
    is: ADRs + the `docs/decisions.md` index, infrastructure (`ok.sh`, `.githooks/`,
-   docker/compose, OTel collector config), `CLAUDE.md`, the standards skills, and the
-   agent/skill definitions under `.claude/`. **A change to any of these must NEVER ride a
+   docker/compose, OTel collector config), `CLAUDE.md`, the standards skills, the
+   agent/skill definitions under `.claude/`, and the **`board/ideas/` backlog** (pre-Board
+   follow-ups; see "Ideas backlog" below). **A change to any of these must NEVER ride a
    feature branch** — that is exactly the out-of-sync bug class.
    - **Carve-out — net-new infra born alongside a new crate rides that crate's branch and
      merges atomically with it (learned 0003).** The rule just above is about *modifying
@@ -418,6 +419,38 @@ item's `## Log / comments`. The **unchecked box is the only re-entry signal**; `
 triages it to the smallest re-entry point, the cycle runs forward, and the owning agent
 checks it `[x]` only once resolved on-branch and re-reviewed. Scope/approach feedback
 **requires an ADR before re-implementation.**
+
+## Ideas backlog (pre-Board follow-ups)
+
+`board/ideas/` is a **calm parking lot for out-of-scope follow-ups** — observations, nice-to-haves,
+suspected tech-debt, or "worth thinking about later" items that surface mid-cycle but are **not**
+part of the work item being driven. It is deliberately **outside the state machine**: an idea is
+**not** a Board item, carries no DoD, and blocks nothing. It exists so a follow-up can be captured
+**without disrupting the drive loop** and triaged by the human on their own schedule. One file per
+idea in `board/ideas/NNNN-<slug>.md` (its own sequence, independent of `board/features/`); the
+folder's `README.md` is the authoritative spec for frontmatter + template, and `TEMPLATE.md` is the
+copy-me starting point.
+
+- **Capture is idea-first (decided 2026-06-26).** When any agent flags a follow-up out of scope of
+  the current item, the orchestrator's **default** is to file an idea in `board/ideas/` for the
+  human to triage — **not** to mint a Board item. The earlier "mint a `chore` directly" path is
+  reserved for the **genuinely urgent** (e.g. a security leak like 0013's JWT); even then, record an
+  idea alongside so the trail is complete. This keeps the loop calm: most follow-ups wait for human
+  judgement rather than auto-becoming work.
+- **Ideas are home #1 (shared / cross-cutting → `main` only).** An idea is future-work state, not
+  feature-local state, so it is **committed to `main`** and **never rides a feature branch** — same
+  rule as planning artifacts and the derived dashboard. The orchestrator captures it on `main` (from
+  the main checkout), not inside the worktree. Putting an idea on a branch is the out-of-sync bug
+  class (home #1).
+- **The Board is committed and potentially public** (treat the same): **never write secrets, tokens,
+  or sensitive payloads into an idea** — describe the shape/behaviour. The pre-commit secret scan
+  covers `board/ideas/` like everything else.
+- **Lifecycle is human-driven, deliberately minimal.** `status: open` → the **human** flips it to
+  `accepted` or `closed` and writes the one-line `## Disposition` decision. There is no AI cycle here:
+  an idea never advances itself. When the human marks one `accepted`, the next drive cycle **promotes**
+  it into a real Board `inbox` item (a `feature` via `architect` plan, or a `chore` minted directly
+  per its scope), then stamps the idea `promoted-to: NNNN`. `closed` and `accepted` idea files are
+  **kept** as a record (a calm log), not deleted.
 
 [adr-0003]: ./docs/adr/0003-verification-layering.md
 [adr-0004]: ./docs/adr/0004-migration-authority-and-binary-cli.md

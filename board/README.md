@@ -26,6 +26,14 @@ delta) on the lighter chore DoD — the live verifier pass is skipped, the cold 
 the no-change invariant is the safety net. A missing `type:` in an item's frontmatter renders as
 `feature` here (the field is new; existing items predate it).
 
+## Ideas backlog
+
+[`ideas/`](./ideas/) is a calm parking lot for **out-of-scope follow-ups** captured mid-cycle — it
+is **outside** the state machine above. An idea is not a work item (no DoD, blocks nothing); the
+human triages each (`accepted`/`closed`), and an `accepted` idea is promoted into a Board item at the
+next `drive` step 1. Spec + template: [`ideas/README.md`](./ideas/README.md). See CLAUDE.md "Ideas
+backlog".
+
 ## Items
 
 | ID | Title | Type | Status (main snapshot) | Priority | Depends on | Branch |
