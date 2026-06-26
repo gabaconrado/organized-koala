@@ -41,7 +41,8 @@ const TIMER_REFRESH_TICKS: u64 = 750;
 
 /// Whether the app is currently in a text-entry context, where letters are typed rather than
 /// interpreted as commands. The duration-edit sub-flow (`editing_duration`) is a global text-entry
-/// mode that overlays the active post-auth screen.
+/// mode that overlays the active post-auth screen. A confirmation dialog captures input but is
+/// **not** text entry (it accepts no typed characters), so it is excluded here.
 fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
     if editing_duration {
         return true;
@@ -57,39 +58,56 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
     }
 }
 
-/// Translate a crossterm key into an app [`Event`] given the current screen and whether the
+/// Translate a crossterm key into an app [`Event`] given the current screen, the single
+/// "input-capturing overlay" predicate (`overlay_capturing`,
+/// [`App::overlay_capturing_input`](crate::app::App::overlay_capturing_input)), and whether the
 /// global duration-edit sub-flow is active.
 ///
 /// Returns `None` for keys that are not bound in the current context. The mapping:
 ///
-/// - `Esc` / `Ctrl+C` → [`Event::Quit`] (and in a sub-flow / while in flight `Esc` is
+/// **Unified overlay-suppression rule (ADR-0010 §3).** While any dialog/overlay captures input —
+/// an add/edit form, a delete-confirm dialog, the duration edit, or the `?` help overlay —
+/// (`overlay_capturing` is `true`) the global hotkeys (`q`/`r`/`?`/`p`/`d` and tab-switch) are
+/// **suppressed**: they never fire their global action while a dialog is open. Only `Esc` (→
+/// [`Event::Cancel`]), `Enter` (→ [`Event::Submit`]), `Tab`/`BackTab` (→ field switch), arrows,
+/// `Backspace`, and — in a text-entry overlay — typed characters reach the focused dialog. This is
+/// the **two-tiered `Esc`**: `Esc` with an overlay open cancels it; `Esc` with no overlay on a
+/// post-auth screen still quits.
+///
+/// - `Esc` / `Ctrl+C` → [`Event::Quit`] (and with an overlay open, or while in flight, `Esc` is
 ///   [`Event::Cancel`]).
 /// - `Enter` → [`Event::Submit`].
-/// - `Tab` / `BackTab` on an idle post-auth list (no sub-flow) → [`Event::NextTab`] /
-///   [`Event::PrevTab`] (cycle `Tasks → Notes → Profiles`, ADR-0010 §1). Inside a sub-flow they
-///   switch the focused field ([`Event::Next`] / [`Event::Prev`]).
+/// - `Tab` / `BackTab` on an idle post-auth list (no overlay) → [`Event::NextTab`] /
+///   [`Event::PrevTab`] (cycle `Tasks → Notes → Profiles`, ADR-0010 §1). Inside an overlay (or on
+///   the auth form) they switch the focused field ([`Event::Next`] / [`Event::Prev`]).
 /// - `Up` / `Down` → [`Event::Prev`] / [`Event::Next`] (move the list selection).
 /// - `Backspace` → [`Event::Backspace`].
 /// - `F2` (auth screen) → [`Event::ToggleAuthMode`].
 /// - In a text-entry context, a printable key → [`Event::Char`].
-/// - On the Tasks tab (not entering text): `a` → [`Event::BeginAddTask`], `e` →
+/// - On the Tasks tab (idle, no overlay): `a` → [`Event::BeginAddTask`], `e` →
 ///   [`Event::BeginEditTask`], `c` → [`Event::ToggleDone`], `x` → [`Event::DeleteSelected`].
-/// - On the Notes tab (idle, not entering text): `a` → [`Event::BeginAddNote`], `e` →
+/// - On the Notes tab (idle, no overlay): `a` → [`Event::BeginAddNote`], `e` →
 ///   [`Event::BeginEditNote`], `x` → [`Event::BeginDeleteNote`], `Enter` opens the selected note.
-/// - On the Profiles tab (idle, not entering text): `Enter` picks the selected profile (mapped to
+/// - On the Profiles tab (idle, no overlay): `Enter` picks the selected profile (mapped to
 ///   [`Event::Submit`], folded by the app core into a client-side re-scope), `a` →
 ///   [`Event::BeginAddProfile`], `e` → [`Event::BeginRenameProfile`], `x` →
 ///   [`Event::BeginDeleteProfile`].
-/// - On any post-auth screen (not entering text): `p` → [`Event::ToggleTimer`], `d` →
-///   [`Event::BeginEditDuration`] (the global timer controls, ADR-0006 §8.2), `r` →
-///   [`Event::Refresh`], `q` → [`Event::Quit`].
+/// - On any post-auth screen (idle, no overlay): `?` → [`Event::ToggleHelp`] (open the help
+///   overlay), `p` → [`Event::ToggleTimer`], `d` → [`Event::BeginEditDuration`] (the global timer
+///   controls, ADR-0006 §8.2), `r` → [`Event::Refresh`], `q` → [`Event::Quit`].
 /// - On the offline screen: `r` → [`Event::Refresh`].
 ///
 /// While a request is outstanding, `Esc` maps to [`Event::Cancel`] (abandon the request) rather
 /// than `Quit`, so cancel stays live; `Ctrl+C` always quits. Note `t`/`n`/`p`/`s` are **not** tab
-/// hotkeys — tab switching is `Tab`/`BackTab` only (`t` is left unbound for the 0016 timer).
+/// hotkeys — tab switching is `Tab`/`BackTab` only (`t` is left unbound for the 0016 timer; 0015
+/// does **not** remap).
 #[must_use]
-pub fn map_key(screen: &Screen, editing_duration: bool, key: KeyEvent) -> Option<Event> {
+pub fn map_key(
+    screen: &Screen,
+    overlay_capturing: bool,
+    editing_duration: bool,
+    key: KeyEvent,
+) -> Option<Event> {
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return Some(Event::Quit);
     }
@@ -99,42 +117,37 @@ pub fn map_key(screen: &Screen, editing_duration: bool, key: KeyEvent) -> Option
         Screen::Main(main) => Some(main.active_tab),
         _ => None,
     };
-    let in_task_form = matches!(
+    let pending = is_pending(screen);
+    // A captured overlay (add/edit/confirm/help/duration) or an in-flight request makes `Esc`
+    // mean cancel, and makes `Tab` switch fields rather than tabs.
+    let in_overlay = overlay_capturing || editing_duration;
+    // The task-delete confirmation is a two-step `x`-again affordance (Assumption A5): while it is
+    // armed the dialog captures input (globals suppressed), but a second `x` must still confirm.
+    let task_delete_armed = matches!(
         screen,
         Screen::Main(main)
-            if main.active_tab == Tab::Tasks
-                && (main.tasks.adding.is_some() || main.tasks.editing.is_some())
+            if main.active_tab == Tab::Tasks && main.tasks.confirming_delete.is_some()
     );
-    let in_notes_sub_flow = matches!(
-        screen,
-        Screen::Main(main) if main.active_tab == Tab::Notes && main.notes.in_sub_flow()
-    );
-    let in_profiles_sub_flow = matches!(
-        screen,
-        Screen::Main(main) if main.active_tab == Tab::Profiles && main.profiles.in_sub_flow()
-    );
-    let pending = is_pending(screen);
-    // A sub-flow (add/edit-task, a notes/profiles sub-flow, or duration-edit) or an in-flight
-    // request makes `Esc` mean cancel.
-    let in_sub_flow = in_task_form || in_notes_sub_flow || in_profiles_sub_flow || editing_duration;
     let on_tasks = active_tab == Some(Tab::Tasks);
     let on_notes = active_tab == Some(Tab::Notes);
     let on_profiles = active_tab == Some(Tab::Profiles);
     let post_auth = active_tab.is_some();
+    // Global hotkeys are live only on an idle post-auth screen with no overlay capturing input.
+    let globals_live = post_auth && !in_overlay;
 
     match key.code {
         KeyCode::Esc => {
-            if in_sub_flow || pending {
+            if in_overlay || pending {
                 Some(Event::Cancel)
             } else {
                 Some(Event::Quit)
             }
         }
         KeyCode::Enter => Some(Event::Submit),
-        // On an idle post-auth list, Tab/Shift+Tab cycle tabs (ADR-0010 §1); inside a sub-flow
+        // On an idle post-auth list, Tab/Shift+Tab cycle tabs (ADR-0010 §1); inside an overlay
         // (or on the auth form) they switch the focused field. Arrows always move the selection.
-        KeyCode::Tab if post_auth && !in_sub_flow => Some(Event::NextTab),
-        KeyCode::BackTab if post_auth && !in_sub_flow => Some(Event::PrevTab),
+        KeyCode::Tab if post_auth && !in_overlay => Some(Event::NextTab),
+        KeyCode::BackTab if post_auth && !in_overlay => Some(Event::PrevTab),
         KeyCode::Tab => Some(Event::Next),
         KeyCode::BackTab => Some(Event::Prev),
         KeyCode::Down => Some(Event::Next),
@@ -142,28 +155,29 @@ pub fn map_key(screen: &Screen, editing_duration: bool, key: KeyEvent) -> Option
         KeyCode::Backspace => Some(Event::Backspace),
         KeyCode::F(2) if matches!(screen, Screen::Auth(_)) => Some(Event::ToggleAuthMode),
         KeyCode::Char(c) if text_entry => Some(Event::Char(c)),
-        // Tasks-tab commands (idle, not a text-entry sub-flow).
-        KeyCode::Char('a') if on_tasks => Some(Event::BeginAddTask),
-        KeyCode::Char('e') if on_tasks => Some(Event::BeginEditTask),
-        KeyCode::Char('c') if on_tasks => Some(Event::ToggleDone),
-        KeyCode::Char('x') if on_tasks => Some(Event::DeleteSelected),
-        // Notes-tab commands (idle list, not a text-entry sub-flow): create / edit / delete.
-        KeyCode::Char('a') if on_notes => Some(Event::BeginAddNote),
-        KeyCode::Char('e') if on_notes => Some(Event::BeginEditNote),
-        KeyCode::Char('x') if on_notes => Some(Event::BeginDeleteNote),
-        // Profiles-tab commands (idle list, not a text-entry sub-flow): create / rename / delete.
-        KeyCode::Char('a') if on_profiles => Some(Event::BeginAddProfile),
-        KeyCode::Char('e') if on_profiles => Some(Event::BeginRenameProfile),
-        KeyCode::Char('x') if on_profiles => Some(Event::BeginDeleteProfile),
-        // The global timer controls are live on every post-auth screen (not while a text-entry
-        // sub-flow owns the keystroke — Assumption B4).
-        KeyCode::Char('p') if post_auth => Some(Event::ToggleTimer),
-        KeyCode::Char('d') if post_auth => Some(Event::BeginEditDuration),
-        KeyCode::Char('r') => match screen {
-            Screen::Main(_) | Screen::Offline { .. } => Some(Event::Refresh),
-            Screen::Auth(_) => None,
-        },
-        KeyCode::Char('q') if post_auth => Some(Event::Quit),
+        // Per-tab action keys (idle list, no overlay capturing input).
+        KeyCode::Char('a') if on_tasks && globals_live => Some(Event::BeginAddTask),
+        KeyCode::Char('e') if on_tasks && globals_live => Some(Event::BeginEditTask),
+        KeyCode::Char('c') if on_tasks && globals_live => Some(Event::ToggleDone),
+        // First `x` (idle) arms the confirmation; a second `x` (armed dialog open) confirms the
+        // delete — the only key the task-delete dialog accepts besides `Esc` to cancel (A5).
+        KeyCode::Char('x') if on_tasks && (globals_live || task_delete_armed) => {
+            Some(Event::DeleteSelected)
+        }
+        KeyCode::Char('a') if on_notes && globals_live => Some(Event::BeginAddNote),
+        KeyCode::Char('e') if on_notes && globals_live => Some(Event::BeginEditNote),
+        KeyCode::Char('x') if on_notes && globals_live => Some(Event::BeginDeleteNote),
+        KeyCode::Char('a') if on_profiles && globals_live => Some(Event::BeginAddProfile),
+        KeyCode::Char('e') if on_profiles && globals_live => Some(Event::BeginRenameProfile),
+        KeyCode::Char('x') if on_profiles && globals_live => Some(Event::BeginDeleteProfile),
+        // Global hotkeys, live only on an idle post-auth screen (suppressed while an overlay
+        // captures input — the unified rule, ADR-0010 §3).
+        KeyCode::Char('?') if globals_live => Some(Event::ToggleHelp),
+        KeyCode::Char('p') if globals_live => Some(Event::ToggleTimer),
+        KeyCode::Char('d') if globals_live => Some(Event::BeginEditDuration),
+        KeyCode::Char('r') if globals_live => Some(Event::Refresh),
+        KeyCode::Char('r') if matches!(screen, Screen::Offline { .. }) => Some(Event::Refresh),
+        KeyCode::Char('q') if globals_live => Some(Event::Quit),
         _ => None,
     }
 }
@@ -237,7 +251,12 @@ pub fn run(
         if event::poll(TICK)?
             && let CtEvent::Key(key) = event::read()?
             && key.kind == event::KeyEventKind::Press
-            && let Some(mapped) = map_key(app.screen(), app.is_editing_duration(), key)
+            && let Some(mapped) = map_key(
+                app.screen(),
+                app.overlay_capturing_input(),
+                app.is_editing_duration(),
+                key,
+            )
             && let Some(dispatch) = app.handle_event(mapped)
         {
             send(&requests, dispatch)?;

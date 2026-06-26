@@ -321,3 +321,11 @@ seam early but the suite goes green as 2/3 land). All five are within `crates/tu
 - [x] 2026-06-26 [orchestrator] Claimed `ready` → `working`. Worktree
   `.claude/worktrees/0015-tui-dialog-system` cut from `main@c9ccd4f` (carries the plan +
   ADR-0010). Session: drive cycle for 0015. tui-dev builds slices 1–4, tester slice 5.
+- [x] 2026-06-26 [tui-dev] Slice 1: overlay model + unified global-hotkey-suppression rule.
+  Added `App::overlay_capturing_input()` (one predicate true for any add/edit/confirm-delete
+  task/note/profile dialog, the duration edit, or the new help overlay), `Event::ToggleHelp`
+  (`?`), and a transient `App.help_open` flag. `map_key` now takes the unified `overlay_capturing`
+  predicate: globals (`q`/`r`/`?`/`p`/`d`/tab-switch) are suppressed while an overlay captures
+  input, `Esc`→`Cancel` (two-tiered Esc preserved; idle post-auth Esc still quits; in-flight
+  Esc-cancel preserved). Help reuses `Event::Cancel` to close (Assumption A2). Files:
+  `crates/tui/src/app/mod.rs`, `crates/tui/src/terminal/mod.rs`. Build green.

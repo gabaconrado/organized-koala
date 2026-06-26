@@ -85,8 +85,11 @@ pub enum Event {
     /// Refresh the current view from the server (also the manual retry from the offline
     /// screen).
     Refresh,
-    /// Cancel the current sub-flow (e.g. abandon the add-task input) or abandon an in-flight
-    /// request.
+    /// Toggle the help overlay (the `?` key): open it on an idle post-auth screen, close it when
+    /// already open. Inert while another dialog is capturing input (Assumption A3).
+    ToggleHelp,
+    /// Cancel the current sub-flow (e.g. abandon the add-task input), close the help overlay, or
+    /// abandon an in-flight request.
     Cancel,
     /// Request to quit the application.
     Quit,
@@ -160,6 +163,9 @@ pub struct App {
     session: Option<Session>,
     screen: Screen,
     timer: Timer,
+    /// Whether the `?` help overlay is open. Transient process-lifetime UI state (#1); it
+    /// participates in [`App::overlay_capturing_input`] like any other dialog.
+    help_open: bool,
     quit: bool,
     next_id: u64,
 }
@@ -178,6 +184,7 @@ impl App {
             session: None,
             screen: Screen::Auth(AuthState::new()),
             timer: Timer::new(),
+            help_open: false,
             quit: false,
             next_id: 0,
         }
@@ -221,6 +228,39 @@ impl App {
         self.timer.is_editing()
     }
 
+    /// Whether the `?` help overlay is open (for rendering).
+    #[must_use]
+    pub fn help_open(&self) -> bool {
+        self.help_open
+    }
+
+    /// The single "input-capturing overlay" predicate (ADR-0010 §3): `true` whenever **any**
+    /// dialog/overlay owns input — a task add/edit form, a task delete confirmation, a notes
+    /// create/edit/confirm-delete, a profiles create/rename/confirm-delete, the duration edit,
+    /// **or** the help overlay. While true, the terminal layer suppresses every global hotkey
+    /// (`q`/`r`/`?`/`p`/`d`/tab-switch) and routes `Esc` to [`Event::Cancel`]; text, field-switch,
+    /// and submit still reach the focused dialog. Confirmation dialogs capture no text but still
+    /// count — they suppress globals and are `Esc`-cancelled. `false` on the auth/offline screens
+    /// (the auth form is its own always-text-entry context).
+    #[must_use]
+    pub fn overlay_capturing_input(&self) -> bool {
+        if self.help_open || self.timer.is_editing() {
+            return true;
+        }
+        match &self.screen {
+            Screen::Main(main) => match main.active_tab {
+                Tab::Tasks => {
+                    main.tasks.adding.is_some()
+                        || main.tasks.editing.is_some()
+                        || main.tasks.confirming_delete.is_some()
+                }
+                Tab::Notes => main.notes.in_sub_flow(),
+                Tab::Profiles => main.profiles.in_sub_flow(),
+            },
+            Screen::Auth(_) | Screen::Offline { .. } => false,
+        }
+    }
+
     /// The id of the request currently awaited on the active surface, if any. On the tabbed view
     /// this is the active pane's marker (each pane owns its own).
     #[must_use]
@@ -246,6 +286,14 @@ impl App {
     /// request-triggering event while that surface's request is outstanding is a no-op. `Quit`
     /// and `Cancel` stay live during a request.
     pub fn handle_event(&mut self, event: Event) -> Option<Dispatch> {
+        // The help overlay owns input while open: `Cancel` (Esc / `?`) closes it; everything else
+        // is inert (Assumption A3). Checked before the duration edit so the two never stack.
+        if self.help_open {
+            if matches!(event, Event::Cancel | Event::ToggleHelp) {
+                self.help_open = false;
+            }
+            return None;
+        }
         // The duration-edit sub-flow is a global text-entry mode overlaying the active post-auth
         // screen: while open it owns keystrokes, so they never reach the screen handler.
         if self.timer.is_editing() {
@@ -254,6 +302,12 @@ impl App {
         match event {
             Event::Quit => {
                 self.quit = true;
+                None
+            }
+            // Open the help overlay on an idle post-auth screen; inert while a dialog captures
+            // input (handled above) or off a post-auth screen (Assumption A3).
+            Event::ToggleHelp if self.screen.is_post_auth() && !self.overlay_capturing_input() => {
+                self.help_open = true;
                 None
             }
             Event::Cancel if self.is_pending() => {
@@ -1350,6 +1404,7 @@ impl App {
         // login; the next login re-loads the account-global timer afresh.
         self.session = None;
         self.timer.reset();
+        self.help_open = false;
         let mut auth = AuthState::new();
         auth.error = Some("session expired — please log in again".to_owned());
         self.screen = Screen::Auth(auth);
