@@ -2,7 +2,7 @@
 id: 0015
 title: TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus
 type: feature      # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0014]
@@ -475,3 +475,12 @@ worktree; docker plus the throwaway test Postgres booted cleanly). Report-only �
   `VERIFIED` verdicts carry forward untouched (no relabelling). Re-ran gates on the rebased tree:
   test 0 failures (32 `test result: ok`), lint clean, fmt --check clean. Branch is current on `main`.
   → `review` → `awaiting-merge`. Cycle terminal; human performs the ff-merge.
+
+- [x] 2026-06-26 [human] The footer (hotkey caption) sits too high — 2 blank rows of bottom
+  margin in the terminal; want 0. Root cause (orchestrator triage): 0015 trimmed the caption to
+  a single non-wrapping line but left `BOTTOM_BAND_ROWS = 3` (sized for the OLD wrapping captions
+  per ADR-0006 §8.3 / learned 0010), so the top-aligned caption leaves 2 dead rows. This is a
+  0015 loose end (the trim created it) and completing it furthers ADR-0010 §2 "tight footer".
+  Folded back into 0015 (operator decision): `awaiting-merge` → `working`; prior approved+verified
+  verdicts VOID once code changes (code-hash will differ); re-runs review + verify. tui-dev shrinks
+  the band to fit the single-line caption + timer widget; tester pins "no blank trailing rows".
