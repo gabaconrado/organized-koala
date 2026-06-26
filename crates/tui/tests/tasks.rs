@@ -19,7 +19,9 @@
 
 mod common;
 
-use common::{Call, FakeClient, done_task, open_task, profile, render, session, submit};
+use common::{
+    Call, FakeClient, done_task, open_task, profile, render, session, submit, tasks_pane,
+};
 use contract::TaskStatus;
 use tui::app::{App, Event, Screen};
 
@@ -36,8 +38,8 @@ fn logged_in(tasks: Vec<contract::Task>) -> (FakeClient, App) {
     let mut app = App::new();
     submit(&mut app, &client, Event::Submit);
     assert!(
-        matches!(app.screen(), Screen::TaskList(_)),
-        "precondition: logged in to the task list",
+        matches!(app.screen(), Screen::Main(_)),
+        "precondition: logged in to the Tasks tab",
     );
     (client, app)
 }
@@ -156,10 +158,7 @@ fn reopen_a_done_task_issues_status_open_patch_and_done_render_clears() {
         "reopen sends only status=open: {calls:?}",
     );
 
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
-    let row = list.tasks.first().expect("one task");
+    let row = tasks_pane(&app).tasks.first().expect("one task").clone();
     assert_eq!(row.status, TaskStatus::Open);
     assert!(row.closed_at.is_none(), "closed_at cleared on reopen");
 
@@ -183,11 +182,13 @@ fn edit_issues_title_and_description_patch_and_row_reflects_it() {
 
     // Open the edit sub-flow: it pre-fills from the task, so clear the title before retyping.
     let _ = app.handle_event(Event::BeginEditTask);
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
-    let edit = list.editing.as_ref().expect("edit sub-flow open");
-    assert_eq!(edit.title, "old title", "edit pre-fills the current title");
+    let edit_title = tasks_pane(&app)
+        .editing
+        .as_ref()
+        .expect("edit sub-flow open")
+        .title
+        .clone();
+    assert_eq!(edit_title, "old title", "edit pre-fills the current title");
 
     // Clear "old title" (9 chars) then type the new title; switch to the description field.
     for _ in 0.."old title".len() {
@@ -218,9 +219,7 @@ fn edit_issues_title_and_description_patch_and_row_reflects_it() {
     );
 
     // The edit sub-flow closed and the row reflects the server's renamed task.
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
+    let list = tasks_pane(&app);
     assert!(list.editing.is_none(), "edit flow closed after success");
     assert_eq!(list.tasks.first().expect("one task").title, "new title");
 
@@ -254,9 +253,7 @@ fn empty_title_edit_is_rejected_inline_with_no_request_issued() {
     );
 
     // The edit sub-flow stays open with an inline error; the task is unchanged.
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
+    let list = tasks_pane(&app);
     let edit = list.editing.as_ref().expect("edit stays open on rejection");
     assert!(
         edit.error.as_deref().is_some_and(|m| m.contains("empty")),
@@ -294,9 +291,7 @@ fn first_delete_arms_confirm_and_issues_no_request() {
         client.calls(),
     );
 
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
+    let list = tasks_pane(&app);
     assert_eq!(
         list.confirming_delete.as_deref(),
         Some("t1"),
@@ -347,9 +342,7 @@ fn second_delete_issues_delete_request_and_row_is_removed_after_refresh() {
     );
 
     // The deleted row is gone and the confirm disarmed; the view is exactly the server's list.
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
+    let list = tasks_pane(&app);
     assert!(list.confirming_delete.is_none(), "confirm disarmed");
     assert_eq!(list.tasks.len(), 1, "the deleted row is removed");
     assert_eq!(list.tasks.first().expect("survivor").id, "t2");
@@ -367,11 +360,8 @@ fn a_non_delete_key_disarms_the_delete_confirm() {
     assert!(app.handle_event(Event::DeleteSelected).is_none());
     let _ = app.handle_event(Event::Next);
 
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
     assert!(
-        list.confirming_delete.is_none(),
+        tasks_pane(&app).confirming_delete.is_none(),
         "a stray key disarms the confirm",
     );
 

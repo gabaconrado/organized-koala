@@ -20,10 +20,11 @@
 mod common;
 
 use common::{
-    Call, FakeClient, api_err, drive, execute, note, offline_err, profile, render, session, submit,
+    Call, FakeClient, api_err, drive, execute, note, notes_pane, offline_err, on_tab, profile,
+    render, session, submit,
 };
 use contract::ErrorCode;
-use tui::app::{App, Event, NotesMode, Screen};
+use tui::app::{App, Event, NotesMode, Screen, Tab};
 
 const W: u16 = 80;
 const H: u16 = 24;
@@ -35,7 +36,7 @@ fn type_str(app: &mut App, s: &str) {
     }
 }
 
-/// A freshly-logged-in app on the `work` task list, plus the shared fake. The login chain
+/// A freshly-logged-in app on the `work` Tasks tab, plus the shared fake. The login chain
 /// (login → profiles → tasks) is scripted; the active profile is `p1`/`work`.
 fn logged_in() -> (FakeClient, App) {
     let client = FakeClient::new();
@@ -44,18 +45,21 @@ fn logged_in() -> (FakeClient, App) {
     client.push_tasks(Ok(vec![]));
     let mut app = App::new();
     submit(&mut app, &client, Event::Submit);
-    assert!(matches!(app.screen(), Screen::TaskList(_)));
+    assert!(matches!(app.screen(), Screen::Main(_)));
     (client, app)
 }
 
-/// Log in and navigate into the notes view, populated from the scripted `notes` list response.
+/// Log in and switch to the Notes tab (`Tab` cycles Tasks→Notes), which issues a `ListNotes` load
+/// populated from the scripted `notes` list response — the new tab-based reachability for notes
+/// (ADR-0010 §1).
 fn enter_notes(notes: Vec<contract::Note>) -> (FakeClient, App) {
     let (client, mut app) = logged_in();
     client.push_notes(Ok(notes));
-    submit(&mut app, &client, Event::OpenNotes);
+    submit(&mut app, &client, Event::NextTab); // Tasks -> Notes
     assert!(
-        matches!(app.screen(), Screen::Notes(_)),
-        "navigated into notes",
+        on_tab(&app, Tab::Notes),
+        "switched to the Notes tab: {}",
+        common::screen_name(&app),
     );
     (client, app)
 }
@@ -72,9 +76,7 @@ fn notes_list_view_mirrors_exactly_the_server_response() {
     ];
     let (_client, app) = enter_notes(server_notes.clone());
 
-    let Screen::Notes(state) = app.screen() else {
-        panic!("notes screen");
-    };
+    let state = notes_pane(&app);
     assert_eq!(
         state.notes, server_notes,
         "view is exactly the server's list"
@@ -119,9 +121,7 @@ fn create_posts_request_then_reflects_in_list_after_refresh() {
     submit(&mut app, &client, Event::Submit);
 
     // The create sub-flow closed and the list now shows the server's note.
-    let Screen::Notes(state) = app.screen() else {
-        panic!("notes screen");
-    };
+    let state = notes_pane(&app);
     assert!(
         matches!(state.mode, NotesMode::List),
         "create sub-flow closed after success",
@@ -180,9 +180,7 @@ fn edit_issues_update_and_reflects_change_in_place() {
 
     // Open the edit sub-flow on the selected note; the form prefilled from it.
     let _ = app.handle_event(Event::BeginEditNote);
-    let Screen::Notes(state) = app.screen() else {
-        panic!("notes screen");
-    };
+    let state = notes_pane(&app);
     let NotesMode::Editing { form, .. } = &state.mode else {
         panic!("edit sub-flow open with prefilled form");
     };
@@ -202,9 +200,7 @@ fn edit_issues_update_and_reflects_change_in_place() {
     submit(&mut app, &client, Event::Submit);
 
     // Edit sub-flow closed; the row reflects the change in place (same single note, new title).
-    let Screen::Notes(state) = app.screen() else {
-        panic!("notes screen");
-    };
+    let state = notes_pane(&app);
     assert!(matches!(state.mode, NotesMode::List), "edit closed");
     assert_eq!(state.notes.len(), 1, "no extra/duplicate row");
     assert_eq!(state.notes.first().expect("one note").title, "New title");
@@ -259,9 +255,7 @@ fn delete_issues_request_and_removes_from_list() {
     // Select the second note, confirm delete; script the 204 and the post-delete refresh list.
     let _ = app.handle_event(Event::Next); // select "remove me"
     let _ = app.handle_event(Event::BeginDeleteNote);
-    let Screen::Notes(state) = app.screen() else {
-        panic!("notes screen");
-    };
+    let state = notes_pane(&app);
     assert!(
         matches!(&state.mode, NotesMode::ConfirmingDelete { note_id, .. } if note_id == "n2"),
         "delete confirmation targets the selected note",
@@ -276,9 +270,7 @@ fn delete_issues_request_and_removes_from_list() {
     )]));
     submit(&mut app, &client, Event::Submit); // confirm
 
-    let Screen::Notes(state) = app.screen() else {
-        panic!("notes screen");
-    };
+    let state = notes_pane(&app);
     assert!(matches!(state.mode, NotesMode::List), "delete flow closed");
     assert_eq!(state.notes.len(), 1, "deleted note removed from list");
     assert_eq!(state.notes.first().expect("one note").title, "keep me");
@@ -330,9 +322,7 @@ fn open_selected_note_fetches_and_views_from_server() {
     )));
     submit(&mut app, &client, Event::Submit); // Enter opens the selected note
 
-    let Screen::Notes(state) = app.screen() else {
-        panic!("notes screen");
-    };
+    let state = notes_pane(&app);
     let NotesMode::Viewing(viewed) = &state.mode else {
         panic!("viewing the opened note");
     };
@@ -369,9 +359,7 @@ fn empty_title_validation_surfaces_inline_in_create_form() {
     submit(&mut app, &client, Event::Submit);
 
     // The create sub-flow stays open with the error surfaced inline on the form; list untouched.
-    let Screen::Notes(state) = app.screen() else {
-        panic!("notes screen");
-    };
+    let state = notes_pane(&app);
     let NotesMode::Creating(form) = &state.mode else {
         panic!("create sub-flow stays open after a validation error");
     };
@@ -421,9 +409,7 @@ fn empty_title_validation_surfaces_inline_in_edit_form() {
     }
     submit(&mut app, &client, Event::Submit);
 
-    let Screen::Notes(state) = app.screen() else {
-        panic!("notes screen");
-    };
+    let state = notes_pane(&app);
     let NotesMode::Editing { form, .. } = &state.mode else {
         panic!("edit sub-flow stays open after a validation error");
     };
@@ -510,9 +496,7 @@ fn stale_delete_response_after_cancel_is_dropped() {
     let follow_up = app.apply_response(stale);
 
     assert!(follow_up.is_none(), "a stale response yields no follow-up");
-    let Screen::Notes(state) = app.screen() else {
-        panic!("still on the notes screen");
-    };
+    let state = notes_pane(&app);
     assert_eq!(
         state.notes.len(),
         1,
@@ -564,9 +548,7 @@ fn superseded_response_after_new_request_is_dropped() {
         "2026-06-18T15:00:00Z",
     )]));
     drive(&mut app, &client, second);
-    let Screen::Notes(state) = app.screen() else {
-        panic!("notes screen");
-    };
+    let state = notes_pane(&app);
     assert_eq!(
         state.notes.first().expect("note").title,
         "fresh",

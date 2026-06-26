@@ -36,8 +36,8 @@ use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use tui::app::{
     AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, Dispatch,
-    EditTaskState, Event, Outcome, ProfileForm, ProfilesMode, ProfilesState, RequestId, Screen,
-    TaskListState,
+    EditTaskState, Event, MainState, NotesState, Outcome, ProfileForm, ProfilesMode, ProfilesState,
+    RequestId, Screen, Tab, TaskListState,
 };
 use tui::client::{Client, ClientError, ClientResult};
 
@@ -752,15 +752,54 @@ fn buffer_text(buffer: &Buffer) -> String {
     out
 }
 
-/// Convenience: the active screen's name, for diagnostics.
+/// Convenience: the active screen's name, for diagnostics. The post-auth tabbed view names the
+/// active tab so a failing assertion still pinpoints which pane was showing.
 pub fn screen_name(app: &App) -> &'static str {
     match app.screen() {
         Screen::Auth(_) => "auth",
-        Screen::TaskList(_) => "task_list",
-        Screen::Notes(_) => "notes",
-        Screen::Profiles(_) => "profiles",
+        Screen::Main(main) => match main.active_tab {
+            Tab::Tasks => "main:tasks",
+            Tab::Notes => "main:notes",
+            Tab::Profiles => "main:profiles",
+        },
         Screen::Offline { .. } => "offline",
     }
+}
+
+// ---- Post-auth tabbed-view accessors (ADR-0010 §1) ----
+//
+// The three list screens are gone: Tasks/Notes/Profiles are now panes of one
+// `Screen::Main(Box<MainState>)`. These accessors read the active tab's pane so a suite can assert
+// on it exactly as it used to assert on `Screen::TaskList(_)` etc. Each panics with a diagnostic if
+// the app is not on the tabbed view (the suites use these only after reaching it).
+
+/// The post-auth tabbed view, panicking if the app is not on it.
+pub fn main_state(app: &App) -> &MainState {
+    match app.screen() {
+        Screen::Main(main) => main,
+        other => panic!("expected the post-auth tabbed view, got {other:?}"),
+    }
+}
+
+/// Whether the app is on the post-auth tabbed view with the given tab active.
+#[must_use]
+pub fn on_tab(app: &App, tab: Tab) -> bool {
+    matches!(app.screen(), Screen::Main(main) if main.active_tab == tab)
+}
+
+/// The Tasks pane of the post-auth tabbed view, panicking if the view is not showing.
+pub fn tasks_pane(app: &App) -> &TaskListState {
+    &main_state(app).tasks
+}
+
+/// The Notes pane of the post-auth tabbed view, panicking if the view is not showing.
+pub fn notes_pane(app: &App) -> &NotesState {
+    &main_state(app).notes
+}
+
+/// The Profiles pane of the post-auth tabbed view, panicking if the view is not showing.
+pub fn profiles_pane(app: &App) -> &ProfilesState {
+    &main_state(app).profiles
 }
 
 /// Drive the edge's "initial timer load" hook to completion: the real poll loop calls
@@ -789,6 +828,59 @@ pub fn refresh_timer(app: &mut App, client: &FakeClient) {
 // public struct literals — no client or driven flow needed to pin the keybinding contract. Each
 // carries its in-flight marker (`pending`) so the same builders cover the idle and in-flight
 // keybinding contexts.
+//
+// Post-auth (ADR-0010 §1) the three list screens are panes of one `Screen::Main(Box<MainState>)`.
+// A builder for "the task list" therefore constructs the tabbed view with the Tasks tab active and
+// the other panes empty; the `task_list_screen*` / `profiles_screen*` names are kept so the
+// keybinding suite reads unchanged.
+
+/// A bare empty task pane.
+fn empty_tasks_pane() -> TaskListState {
+    TaskListState {
+        tasks: Vec::new(),
+        selected: None,
+        adding: None,
+        editing: None,
+        confirming_delete: None,
+        message: None,
+        pending: None,
+    }
+}
+
+/// A task pane with one open task selected, no sub-flow.
+fn one_task_pane() -> TaskListState {
+    TaskListState {
+        tasks: vec![open_task(
+            "00000000-0000-0000-0000-000000000001",
+            "a task",
+            "2026-06-18T10:00:00Z",
+        )],
+        selected: Some(0),
+        adding: None,
+        editing: None,
+        confirming_delete: None,
+        message: None,
+        pending: None,
+    }
+}
+
+/// A profiles pane listing two profiles in the bare list mode, first selected.
+fn two_profiles_pane() -> ProfilesState {
+    ProfilesState {
+        profiles: vec![profile("p1", "work"), profile("p2", "personal")],
+        selected: Some(0),
+        mode: ProfilesMode::List,
+        message: None,
+        pending: None,
+    }
+}
+
+/// Wrap three panes into the post-auth tabbed view with `active` selected.
+fn main_screen(active: Tab, tasks: TaskListState, profiles: ProfilesState) -> Screen {
+    let mut main = MainState::new(tasks, NotesState::new(Vec::new()), profiles);
+    main.active_tab = active;
+    Screen::Main(Box::new(main))
+}
 
 /// The auth (login) screen, idle (no request in flight).
 pub fn auth_screen() -> Screen {
@@ -800,6 +892,7 @@ pub fn auth_screen() -> Screen {
         email: String::new(),
         password: String::new(),
         profile_name: String::new(),
+        account: String::new(),
         error: None,
         pending: None,
     })
@@ -816,73 +909,41 @@ pub fn auth_screen_pending() -> Screen {
     }
 }
 
-/// A task-list screen with one open task and no add-task sub-flow open, idle.
+/// The post-auth tabbed view on the Tasks tab with one open task and no sub-flow, idle.
 pub fn task_list_screen() -> Screen {
-    Screen::TaskList(TaskListState {
-        tasks: vec![open_task(
-            "00000000-0000-0000-0000-000000000001",
-            "a task",
-            "2026-06-18T10:00:00Z",
-        )],
-        selected: Some(0),
-        adding: None,
-        editing: None,
-        confirming_delete: None,
-        message: None,
-        pending: None,
-    })
+    main_screen(Tab::Tasks, one_task_pane(), two_profiles_pane())
 }
 
-/// A task-list screen with a request outstanding (no add-task sub-flow open).
+/// The tabbed view on the Tasks tab with the active pane's request outstanding.
 pub fn task_list_screen_pending() -> Screen {
-    match task_list_screen() {
-        Screen::TaskList(mut list) => {
-            list.pending = Some(RequestId(0));
-            Screen::TaskList(list)
-        }
-        other => other,
-    }
+    let mut tasks = one_task_pane();
+    tasks.pending = Some(RequestId(0));
+    main_screen(Tab::Tasks, tasks, two_profiles_pane())
 }
 
-/// A task-list screen with the add-task sub-flow open (a text-entry context).
+/// The tabbed view on the Tasks tab with the add-task sub-flow open (a text-entry context).
 pub fn task_list_screen_adding() -> Screen {
-    Screen::TaskList(TaskListState {
-        tasks: Vec::new(),
-        selected: None,
-        adding: Some(AddTaskState {
-            on_title: true,
-            title: String::new(),
-            description: String::new(),
-            error: None,
-        }),
-        editing: None,
-        confirming_delete: None,
-        message: None,
-        pending: None,
-    })
+    let mut tasks = empty_tasks_pane();
+    tasks.adding = Some(AddTaskState {
+        on_title: true,
+        title: String::new(),
+        description: String::new(),
+        error: None,
+    });
+    main_screen(Tab::Tasks, tasks, two_profiles_pane())
 }
 
-/// A task-list screen with the edit-task sub-flow open (a text-entry context), pre-filled.
+/// The tabbed view on the Tasks tab with the edit-task sub-flow open (a text-entry context).
 pub fn task_list_screen_editing() -> Screen {
-    Screen::TaskList(TaskListState {
-        tasks: vec![open_task(
-            "00000000-0000-0000-0000-000000000001",
-            "a task",
-            "2026-06-18T10:00:00Z",
-        )],
-        selected: Some(0),
-        adding: None,
-        editing: Some(EditTaskState {
-            task_id: "00000000-0000-0000-0000-000000000001".to_owned(),
-            on_title: true,
-            title: "a task".to_owned(),
-            description: String::new(),
-            error: None,
-        }),
-        confirming_delete: None,
-        message: None,
-        pending: None,
-    })
+    let mut tasks = one_task_pane();
+    tasks.editing = Some(EditTaskState {
+        task_id: "00000000-0000-0000-0000-000000000001".to_owned(),
+        on_title: true,
+        title: "a task".to_owned(),
+        description: String::new(),
+        error: None,
+    });
+    main_screen(Tab::Tasks, tasks, two_profiles_pane())
 }
 
 /// The blocking offline screen, idle.
@@ -901,56 +962,43 @@ pub fn offline_screen_pending() -> Screen {
     }
 }
 
-/// A profile-switcher screen listing two profiles, the bare list mode, idle. The selected entry is
-/// the first profile.
+/// The tabbed view on the Profiles tab listing two profiles, bare list mode, idle.
 pub fn profiles_screen() -> Screen {
-    Screen::Profiles(ProfilesState {
-        profiles: vec![profile("p1", "work"), profile("p2", "personal")],
-        selected: Some(0),
-        mode: ProfilesMode::List,
-        message: None,
-        pending: None,
-    })
+    main_screen(Tab::Profiles, empty_tasks_pane(), two_profiles_pane())
 }
 
-/// A profile-switcher screen with a request outstanding (bare list mode).
+/// The tabbed view on the Profiles tab with the active pane's request outstanding.
 pub fn profiles_screen_pending() -> Screen {
-    match profiles_screen() {
-        Screen::Profiles(mut state) => {
-            state.pending = Some(RequestId(0));
-            Screen::Profiles(state)
-        }
-        other => other,
-    }
+    let mut profiles = two_profiles_pane();
+    profiles.pending = Some(RequestId(0));
+    main_screen(Tab::Profiles, empty_tasks_pane(), profiles)
 }
 
-/// A profile-switcher screen with the create sub-flow open (a text-entry context).
+/// The tabbed view on the Profiles tab with the create sub-flow open (a text-entry context).
 pub fn profiles_screen_creating() -> Screen {
-    match profiles_screen() {
-        Screen::Profiles(mut state) => {
-            state.mode = ProfilesMode::Creating(ProfileForm {
-                name: String::new(),
-                error: None,
-            });
-            Screen::Profiles(state)
-        }
-        other => other,
-    }
+    let mut profiles = two_profiles_pane();
+    profiles.mode = ProfilesMode::Creating(ProfileForm {
+        name: String::new(),
+        error: None,
+    });
+    main_screen(Tab::Profiles, empty_tasks_pane(), profiles)
 }
 
-/// A profile-switcher screen with the rename sub-flow open (a text-entry context), prefilled.
+/// The tabbed view on the Profiles tab with the rename sub-flow open (a text-entry context).
 pub fn profiles_screen_renaming() -> Screen {
-    match profiles_screen() {
-        Screen::Profiles(mut state) => {
-            state.mode = ProfilesMode::Renaming {
-                profile_id: "p1".to_owned(),
-                form: ProfileForm {
-                    name: "work".to_owned(),
-                    error: None,
-                },
-            };
-            Screen::Profiles(state)
-        }
-        other => other,
-    }
+    let mut profiles = two_profiles_pane();
+    profiles.mode = ProfilesMode::Renaming {
+        profile_id: "p1".to_owned(),
+        form: ProfileForm {
+            name: "work".to_owned(),
+            error: None,
+        },
+    };
+    main_screen(Tab::Profiles, empty_tasks_pane(), profiles)
+}
+
+/// The tabbed view on the Notes tab, bare list mode, idle. Used by the keybinding suite to pin the
+/// Notes-tab command keys.
+pub fn notes_screen() -> Screen {
+    main_screen(Tab::Notes, empty_tasks_pane(), two_profiles_pane())
 }

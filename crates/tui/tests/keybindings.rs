@@ -16,9 +16,9 @@ use tui::app::Event;
 use tui::terminal::map_key;
 
 use common::{
-    auth_screen, auth_screen_pending, offline_screen, offline_screen_pending, profiles_screen,
-    profiles_screen_creating, profiles_screen_pending, profiles_screen_renaming, task_list_screen,
-    task_list_screen_adding, task_list_screen_editing, task_list_screen_pending,
+    auth_screen, auth_screen_pending, notes_screen, offline_screen, offline_screen_pending,
+    profiles_screen, profiles_screen_creating, profiles_screen_pending, profiles_screen_renaming,
+    task_list_screen, task_list_screen_adding, task_list_screen_editing, task_list_screen_pending,
 };
 
 fn key(code: KeyCode) -> KeyEvent {
@@ -119,13 +119,104 @@ fn enter_submits_everywhere() {
 }
 
 #[test]
-fn tab_down_is_next_and_backtab_up_is_prev() {
-    for screen in [auth_screen(), task_list_screen(), task_list_screen_adding()] {
+fn tab_switches_field_in_auth_and_in_sub_flows() {
+    // On the auth form and inside a post-auth text-entry sub-flow, Tab/BackTab switch the focused
+    // FIELD (Next/Prev) — tab-cycling is reserved for idle post-auth lists (ADR-0010 §1).
+    for screen in [auth_screen(), task_list_screen_adding()] {
         assert_eq!(map(&screen, key(KeyCode::Tab)), Some(Event::Next));
-        assert_eq!(map(&screen, key(KeyCode::Down)), Some(Event::Next));
         assert_eq!(map(&screen, key(KeyCode::BackTab)), Some(Event::Prev));
-        assert_eq!(map(&screen, key(KeyCode::Up)), Some(Event::Prev));
     }
+}
+
+#[test]
+fn arrows_always_move_the_list_selection() {
+    // Arrows move the selection (Next/Prev) on every screen — auth, the idle post-auth lists, and
+    // sub-flows alike. Tab no longer owns list movement (ADR-0010 §1: arrows move, Tab cycles).
+    for screen in [
+        auth_screen(),
+        task_list_screen(),
+        notes_screen(),
+        profiles_screen(),
+        task_list_screen_adding(),
+    ] {
+        assert_eq!(
+            map(&screen, key(KeyCode::Down)),
+            Some(Event::Next),
+            "Down moves selection on {screen:?}",
+        );
+        assert_eq!(
+            map(&screen, key(KeyCode::Up)),
+            Some(Event::Prev),
+            "Up moves selection on {screen:?}",
+        );
+    }
+}
+
+// ---- Top-level tab cycling (ADR-0010 §1) ----
+
+#[test]
+fn tab_and_shift_tab_cycle_tabs_on_an_idle_post_auth_list() {
+    // On an idle post-auth list (any tab), Tab → NextTab and Shift+Tab → PrevTab; the cycling
+    // itself (Tasks→Notes→Profiles→Tasks) is exercised end-to-end in the navigation suite.
+    for screen in [task_list_screen(), notes_screen(), profiles_screen()] {
+        assert_eq!(
+            map(&screen, key(KeyCode::Tab)),
+            Some(Event::NextTab),
+            "Tab cycles to the next tab on the idle list {screen:?}",
+        );
+        assert_eq!(
+            map(&screen, key(KeyCode::BackTab)),
+            Some(Event::PrevTab),
+            "Shift+Tab cycles to the previous tab on the idle list {screen:?}",
+        );
+    }
+}
+
+#[test]
+fn tab_switches_field_not_tabs_inside_a_post_auth_sub_flow() {
+    // Inside any post-auth sub-flow Tab must switch the focused field (Next), NEVER cycle tabs —
+    // otherwise typing into a form would jump panes (ADR-0010 §1).
+    for screen in [
+        task_list_screen_adding(),
+        task_list_screen_editing(),
+        profiles_screen_creating(),
+        profiles_screen_renaming(),
+    ] {
+        assert_eq!(
+            map(&screen, key(KeyCode::Tab)),
+            Some(Event::Next),
+            "Tab switches field (not tab) in the sub-flow {screen:?}",
+        );
+        assert_eq!(
+            map(&screen, key(KeyCode::BackTab)),
+            Some(Event::Prev),
+            "Shift+Tab switches field (not tab) in the sub-flow {screen:?}",
+        );
+    }
+}
+
+#[test]
+fn letter_keys_never_switch_tabs() {
+    // Deliberately NO t/n/p/s tab-letter hotkeys (ADR-0010 §1; `t` is kept free for the 0016
+    // timer). On the idle Tasks tab these letters are either a pane command (none of t/n/p/s map to
+    // a tab switch) or unbound — crucially none yields NextTab/PrevTab.
+    let screen = task_list_screen();
+    for c in ['t', 'n', 's'] {
+        let mapped = map(&screen, key(KeyCode::Char(c)));
+        assert!(
+            !matches!(mapped, Some(Event::NextTab) | Some(Event::PrevTab)),
+            "{c:?} must NOT switch tabs (got {mapped:?})",
+        );
+    }
+    // `t`/`n`/`s` are unbound on the Tasks tab; `p` is the timer toggle (not a tab switch).
+    assert_eq!(map(&screen, key(KeyCode::Char('t'))), None, "t unbound");
+    assert_eq!(map(&screen, key(KeyCode::Char('n'))), None, "n unbound");
+    assert_eq!(map(&screen, key(KeyCode::Char('s'))), None, "s unbound");
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('p'))),
+        Some(Event::ToggleTimer),
+        "p is the timer toggle, not a tab switch",
+    );
 }
 
 #[test]
@@ -195,17 +286,42 @@ fn task_list_command_keys() {
     );
     assert_eq!(map(&screen, key(KeyCode::Char('r'))), Some(Event::Refresh),);
     assert_eq!(map(&screen, key(KeyCode::Char('q'))), Some(Event::Quit));
-    // `n` opens the notes view; `s` opens the profile switcher (Assumption A7).
-    assert_eq!(
-        map(&screen, key(KeyCode::Char('n'))),
-        Some(Event::OpenNotes),
-    );
-    assert_eq!(
-        map(&screen, key(KeyCode::Char('s'))),
-        Some(Event::OpenProfiles),
-    );
+    // The old `n` (open notes) / `s` (open profiles) cross-screen keys are removed (ADR-0010 §1):
+    // they are now unbound on the Tasks tab.
+    assert_eq!(map(&screen, key(KeyCode::Char('n'))), None, "n unbound now");
+    assert_eq!(map(&screen, key(KeyCode::Char('s'))), None, "s unbound now");
     // An unbound printable key on the task list is ignored.
     assert_eq!(map(&screen, key(KeyCode::Char('z'))), None);
+}
+
+#[test]
+fn notes_tab_command_keys() {
+    // On the idle Notes tab: `a` create, `e` edit, `x` delete, Enter opens the selected note; the
+    // global timer/refresh/quit keys are live and `Tab` cycles tabs (covered above).
+    let screen = notes_screen();
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('a'))),
+        Some(Event::BeginAddNote),
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('e'))),
+        Some(Event::BeginEditNote),
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('x'))),
+        Some(Event::BeginDeleteNote),
+    );
+    assert_eq!(map(&screen, key(KeyCode::Enter)), Some(Event::Submit));
+    assert_eq!(map(&screen, key(KeyCode::Char('r'))), Some(Event::Refresh));
+    assert_eq!(map(&screen, key(KeyCode::Char('q'))), Some(Event::Quit));
+    // `c` (toggle-done) is a Tasks-only command — unbound on the Notes tab.
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('c'))),
+        None,
+        "c unbound on notes"
+    );
+    // `t`/`n`/`s` never switch tabs.
+    assert_eq!(map(&screen, key(KeyCode::Char('t'))), None);
 }
 
 #[test]
@@ -359,13 +475,13 @@ fn r_is_not_a_command_on_the_auth_screen() {
     );
 }
 
-// ---- Profile switcher (ADR-0009 §5 — `s` opens it; a/e/x/r/Enter/Esc on the idle list) ----
+// ---- Profiles tab (ADR-0009 §5 — a/e/x/r/Enter on the idle list, reached via Tab now) ----
 
 #[test]
-fn profile_switcher_list_command_keys() {
-    // On the idle switcher list: `a` create, `e` rename, `x` delete, `r` refresh, `q` quit, Enter
-    // picks the active profile (Submit), Up/Down navigate. Esc returns to the task list (Back),
-    // since the idle switcher list is not a sub-flow.
+fn profiles_tab_list_command_keys() {
+    // On the idle Profiles tab: `a` create, `e` rename, `x` delete, `r` refresh, `q` quit, Enter
+    // picks the active profile (Submit), Up/Down navigate. The old idle-`Esc`-back is removed
+    // (ADR-0010 §1): the idle list is not a sub-flow, so Esc QUITS (tab-switch is how you leave).
     let screen = profiles_screen();
     assert_eq!(
         map(&screen, key(KeyCode::Char('a'))),
@@ -384,8 +500,8 @@ fn profile_switcher_list_command_keys() {
     assert_eq!(map(&screen, key(KeyCode::Enter)), Some(Event::Submit));
     assert_eq!(map(&screen, key(KeyCode::Down)), Some(Event::Next));
     assert_eq!(map(&screen, key(KeyCode::Up)), Some(Event::Prev));
-    // Idle switcher list: Esc navigates back to the task list, not quit.
-    assert_eq!(map(&screen, key(KeyCode::Esc)), Some(Event::Back));
+    // Idle post-auth list: Esc quits (no more idle-Esc-back).
+    assert_eq!(map(&screen, key(KeyCode::Esc)), Some(Event::Quit));
     // An unbound printable key is ignored.
     assert_eq!(map(&screen, key(KeyCode::Char('z'))), None);
 }

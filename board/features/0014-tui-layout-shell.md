@@ -236,6 +236,21 @@ the acceptance criteria):
   --check`/lib+bins `clippy` green; doctests pass. Test suites (`tester`-owned) fail to compile —
   expected, slice 5 updates them (see report). Stayed within ADR-0010 §5 (no contract/server/domain
   change).
+- [x] 2026-06-26 [tester] Slice 5 done — `TestBackend` suite updated to the tabbed shell + new 0014
+  coverage. `common/mod.rs`: `Session`/`AuthState` literals carry `account`; the `Screen::TaskList/
+  Notes/Profiles` builders become `Screen::Main(Box<MainState>)` builders on the right active `Tab`
+  (names kept); `screen_name` reports `main:<tab>`; added `main_state`/`on_tab`/`tasks_pane`/
+  `notes_pane`/`profiles_pane` accessors. Existing suites re-pointed to the tabbed view (tab-switch
+  via `NextTab`/`PrevTab` replaces `OpenNotes`/`OpenProfiles`/`Back`; pane accessors replace the old
+  destructures) preserving every test's intent (CRUD reachability, error-code branching, in-flight,
+  JWT redaction). New `tests/navigation.rs` (14 tests) covers the 0014 acceptance: tab bar with Tasks
+  default; `Tab`/`Shift+Tab` cycle both directions + pane updates; active-tab highlight; no `t`/`n`/
+  `p`/`s` switches a tab (end-to-end via `map_key`) and arrows move selection; per-tab selection
+  survives a switch away/back (Tasks + Notes); exact verbatim title `organized koala - <user> @
+  [<profile>]` (+ em-dash guard) and re-scope after pick-active; footer flush near the bottom rows;
+  centred auth box with toggle + all fields + inline error band. `./ok.sh test | lint | fmt --check`
+  all green (tui integration suite incl. `navigation`). Only mock is the `Client` trait; no `src/`
+  change.
 
 <!-- feature: needs an `architect` plan (`plan` skill) writing a `## Plan(s)` block before code. -->
 <!-- Open question for the architect: does the new TUI interaction model (tabs + later dialogs + detail views, 0014–0016) warrant its own ADR for the TUI shell, or is it presentation-only and ADR-free? Settle before planning 0015/0016. -->

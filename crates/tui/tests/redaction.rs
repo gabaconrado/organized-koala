@@ -26,6 +26,7 @@ const FAKE_TOKEN: &str = "SECRET.JWT.VALUE";
 fn session_debug_redacts_token() {
     let session = Session {
         token: SessionToken::new(FAKE_TOKEN.to_owned()),
+        account: "ada".to_owned(),
         profile_id: "p1".to_owned(),
         profile_name: "work".to_owned(),
     };

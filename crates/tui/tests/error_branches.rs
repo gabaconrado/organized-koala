@@ -14,12 +14,12 @@
 
 mod common;
 
-use common::{FakeClient, api_err, offline_err, open_task, profile, session, submit};
+use common::{FakeClient, api_err, offline_err, open_task, profile, session, submit, tasks_pane};
 use contract::ErrorCode;
 use tui::app::{App, Event, Screen};
 
 /// A handle to a fake plus a freshly-logged-in app sharing it. The handle scripts later
-/// responses; the app is on the task list of the `work` profile with the given tasks.
+/// responses; the app is on the Tasks tab of the `work` profile with the given tasks.
 fn logged_in(tasks: Vec<contract::Task>) -> (FakeClient, App) {
     let client = FakeClient::new();
     client.push_login(Ok(session("jwt-token")));
@@ -28,8 +28,8 @@ fn logged_in(tasks: Vec<contract::Task>) -> (FakeClient, App) {
     let mut app = App::new();
     submit(&mut app, &client, Event::Submit);
     assert!(
-        matches!(app.screen(), Screen::TaskList(_)),
-        "precondition: logged in to task list",
+        matches!(app.screen(), Screen::Main(_)),
+        "precondition: logged in to the tabbed view (Tasks tab)",
     );
     assert!(app.session().is_some(), "precondition: session present");
     (client, app)
@@ -82,10 +82,11 @@ fn add_task_validation_failed_shows_inline_error_and_keeps_session() {
     let _ = app.handle_event(Event::BeginAddTask);
     submit(&mut app, &client, Event::Submit); // submit the empty-title task
 
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("a validation error must keep us on the task list");
-    };
-    let add = list
+    assert!(
+        matches!(app.screen(), Screen::Main(_)),
+        "a validation error must keep us on the Tasks tab",
+    );
+    let add = tasks_pane(&app)
         .adding
         .as_ref()
         .expect("the add-task flow stays open on a validation error");
@@ -167,8 +168,8 @@ fn offline_during_session_then_retry_recovers_to_task_list() {
     client.push_tasks(Ok(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]));
     submit(&mut app, &client, Event::Refresh); // 'r' on the offline screen = retry
     assert!(
-        matches!(app.screen(), Screen::TaskList(_)),
-        "a successful retry recovers to the task list",
+        matches!(app.screen(), Screen::Main(_)),
+        "a successful retry recovers to the Tasks tab",
     );
 }
 
@@ -216,9 +217,10 @@ fn other_api_error_after_auth_surfaces_inline_on_task_list() {
 
     submit(&mut app, &client, Event::Refresh);
 
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("a coded-less post-auth error stays on the task list");
-    };
-    assert_eq!(list.message.as_deref(), Some("internal error"));
+    assert!(
+        matches!(app.screen(), Screen::Main(_)),
+        "a coded-less post-auth error stays on the Tasks tab",
+    );
+    assert_eq!(tasks_pane(&app).message.as_deref(), Some("internal error"));
     assert!(app.session().is_some(), "session kept on a non-auth error");
 }

@@ -18,13 +18,18 @@ use tui::app::{App, Event};
 const W: u16 = 80;
 const H: u16 = 24;
 
-/// Drive a fresh app from login to its task list with the given tasks, returning the app.
+/// Drive a fresh app from login to its post-auth tabbed view (Tasks tab) with the given tasks,
+/// returning the app. The login identifier `ada` is typed so the post-auth title can render the
+/// live `<user>`.
 fn logged_in_with(tasks: Vec<contract::Task>) -> App {
     let client = FakeClient::new();
     client.push_login(Ok(session("jwt-token")));
     client.push_profiles(Ok(vec![profile("p1", "work")]));
     client.push_tasks(Ok(tasks));
     let mut app = App::new();
+    for c in "ada".chars() {
+        let _ = app.handle_event(Event::Char(c));
+    }
     submit(&mut app, &client, Event::Submit); // login -> profiles -> tasks
     app
 }
@@ -33,7 +38,8 @@ fn logged_in_with(tasks: Vec<contract::Task>) -> App {
 fn auth_login_screen_renders_its_fields_and_hint() {
     let app = App::new();
     let text = render(&app, W, H);
-    assert!(text.contains("organized-koala — Login"), "title:\n{text}");
+    // The auth title is centred and reads `organized koala - Login` (a space + hyphen, no em dash).
+    assert!(text.contains("organized koala - Login"), "title:\n{text}");
     assert!(text.contains("Identifier"), "identifier field:\n{text}");
     assert!(text.contains("Password"), "password field:\n{text}");
     // Login form must NOT show the register-only fields.
@@ -51,7 +57,7 @@ fn auth_register_screen_renders_all_four_fields() {
     let _ = app.handle_event(Event::ToggleAuthMode);
     let text = render(&app, W, H);
     assert!(
-        text.contains("organized-koala — Register"),
+        text.contains("organized koala - Register"),
         "title:\n{text}"
     );
     assert!(text.contains("Username"), "username:\n{text}");
@@ -96,7 +102,10 @@ fn task_list_renders_newest_first_with_markers() {
     let app = logged_in_with(tasks);
     let text = render(&app, W, H);
 
-    assert!(text.contains("tasks [work]"), "profile in header:\n{text}");
+    assert!(
+        text.contains("organized koala - ada @ [work]"),
+        "contextual title with user + profile:\n{text}",
+    );
     // Done/undone markers.
     assert!(
         text.contains("[ ] newest open task"),
@@ -162,8 +171,8 @@ fn empty_task_list_still_renders_chrome() {
     let app = logged_in_with(Vec::new());
     let text = render(&app, W, H);
     assert!(
-        text.contains("tasks [work]"),
-        "header even when empty:\n{text}"
+        text.contains("organized koala - ada @ [work]"),
+        "contextual title even when empty:\n{text}",
     );
     assert!(text.contains("Tasks"), "list block title:\n{text}");
 }
@@ -238,9 +247,11 @@ fn task_list_in_flight_appends_spinner_without_replacing_the_caption() {
     assert!(app.is_pending(), "task list in-flight after toggle-done");
 
     let text = render(&app, W, H);
-    // The command caption stays present (not replaced) — the regression guard.
+    // The command caption stays present (not replaced) — the regression guard. (The caption wraps
+    // at ` | ` separators when the timer label takes the right column, so assert on the stable
+    // leading segments that never split mid-token.)
     assert!(
-        text.contains("a: add") && text.contains("p: timer"),
+        text.contains("Tab: switch tab") && text.contains("a: add"),
         "the command caption is NOT replaced while pending:\n{text}",
     );
     assert!(

@@ -15,10 +15,10 @@
 
 mod common;
 
-use common::{FakeClient, drive, execute, open_task, profile, session, submit};
+use common::{FakeClient, drive, execute, open_task, profile, session, submit, tasks_pane};
 use tui::app::{App, Event, Screen};
 
-/// A freshly-logged-in app on the `work` task list with the given tasks, plus the shared fake.
+/// A freshly-logged-in app on the `work` Tasks tab with the given tasks, plus the shared fake.
 fn logged_in(tasks: Vec<contract::Task>) -> (FakeClient, App) {
     let client = FakeClient::new();
     client.push_login(Ok(session("jwt")));
@@ -26,7 +26,7 @@ fn logged_in(tasks: Vec<contract::Task>) -> (FakeClient, App) {
     client.push_tasks(Ok(tasks));
     let mut app = App::new();
     submit(&mut app, &client, Event::Submit);
-    assert!(matches!(app.screen(), Screen::TaskList(_)));
+    assert!(matches!(app.screen(), Screen::Main(_)));
     (client, app)
 }
 
@@ -151,11 +151,12 @@ fn stale_response_after_cancel_is_dropped() {
     let follow_up = app.apply_response(stale);
 
     assert!(follow_up.is_none(), "a stale response yields no follow-up");
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("still on the task list");
-    };
+    assert!(
+        matches!(app.screen(), Screen::Main(_)),
+        "still on the Tasks tab",
+    );
     assert_eq!(
-        list.tasks.first().expect("task present").status,
+        tasks_pane(&app).tasks.first().expect("task present").status,
         contract::TaskStatus::Open,
         "the dropped stale update must not flip the task to done",
     );
@@ -203,11 +204,9 @@ fn superseded_response_after_new_request_is_dropped() {
     // The new (refresh) request then completes normally.
     client.push_tasks(Ok(vec![open_task("t2", "fresh", "2026-06-18T15:00:00Z")]));
     drive(&mut app, &client, second);
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
+    assert!(matches!(app.screen(), Screen::Main(_)), "Tasks tab");
     assert_eq!(
-        list.tasks.first().expect("task").title,
+        tasks_pane(&app).tasks.first().expect("task").title,
         "fresh",
         "the new request's response drove the view, not the stale one",
     );

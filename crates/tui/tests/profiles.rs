@@ -25,10 +25,11 @@
 mod common;
 
 use common::{
-    Call, FakeClient, api_err, drive, execute, offline_err, profile, render, session, submit,
+    Call, FakeClient, api_err, drive, execute, offline_err, on_tab, profile, profiles_pane, render,
+    session, submit,
 };
 use contract::ErrorCode;
-use tui::app::{App, Event, ProfilesMode, Screen};
+use tui::app::{App, Event, ProfilesMode, Screen, Tab};
 
 const W: u16 = 80;
 const H: u16 = 24;
@@ -40,7 +41,7 @@ fn type_str(app: &mut App, s: &str) {
     }
 }
 
-/// A freshly-logged-in app on the `work` task list, plus the shared fake. The login chain
+/// A freshly-logged-in app on the `work` Tasks tab, plus the shared fake. The login chain
 /// (login → profiles → tasks) is scripted; the active profile is `p1`/`work`.
 fn logged_in() -> (FakeClient, App) {
     let client = FakeClient::new();
@@ -49,28 +50,34 @@ fn logged_in() -> (FakeClient, App) {
     client.push_tasks(Ok(vec![]));
     let mut app = App::new();
     submit(&mut app, &client, Event::Submit);
-    assert!(matches!(app.screen(), Screen::TaskList(_)));
+    assert!(matches!(app.screen(), Screen::Main(_)));
     (client, app)
 }
 
-/// Log in and open the profile switcher, populated from the scripted `profiles` list response.
+/// Log in and switch to the Profiles tab (`Shift+Tab` cycles Tasks→Profiles directly), which issues
+/// a `ListProfiles` load populated from the scripted `profiles` list response — the new tab-based
+/// reachability for the switcher (ADR-0010 §1).
 fn enter_switcher(profiles: Vec<contract::Profile>) -> (FakeClient, App) {
     let (client, mut app) = logged_in();
     client.push_profiles(Ok(profiles));
-    submit(&mut app, &client, Event::OpenProfiles);
+    submit(&mut app, &client, Event::PrevTab); // Tasks -> Profiles (reverse cycle)
     assert!(
-        matches!(app.screen(), Screen::Profiles(_)),
-        "navigated into the switcher",
+        on_tab(&app, Tab::Profiles),
+        "switched to the Profiles tab: {}",
+        common::screen_name(&app),
     );
     (client, app)
 }
 
-/// The switcher state, panicking if the app is not on the switcher screen.
+/// The switcher (Profiles pane) state, panicking if the app is not on the tabbed view.
 fn switcher(app: &App) -> &tui::app::ProfilesState {
-    match app.screen() {
-        Screen::Profiles(state) => state,
-        other => panic!("expected the switcher screen, got {other:?}"),
-    }
+    profiles_pane(app)
+}
+
+/// Leave the Profiles tab back to the Tasks tab (`Tab` cycles Profiles→Tasks), the new equivalent
+/// of the old idle-`Esc`-back. The switch issues a fresh `ListTasks` for the active profile.
+fn back_to_tasks(app: &mut App, client: &FakeClient) {
+    submit(app, client, Event::NextTab);
 }
 
 // ---- list render ----
@@ -121,8 +128,8 @@ fn picking_a_profile_rescopes_the_active_id_with_no_server_switch_call() {
     submit(&mut app, &client, Event::Submit);
 
     assert!(
-        matches!(app.screen(), Screen::TaskList(_)),
-        "pick-active lands on the task list of the chosen profile",
+        on_tab(&app, Tab::Tasks),
+        "pick-active lands on the Tasks tab of the chosen profile",
     );
 
     // The last call is a ListTasks scoped to the NEWLY-active profile id `p2`.
@@ -506,10 +513,10 @@ fn deleting_the_active_profile_repoints_to_the_first_remaining() {
     assert_eq!(state.profiles.len(), 1);
     assert_eq!(state.profiles.first().expect("p2").id, "p2");
 
-    // Now leave the switcher to the task list: the scoped read must carry the re-pointed id p2,
-    // never the deleted p1.
+    // Now switch back to the Tasks tab: the scoped read must carry the re-pointed id p2, never the
+    // deleted p1.
     client.push_tasks(Ok(vec![]));
-    submit(&mut app, &client, Event::Back);
+    back_to_tasks(&mut app, &client);
     let calls = client.calls();
     assert!(
         matches!(calls.last(), Some(Call::ListTasks { token, profile_id })
@@ -521,18 +528,20 @@ fn deleting_the_active_profile_repoints_to_the_first_remaining() {
 // ---- navigation / offline ----
 
 #[test]
-fn esc_returns_from_the_idle_switcher_to_the_task_list() {
+fn switching_away_from_the_idle_switcher_returns_to_the_tasks_tab() {
+    // The old idle-`Esc`-back is gone; `Tab` from the idle Profiles tab cycles to Tasks, which
+    // re-lists the active profile's tasks (ADR-0010 §1).
     let (client, mut app) = enter_switcher(vec![profile("p1", "work")]);
     client.push_tasks(Ok(vec![]));
-    submit(&mut app, &client, Event::Back);
+    back_to_tasks(&mut app, &client);
     assert!(
-        matches!(app.screen(), Screen::TaskList(_)),
-        "Esc on the idle switcher returns to the task list",
+        on_tab(&app, Tab::Tasks),
+        "Tab from the idle switcher returns to the Tasks tab",
     );
     let calls = client.calls();
     assert!(
         matches!(calls.last(), Some(Call::ListTasks { profile_id, .. }) if profile_id == "p1"),
-        "back re-lists the active profile's tasks: {calls:?}",
+        "the tab switch re-lists the active profile's tasks: {calls:?}",
     );
 }
 

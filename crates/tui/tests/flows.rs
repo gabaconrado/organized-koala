@@ -14,7 +14,9 @@
 
 mod common;
 
-use common::{Call, FakeClient, done_task, drive, open_task, profile, render, session, submit};
+use common::{
+    Call, FakeClient, done_task, drive, open_task, profile, render, session, submit, tasks_pane,
+};
 use contract::TaskStatus;
 use tui::app::{App, AuthMode, Event, Screen};
 
@@ -44,8 +46,8 @@ fn login_flow_fetches_profiles_and_enters_task_list() {
     type_str(&mut app, "hunter2");
     submit(&mut app, &client, Event::Submit);
 
-    // Landed on the task list of the auto-selected profile.
-    assert!(matches!(app.screen(), Screen::TaskList(_)));
+    // Landed on the Tasks tab of the auto-selected profile.
+    assert!(matches!(app.screen(), Screen::Main(_)));
     let s = app.session().expect("session set");
     assert_eq!(s.profile_id, "p1");
     assert_eq!(s.profile_name, "work");
@@ -91,7 +93,7 @@ fn register_flow_carries_all_fields_and_enters_task_list() {
     type_str(&mut app, "personal");
     submit(&mut app, &client, Event::Submit);
 
-    assert!(matches!(app.screen(), Screen::TaskList(_)));
+    assert!(matches!(app.screen(), Screen::Main(_)));
     let calls = client.calls();
     assert!(
         matches!(
@@ -113,7 +115,7 @@ fn add_task_posts_request_then_refreshes_from_server() {
     client.push_tasks(Ok(vec![])); // initial empty list
     let mut app = App::new();
     submit(&mut app, &client, Event::Submit);
-    assert!(matches!(app.screen(), Screen::TaskList(_)));
+    assert!(matches!(app.screen(), Screen::Main(_)));
 
     // Script the create response and the post-create refresh list.
     let created = open_task("t-new", "Buy milk", "2026-06-18T13:00:00Z");
@@ -128,9 +130,7 @@ fn add_task_posts_request_then_refreshes_from_server() {
     submit(&mut app, &client, Event::Submit);
 
     // The add flow closed and the list now shows the server's task.
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
+    let list = tasks_pane(&app);
     assert!(list.adding.is_none(), "add flow closed after success");
     assert_eq!(list.tasks.len(), 1);
     assert_eq!(list.tasks.first().expect("one task").title, "Buy milk");
@@ -193,9 +193,7 @@ fn mark_done_issues_update_status_done_and_rerenders_from_server() {
     submit(&mut app, &client, Event::ToggleDone);
 
     // The row reflects the server's now-done task with no extra/duplicate row.
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
+    let list = tasks_pane(&app);
     assert_eq!(list.tasks.len(), 1, "no extra/duplicate row");
     let row = list.tasks.first().expect("one task");
     assert_eq!(row.status, TaskStatus::Done);
@@ -267,12 +265,10 @@ fn task_list_view_mirrors_exactly_the_server_response() {
     let mut app = App::new();
     submit(&mut app, &client, Event::Submit);
 
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
     assert_eq!(
-        list.tasks, server_tasks,
-        "view is exactly the server's list"
+        tasks_pane(&app).tasks,
+        server_tasks,
+        "view is exactly the server's list",
     );
 }
 
@@ -293,9 +289,7 @@ fn refresh_replaces_the_list_with_the_servers_new_response() {
     )]));
     submit(&mut app, &client, Event::Refresh);
 
-    let Screen::TaskList(list) = app.screen() else {
-        panic!("task list");
-    };
+    let list = tasks_pane(&app);
     assert_eq!(list.tasks.len(), 1);
     assert_eq!(
         list.tasks.first().expect("one task").title,
