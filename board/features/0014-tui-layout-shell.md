@@ -2,7 +2,9 @@
 id: 0014
 title: TUI layout shell — top-level tabs, centered title, centered auth form, tight footer
 type: feature      # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+# ^ FROZEN at claim snapshot — authoritative copy is on branch feature/0014-tui-layout-shell
+#   (cut from main@6511941). The human's merge brings the finished item back to main.
 priority: medium    # high | medium | low
 parent: null
 depends-on: []
