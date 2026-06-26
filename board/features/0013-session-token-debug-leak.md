@@ -92,6 +92,17 @@ re-type it `feature` (with an ADR if a wire change is involved), per the CLAUDE.
   `SessionToken` doctest asserts `format!("{token:?}") == "[REDACTED]"`). No `contract`/wire (#2), no
   domain-structure (#3), no observable behaviour change beyond `Debug` rendering.
 
+- 2026-06-26 [tester] Added the acceptance tests for criterion 1 (token not reachable from any
+  derived/`{:?}` `Debug` in `crates/tui/`). New integration test file `crates/tui/tests/redaction.rs`
+  (public-API only — `tui::app::{Session, ClientRequest, Outcome, SessionToken}`), mirroring
+  `contract`'s `Password` doctest pattern with an obviously-fake placeholder token (`SECRET.JWT.VALUE`,
+  not a real/plausible JWT — secret scan passes). Three tests, each formatting `{:?}` and asserting
+  the output (a) does NOT contain the token substring and (b) DOES contain `[REDACTED]`:
+  `session_debug_redacts_token` (also asserts `profile_id`/`profile_name` still render),
+  `client_request_debug_redacts_token` (`ClientRequest::ListTasks`, also asserts `profile_id` renders),
+  `outcome_list_profiles_debug_redacts_token` (`Outcome::ListProfiles`). No source touched (test file
+  only). `./ok.sh test | lint | fmt --check` all green; the three redaction tests pass.
+
 - [x] 2026-06-25 [operator] High-priority: this is a serious problem — a session JWT reachable
       from a derived `Debug`. Why did it pass our guidelines (secrecy / manual `Debug`)?
       **Root cause (answered):** the `Session` struct was introduced in 0004 (`4b9eda0`,
