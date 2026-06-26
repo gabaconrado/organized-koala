@@ -407,3 +407,15 @@ seam early but the suite goes green as 2/3 land). All five are within `crates/tu
   + tests only). #1 statelessness preserved (`help_open` transient; state machines/error routing untouched —
   `last_profile` guard intact). No 0016 creep (`t`/`Space`/detail views absent; only `?` is new). All six
   acceptance criteria met; `?`-closes-help fix verified. No fix-now findings, no out-of-scope ideas.
+
+- [x] 2026-06-26 [verifier] Live verify — **VERIFIED** pinned to code-hash
+  `b9884943f36f3ac6c9d56fd2be46e31057a9060a` (head commit `ad0dd70`). No-delta premise confirmed
+  (`contract`/`server`/`migrations`/`deploy`/`ok.sh` byte-identical to main; diff is `crates/tui/src/{app,terminal,ui}/mod.rs`
+  + tui tests). Clause-4 part 1: `TestBackend` suite green — `tests/dialogs.rs` 21/0 covering all six
+  acceptance criteria + supporting suites all 0-fail. Clause-4 part 2: `./ok.sh up` booted clean (postgres
+  healthy, one-shot `migrate` exit 0 — no history conflict, server healthy on :8080); exercised live the
+  reqwest/API paths the dialogs drive — auth register/login (+401 invalid_credentials), profiles list,
+  tasks/notes create(201)/list/delete(204), timer config(GET/PUT)+session start/stop, error contract
+  (400 validation_failed, 401 unauthenticated), profile-scoping (404 not_found, no cross-profile read),
+  OTel per-handler spans. All shapes/status/error-contract/scoping unchanged. Left `deploy_postgres-data`
+  intact (no `down -v`).
