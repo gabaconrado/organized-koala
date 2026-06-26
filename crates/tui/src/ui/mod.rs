@@ -33,13 +33,13 @@ const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 /// at the 80×24 test viewport without clipping the affordance (ADR-0006 §8.3, learned 0010).
 const FOOTER_CAPTION: &str = "↑↓: move | Tab/Shift+Tab: switch tab | ?: help | q: quit";
 
-/// Height (rows) of the bottom band on a post-auth screen: the hotkey caption (which may wrap)
-/// on the left and the global timer widget on the right. Three rows so the wrapped caption plus
-/// the appended in-flight spinner + cancel affordance stays fully visible at the 80×24 viewport
-/// without clipping the cancel affordance (ADR-0006 §8.3, learned 0010). The footer is pulled
-/// flush to the bottom row by removing the outer bottom margin, not by shrinking this band
-/// (Assumption A5).
-const BOTTOM_BAND_ROWS: u16 = 3;
+/// Height (rows) of the bottom band on a post-auth screen: the hotkey caption on the left and the
+/// global timer widget on the right. A single row — the caption is a single trimmed line (post-0015)
+/// and no longer carries the textual cancel affordance, which moved into the `?` help modal
+/// (ADR-0006 §8.3, amended 2026-06-26), so the multi-row reservation that existed only to keep the
+/// wrapping affordance from being clipped is no longer needed. One row pulled flush to the bottom
+/// satisfies ADR-0010 §2's "tight footer" goal; the band does not grow.
+const BOTTOM_BAND_ROWS: u16 = 1;
 
 /// The spinner glyph for the given tick, or empty when not pending. Pure so the spinner cadence
 /// is testable independently of the real loop's timing.
@@ -50,14 +50,16 @@ pub fn spinner_frame(tick: u64) -> &'static str {
     SPINNER_FRAMES.get(i).copied().unwrap_or("|")
 }
 
-/// The hotkey caption with the in-flight spinner **appended** (ADR-0006 §8.3): while a request is
-/// outstanding, a trailing spinner glyph is added to the end of the stable caption rather than
-/// replacing it, so the caption never flickers. The "Esc to cancel" affordance is appended
-/// alongside the spinner. When idle, the base caption is returned unchanged.
+/// The hotkey caption with the in-flight spinner **appended** (ADR-0006 §8.3, amended
+/// 2026-06-26): while a request is outstanding, a trailing spinner glyph is added to the end of
+/// the stable caption rather than replacing it, so the caption never flickers. The textual cancel
+/// affordance is no longer appended here — `Esc` still cancels an in-flight request, but that hint
+/// now lives in the `?` help modal so the footer stays a single flush row. When idle, the base
+/// caption is returned unchanged.
 #[must_use]
 pub fn caption_with_spinner(base: &str, pending: bool, tick: u64) -> String {
     if pending {
-        format!("{base}   {} (Esc to cancel)", spinner_frame(tick))
+        format!("{base}   {}", spinner_frame(tick))
     } else {
         base.to_owned()
     }
@@ -408,6 +410,7 @@ fn draw_help(frame: &mut Frame) {
         Line::from("  p                 start / stop the focus timer"),
         Line::from("  d                 set the timer duration"),
         Line::from("  r                 refresh the current view"),
+        Line::from("  Esc               cancel an in-flight / loading request"),
         Line::from("  ? / Esc  close help    q  quit"),
         Line::from(""),
         Line::from("Tasks    a add · e edit · c toggle done · x delete"),
