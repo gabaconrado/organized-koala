@@ -272,6 +272,61 @@ the acceptance criteria):
   read → 404 not_found, no leak), OTel spans `service.name: organized-koalad` for every path.
   No server/contract delta to exercise (presentation-only, as scoped). Stack torn down (no `-v`).
 
+## Summary
+
+Phase 1 of the three-part TUI overhaul (0014 → 0015 → 0016): a **`tui`-crate-only** reshape of
+the structural shell — the navigation model, the auth screen, the title bar, and the footer
+position — with **no `contract`/server/domain change** (ADR-0010 §5 binding boundary).
+
+**What shipped:**
+
+- **Tabbed post-auth view.** The three mutually-exclusive post-auth screens
+  (`Screen::TaskList`/`Notes`/`Profiles`) collapsed into a single `Screen::Main(Box<MainState>)`
+  carrying the active `Tab{Tasks,Notes,Profiles}` plus all three live panes (new
+  `crates/tui/src/app/main_view.rs`). New `Event::NextTab`/`PrevTab`; `map_key` remaps
+  `Tab`/`BackTab` to tab-switching on an idle list (cycling Tasks → Notes → Profiles → Tasks both
+  directions), arrows move the list selection, and a tab switch re-derives the active pane from a
+  **fresh server load** for the active profile (#1, #4) while preserving the selected row. The old
+  `OpenNotes`/`OpenProfiles`/`Back` cross-screen navigation and the idle-`Esc`-back path are
+  removed; the `n` (open notes), `s` (open profiles), and idle-`Esc`-back bindings are removed.
+  `t` is left **deliberately unbound** for 0016's timer hotkey. Profile pick-active is re-homed
+  onto the Profiles tab. Every other binding (`a`/`e`/`c`/`x` per pane, `p`/`d` timer, `r`
+  refresh, `q` quit, sub-flow `Esc`=cancel) is unchanged — no sub-flow/CRUD behaviour change.
+- **`Session`/`AuthState` gained `account: String`** — the entered login/register identifier is
+  captured **client-side** at auth time (no new wire; ADR-0010 §2) so the title can render
+  `<user>`.
+- **Presentation touch-ups.** Centred bounded auth form (Login⇄Register toggle, all fields, inline
+  error band intact); centred verbatim title `organized koala - <user> @ [<profile>]` (literal
+  hyphen + square brackets); footer (caption + timer) pulled flush to the bottom row (outer bottom
+  margin dropped; band kept at 3 rows — caption + spinner + cancel still fit at 80×24). Full
+  captions retained (the caption trim is 0015).
+
+**Acceptance met:** all 0014 criteria are satisfied by code plus a real test — the tab bar with
+Tasks default; `Tab`/`Shift+Tab` cycling both directions with pane updates; no `t`/`n`/`p`/`s`
+switching a tab (asserted end-to-end through `map_key`) with arrows moving the selection; per-tab
+selection surviving a switch away/back; the centred auth box; the verbatim title (with an em-dash
+guard); the flush footer; and no regression to task/note/profile CRUD reachable through the new
+tabs. New `crates/tui/tests/navigation.rs` (14 tests) plus the re-pointed existing suites; only
+mock is the `Client` trait.
+
+**Verdicts (pinned to code-hash `bf65aa9612bf1633bf75e64f66a3dfddcfb4aa10`, commit `c8b1217`):**
+
+- **REVIEW-STATUS: approved** — TUI-only diff (nothing under `contract`/`server`); #1 stateless
+  (panes server-derived, selection transient, `account` never persisted), #4 profile-scoped, no
+  secret leak, no 0015/0016 scope creep, smallest correct change.
+- **VERIFY-STATUS: verified** — `./ok.sh test` green incl. `navigation.rs`; docker available,
+  `./ok.sh up` booted a healthy stack (no migration-history conflict — no-migration branch), live
+  reqwest paths the tabs drive exercised (register/login, list+create tasks/notes/profiles, timer
+  config, `{code,message}` error contract, profile-scoping → 404 no leak, OTel spans). No
+  server/contract delta to exercise (presentation-only).
+
+coverage: 72.96% line (report-only — never a gate)
+
+**Forward note:** [ADR-0010][adr-0010] is **binding on 0015 and 0016** — its presentation-only
+boundary (§5) and the tab/Esc/keymap invariants govern the next two phases, which **inherit and
+cite ADR-0010** rather than opening new shell ADRs (unless a phase needs a wire/server/domain
+change — none is expected). 0015 `depends-on: [0014]`; 0016 `depends-on: [0015]`.
+
 <!-- feature: needs an `architect` plan (`plan` skill) writing a `## Plan(s)` block before code. -->
 <!-- Open question for the architect: does the new TUI interaction model (tabs + later dialogs + detail views, 0014–0016) warrant its own ADR for the TUI shell, or is it presentation-only and ADR-free? Settle before planning 0015/0016. -->
 
