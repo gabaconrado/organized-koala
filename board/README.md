@@ -52,7 +52,7 @@ backlog".
 | [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | merged | medium | — | — (merged) |
 | [0013](./features/0013-session-token-debug-leak.md) | Redact the JWT in `tui` `Session` — bare `String` reachable via derived `Debug` (rust-standards secret-leak violation) | chore | merged | high | — | — (merged) |
 | [0014](./features/0014-tui-layout-shell.md) | TUI layout shell — top-level tabs, centred title, centred auth form, tight footer | feature | merged | medium | — | — (merged) |
-| [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | inbox | medium | 0014 (merged ✓) | — |
+| [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | ready (branch: awaiting-merge) | medium | 0014 (merged ✓) | feature/0015-tui-dialog-system |
 | [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | inbox | medium | 0015 | — |
 
 > **0010 — Notes — MERGED.** The final missing
@@ -144,6 +144,25 @@ backlog".
 > `bf65aa9612bf1633bf75e64f66a3dfddcfb4aa10` (commit `c8b1217`); coverage 72.96% line (report-only).
 > ADR-0010 binds 0015/0016 — those phases inherit and cite it. Fast-forward merged into `main`
 > (linear history); **0015 is now unblocked.**
+>
+> **0015 — TUI dialog system — AWAITING-MERGE on the branch (Phase 2 of 3).** A **`tui`-crate-only**
+> modal framework with **no** `contract`/server/domain change (the
+> [ADR-0010](../docs/adr/0010-tui-navigation-and-interaction-model.md) §5 presentation-only boundary,
+> confirmed byte-identical by reviewer + verifier). A deep `draw_dialog` helper (one `Dialog` fed by
+> all six dialog kinds + the help overlay) floats centred over the tabbed view via `Clear` +
+> `centered_rect`; task/note/profile add+edit+delete-confirm and the timer duration edit all moved off
+> the 2-row message band into dialogs (state machines/error routing untouched — `last_profile` refusal
+> preserved); a `?` help modal (transient `App.help_open`) lists the full hotkey reference and the
+> three long `*_CAPTION` constants collapse into one short `FOOTER_CAPTION`; `draw_field` renders a
+> focused field's border in `Color::Magenta` (auth + all dialog fields). A single
+> `App::overlay_capturing_input()` predicate unifies the scattered text-entry/sub-flow gates (globals
+> suppressed while any overlay captures input; two-tiered `Esc`). A tester-flagged fix-now made `?`
+> close the help overlay end-to-end (distinct `help_open` param in the 5-arg `map_key`) so the
+> advertised `?/Esc: close` affordance works. Tests `tests/dialogs.rs` 21/0 + 380 total pass; reviewer
+> **approved** + verifier **VERIFIED**, both pinned to code-hash
+> `b9884943f36f3ac6c9d56fd2be46e31057a9060a`; coverage 73.80% line (report-only). The `main` snapshot
+> stays `ready` (frozen at claim); the live status is `awaiting-merge` on
+> `feature/0015-tui-dialog-system`. **0016 is unblocked once 0015 merges.**
 >
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**

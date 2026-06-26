@@ -5,6 +5,89 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-26 (0015 — TUI dialog system: modals, trimmed footer, purple focus; `feature`)
+
+Phase 2 of the three-part TUI overhaul (0014 → **0015** → 0016). A **`tui`-crate-only** dialog
+system — a reusable centred-modal framework, every add/delete/timer-config sub-flow moved off the
+inline message band and into dialogs, a `?` help modal with a trimmed footer caption, and a purple
+focus border — with **no `contract`/server/domain change** (the presentation-only boundary binds per
+[ADR-0010][adr-0010-0015] §5; reviewer + verifier both confirmed
+`contract`/`server`/`migrations`/`deploy`/`ok.sh` byte-identical to `main`). Branch
+`feature/0015-tui-dialog-system`; reviewer **approved** + verifier **VERIFIED**, both pinned to
+code-hash `b9884943f36f3ac6c9d56fd2be46e31057a9060a`. Stopped at the AI-terminal `awaiting-merge`
+on the branch.
+
+What shipped (on the branch, `crates/tui/` only — **no** wire surface touched):
+
+- **Reusable dialog framework.** A deep, narrow `draw_dialog` helper in `ui/mod.rs` (one `Dialog`
+  struct fed by all six dialog kinds + the help overlay), drawn after the panes via `Clear` +
+  `centered_rect` so it floats centred over the tabbed view, carrying a title, fields and/or a
+  confirm/cancel prompt, and an optional inline error line.
+- **`?` help modal + trimmed footer.** A transient `App.help_open` flag toggled by
+  `Event::ToggleHelp` (`?`) renders a centred help modal with the full hotkey reference; the three
+  long `*_CAPTION` constants collapse into one short `FOOTER_CAPTION` (movement, tab switch, `?`,
+  `q`) plus the unchanged in-flight spinner + "(Esc to cancel)" affordance.
+- **Add / delete / timer dialogs.** Task add/edit, note add/edit, profile add/rename, the three
+  delete-confirmations, and the timer duration edit all moved out of the 2-row message band into
+  dialogs; the message band now carries only the pane's transient status/error (the `last_profile`
+  refusal preserved). State machines + submit/cancel + chained-refresh + error routing are
+  untouched — only the render site moved (ADR-0010 §5 presentation-only).
+- **Purple focus border.** `draw_field` renders a focused field's border in `Color::Magenta`
+  (replacing `Modifier::BOLD`), on the auth form fields + all dialog fields; non-focused fields keep
+  the plain border.
+- **Unified suppression rule + two-tiered Esc.** A single `App::overlay_capturing_input()` predicate
+  replaces the scattered `adding.is_some()`/`in_sub_flow()`/`editing_duration` gates: while any
+  overlay captures input the globals (`q`/`r`/`?`/`p`/`d`/tab-switch) are suppressed and `Esc`
+  cancels the overlay; `Esc` with no overlay on a post-auth screen still quits, and in-flight
+  `Esc`-cancel is preserved.
+
+**Process-relevant event — the test layer caught a UX/keymap inconsistency before review.** Tester's
+slice 5 flagged (as a finding, not worked around — no src edit) that `draw_help`'s footer advertised
+`?/Esc: close`, yet a live `?` keypress was suppressed by the open help overlay at the keymap, so
+only `Esc` actually closed help. tui-dev corrected it **in-cycle** (fix-now) rather
+than deferring: a distinct `help_open` param threaded into `map_key` (now 5-arg
+`(screen, overlay_capturing, help_open, editing_duration, key)`) special-cases `?` to **toggle** —
+opening from an idle post-auth screen and closing while the help overlay is active (the core already
+folds `Event::ToggleHelp` into a close); `?` stays suppressed while a *non-help* dialog captures input
+(A3). A clean example of the `TestBackend` layer (ADR-0003 layer 2) catching a keymap/affordance
+mismatch the moment the tests pinned the advertised behaviour, corrected before the cold review rather
+than reaching `awaiting-merge` as a latent inconsistency.
+
+Agents: **tui-dev** (slice 1 overlay/suppression seam, slices 2+3 dialog framework + help modal +
+footer trim, slice 4 docs, + the `?`-closes-help fix-now) and **tester** (slice 5 `TestBackend`
+suite — new `tests/dialogs.rs` + extensions across the existing suites, plus the follow-up updating
+the suite for the 5-arg `map_key` and flipped `?`-closes-help behaviour).
+
+Tests: `./ok.sh test` **380 passed / 0 failed**; `./ok.sh lint` clean (`--all-targets`);
+`./ok.sh fmt --check` clean. Verifier confirmed `tests/dialogs.rs` 21/0 covering all six acceptance
+criteria, all supporting suites 0-fail, and (clause-4 part 2) booted `./ok.sh up` clean to confirm
+the reqwest/API paths the dialogs drive are unchanged (no server/contract delta to exercise).
+
+coverage: **73.80%** line (the headline `TOTAL` line-coverage from a fresh `./ok.sh coverage` in the
+worktree; docker plus the throwaway test Postgres booted cleanly — no cross-worktree volume conflict).
+Report-only — never a gate.
+
+**Cycle ran clean — no new gotcha, no agent/skill/standards change warranted.** The "unify scattered
+suppression gates into one predicate but keep a distinct flag for the toggle-able overlay so its own
+toggle key isn't swallowed" lesson is genuine but **0015-specific design detail**, already captured
+in the plan's slice 1 + the `?`-closes-help fix Log — not a cross-cutting, recurring gotcha, so none
+manufactured. The fix-now process note above is recorded here as a journal observation, not a
+standards rule.
+
+**Follow-ups / ideas filed this cycle: none.** Reviewer and verifier both reported no out-of-scope
+findings; the `?`-closes-help issue was an **in-scope fix-now** (the advertised affordance had to
+work to meet acceptance), not a deferred follow-up. The pre-existing per-worktree compose-isolation
+idea (`board/ideas/0001`) remains open and untouched. No new idea minted.
+
+**Forward note.** 0016 (`depends-on: [0015]`) is the final phase: per-field task/note detail views +
+the complete hotkey remap (`c`→`Space`, `x`→`d`, `p`→`t`, `t` finally bound) — all still under
+[ADR-0010][adr-0010-0015], inheriting and citing it (a new shell ADR is only warranted if 0016 needs
+a wire/server/domain change, which is not expected). Merge 0015 before claiming 0016.
+
+[adr-0010-0015]: ./adr/0010-tui-navigation-and-interaction-model.md
+
+---
+
 ## Handoff — 2026-06-26 (0014 — TUI layout shell: tabs, centred auth/title, tight footer; `feature`)
 
 Phase 1 of the three-part TUI overhaul (0014 → 0015 → 0016). A **`tui`-crate-only** reshape of the
@@ -1606,4 +1689,36 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   chore invariant attested (code-hash `e5925c5139e52846d8593c4be3ab2d0516d49fa0`); coverage 66.90%
   line. This cycle sharpened `rust-standards` with a callout on the
   `missing_debug_implementations`-lint-vs-secret-redaction tension (the root cause that let this leak
-  survive from 0004 through 0011 under diff-scoped cold review). Awaiting the human's merge.
+  survive from 0004 through 0011 under diff-scoped cold review). Merged on `main`.
+- **The TUI layout shell is MERGED on `main`** (0014, Phase 1 of the three-part TUI overhaul, a
+  `feature`, live-verified): a **`tui`-crate-only** reshape of the structural shell with **no**
+  `contract`/server/domain change ([ADR-0010][adr-0010-0014-snap] §5 boundary). `Screen::TaskList`/
+  `Notes`/`Profiles` collapsed into one `Screen::Main(Box<MainState>)` holding the active
+  `Tab{Tasks,Notes,Profiles}` + all three live panes (new `crates/tui/src/app/main_view.rs`);
+  `Tab`/`Shift+Tab` cycle tabs (arrows move list selection), each switch re-derives the pane from a
+  fresh server load for the active profile (#1, #4) preserving the row; removed `n`/`s`/idle-`Esc`-back
+  and the old cross-screen events; `t` left unbound for 0016. `Session`/`AuthState` gained a
+  client-captured `account: String` (no new wire); centred bounded auth form, centred verbatim title
+  `organized koala - <user> @ [<profile>]`, footer flushed to the bottom. Reviewer **approved** +
+  verifier **verified**, both pinned to code-hash `bf65aa9612bf1633bf75e64f66a3dfddcfb4aa10`; coverage
+  72.96% line. ADR-0010 binds 0015/0016. Fast-forward merged into `main`.
+- **The TUI dialog system is at `awaiting-merge` on `feature/0015-tui-dialog-system`**
+  (0015, Phase 2 of the TUI overhaul, a `feature`, live-verified): a **`tui`-crate-only** modal
+  framework with **no** `contract`/server/domain change ([ADR-0010][adr-0010-0014-snap] §5 boundary,
+  confirmed byte-identical). A deep `draw_dialog` helper (one `Dialog` fed by all six dialog kinds +
+  the help overlay) floats centred over the tabbed view via `Clear` + `centered_rect`; task/note/
+  profile add+edit+delete-confirm and the timer duration edit all moved off the 2-row message band
+  into dialogs (state machines/error routing untouched — `last_profile` refusal preserved); a `?`
+  help modal (transient `App.help_open`, `Event::ToggleHelp`) lists the full hotkey reference and the
+  three long `*_CAPTION` constants collapse into one short `FOOTER_CAPTION`; `draw_field` renders a
+  focused field's border in `Color::Magenta` (auth + all dialog fields). A single
+  `App::overlay_capturing_input()` predicate unifies the scattered text-entry/sub-flow gates: globals
+  (`q`/`r`/`?`/`p`/`d`/tab-switch) suppressed while any overlay captures input, two-tiered `Esc`
+  (cancels an open overlay, still quits idle post-auth, still cancels in-flight). A tester-flagged
+  fix-now made `?` close the help overlay end-to-end (distinct `help_open` param in the 5-arg
+  `map_key`) so the advertised `?/Esc: close` affordance works. Tests `tests/dialogs.rs` 21/0 + 380
+  total pass; reviewer **approved** + verifier **VERIFIED**, both pinned to code-hash
+  `b9884943f36f3ac6c9d56fd2be46e31057a9060a`; coverage 73.80% line. Awaiting the human's merge; 0016
+  is unblocked once 0015 merges.
+
+[adr-0010-0014-snap]: ./adr/0010-tui-navigation-and-interaction-model.md
