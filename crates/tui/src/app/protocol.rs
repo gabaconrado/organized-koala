@@ -14,6 +14,7 @@ use contract::{
     UpdateProfileRequest, UpdateTaskRequest, UpdateTimerConfigRequest,
 };
 
+use crate::app::token::SessionToken;
 use crate::client::ClientResult;
 
 /// A monotonically increasing identifier the edge stamps onto each in-flight request, so a
@@ -37,19 +38,19 @@ pub enum ClientRequest {
     /// `GET /api/profiles` — carries the freshly-issued token to chain the post-auth load.
     ListProfiles {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
     },
     /// `POST /api/profiles` — create a profile (the switcher's create sub-flow).
     CreateProfile {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile to create.
         req: CreateProfileRequest,
     },
     /// `PATCH /api/profiles/{profile_id}` — rename a profile (the switcher's rename sub-flow).
     UpdateProfile {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile to rename.
         profile_id: String,
         /// The new name.
@@ -58,21 +59,21 @@ pub enum ClientRequest {
     /// `DELETE /api/profiles/{profile_id}` — delete a profile (the switcher's delete sub-flow).
     DeleteProfile {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile to delete.
         profile_id: String,
     },
     /// `GET /api/profiles/{profile_id}/tasks`.
     ListTasks {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile namespace to list.
         profile_id: String,
     },
     /// `POST /api/profiles/{profile_id}/tasks`.
     CreateTask {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile namespace to create the task in.
         profile_id: String,
         /// The task to create.
@@ -82,7 +83,7 @@ pub enum ClientRequest {
     /// reopen).
     UpdateTask {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile namespace owning the task.
         profile_id: String,
         /// The task to update.
@@ -93,7 +94,7 @@ pub enum ClientRequest {
     /// `DELETE /api/profiles/{profile_id}/tasks/{task_id}`.
     DeleteTask {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile namespace owning the task.
         profile_id: String,
         /// The task to delete.
@@ -102,14 +103,14 @@ pub enum ClientRequest {
     /// `GET /api/profiles/{profile_id}/notes`.
     ListNotes {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile namespace to list.
         profile_id: String,
     },
     /// `POST /api/profiles/{profile_id}/notes`.
     CreateNote {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile namespace to create the note in.
         profile_id: String,
         /// The note to create.
@@ -118,7 +119,7 @@ pub enum ClientRequest {
     /// `GET /api/profiles/{profile_id}/notes/{note_id}`.
     GetNote {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile namespace owning the note.
         profile_id: String,
         /// The note to read.
@@ -127,7 +128,7 @@ pub enum ClientRequest {
     /// `PATCH /api/profiles/{profile_id}/notes/{note_id}`.
     UpdateNote {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile namespace owning the note.
         profile_id: String,
         /// The note to update.
@@ -138,7 +139,7 @@ pub enum ClientRequest {
     /// `DELETE /api/profiles/{profile_id}/notes/{note_id}`.
     DeleteNote {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The profile namespace owning the note.
         profile_id: String,
         /// The note to delete.
@@ -147,29 +148,29 @@ pub enum ClientRequest {
     /// `GET /api/timer/config` — read the account-global duration config.
     GetTimerConfig {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
     },
     /// `PUT /api/timer/config` — update the global session duration.
     UpdateTimerConfig {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
         /// The new duration to set.
         req: UpdateTimerConfigRequest,
     },
     /// `GET /api/timer/session` — read the current focus session.
     GetTimerSession {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
     },
     /// `POST /api/timer/session/start` — start (or restart) a focus session.
     StartTimerSession {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
     },
     /// `POST /api/timer/session/stop` — stop the active session (resets to idle).
     StopTimerSession {
         /// The bearer token to authenticate with.
-        token: String,
+        token: SessionToken,
     },
 }
 
@@ -189,7 +190,7 @@ pub enum Outcome {
     /// core can establish the session on success without re-deriving it.
     ListProfiles {
         /// The bearer token the request used.
-        token: String,
+        token: SessionToken,
         /// The profiles returned (or the error).
         result: ClientResult<Vec<Profile>>,
     },

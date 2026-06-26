@@ -488,77 +488,77 @@ fn run_request(client: &FakeClient, request: ClientRequest) -> Outcome {
         ClientRequest::Register(req) => Outcome::Register(client.register(&req)),
         ClientRequest::Login(req) => Outcome::Login(client.login(&req)),
         ClientRequest::ListProfiles { token } => {
-            let result = client.list_profiles(&token);
+            let result = client.list_profiles(token.expose());
             Outcome::ListProfiles { token, result }
         }
         ClientRequest::CreateProfile { token, req } => {
-            Outcome::CreateProfile(client.create_profile(&token, &req))
+            Outcome::CreateProfile(client.create_profile(token.expose(), &req))
         }
         ClientRequest::UpdateProfile {
             token,
             profile_id,
             req,
-        } => Outcome::UpdateProfile(client.rename_profile(&token, &profile_id, &req)),
+        } => Outcome::UpdateProfile(client.rename_profile(token.expose(), &profile_id, &req)),
         ClientRequest::DeleteProfile { token, profile_id } => {
-            Outcome::DeleteProfile(client.delete_profile(&token, &profile_id))
+            Outcome::DeleteProfile(client.delete_profile(token.expose(), &profile_id))
         }
         ClientRequest::ListTasks { token, profile_id } => {
-            Outcome::ListTasks(client.list_tasks(&token, &profile_id))
+            Outcome::ListTasks(client.list_tasks(token.expose(), &profile_id))
         }
         ClientRequest::CreateTask {
             token,
             profile_id,
             req,
-        } => Outcome::CreateTask(client.create_task(&token, &profile_id, &req)),
+        } => Outcome::CreateTask(client.create_task(token.expose(), &profile_id, &req)),
         ClientRequest::UpdateTask {
             token,
             profile_id,
             task_id,
             req,
-        } => Outcome::UpdateTask(client.update_task(&token, &profile_id, &task_id, &req)),
+        } => Outcome::UpdateTask(client.update_task(token.expose(), &profile_id, &task_id, &req)),
         ClientRequest::DeleteTask {
             token,
             profile_id,
             task_id,
-        } => Outcome::DeleteTask(client.delete_task(&token, &profile_id, &task_id)),
+        } => Outcome::DeleteTask(client.delete_task(token.expose(), &profile_id, &task_id)),
         ClientRequest::ListNotes { token, profile_id } => {
-            Outcome::ListNotes(client.list_notes(&token, &profile_id))
+            Outcome::ListNotes(client.list_notes(token.expose(), &profile_id))
         }
         ClientRequest::CreateNote {
             token,
             profile_id,
             req,
-        } => Outcome::CreateNote(client.create_note(&token, &profile_id, &req)),
+        } => Outcome::CreateNote(client.create_note(token.expose(), &profile_id, &req)),
         ClientRequest::GetNote {
             token,
             profile_id,
             note_id,
-        } => Outcome::GetNote(client.get_note(&token, &profile_id, &note_id)),
+        } => Outcome::GetNote(client.get_note(token.expose(), &profile_id, &note_id)),
         ClientRequest::UpdateNote {
             token,
             profile_id,
             note_id,
             req,
-        } => Outcome::UpdateNote(client.update_note(&token, &profile_id, &note_id, &req)),
+        } => Outcome::UpdateNote(client.update_note(token.expose(), &profile_id, &note_id, &req)),
         ClientRequest::DeleteNote {
             token,
             profile_id,
             note_id,
-        } => Outcome::DeleteNote(client.delete_note(&token, &profile_id, &note_id)),
+        } => Outcome::DeleteNote(client.delete_note(token.expose(), &profile_id, &note_id)),
         ClientRequest::GetTimerConfig { token } => {
-            Outcome::GetTimerConfig(client.get_timer_config(&token))
+            Outcome::GetTimerConfig(client.get_timer_config(token.expose()))
         }
         ClientRequest::UpdateTimerConfig { token, req } => {
-            Outcome::UpdateTimerConfig(client.update_timer_config(&token, &req))
+            Outcome::UpdateTimerConfig(client.update_timer_config(token.expose(), &req))
         }
         ClientRequest::GetTimerSession { token } => {
-            Outcome::GetTimerSession(client.get_timer_session(&token))
+            Outcome::GetTimerSession(client.get_timer_session(token.expose()))
         }
         ClientRequest::StartTimerSession { token } => {
-            Outcome::StartTimerSession(client.start_timer_session(&token))
+            Outcome::StartTimerSession(client.start_timer_session(token.expose()))
         }
         ClientRequest::StopTimerSession { token } => {
-            Outcome::StopTimerSession(client.stop_timer_session(&token))
+            Outcome::StopTimerSession(client.stop_timer_session(token.expose()))
         }
     }
 }

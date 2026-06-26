@@ -74,6 +74,24 @@ re-type it `feature` (with an ADR if a wire change is involved), per the CLAUDE.
 - 2026-06-26 [orchestrator] Claimed minted chore; cut worktree
   `feature/0013-session-token-debug-leak` from `main@3b60289`; status → working. Session: drive-0013.
 
+- 2026-06-26 [tui-dev] Redacted the bearer JWT. Chose shape **(b)** — a local redacting newtype
+  `SessionToken(String)` (new `crates/tui/src/app/token.rs`) with a hand-written `Debug` → `[REDACTED]`,
+  mirroring `contract::Password`. Picked (b) over (a) `secrecy::SecretString` because: the `Client`
+  trait methods all take `token: &str` (calling `reqwest`'s `bearer_auth`), so the in-pattern
+  `expose()` newtype already templated in-repo gives the redaction in one type with no new dependency,
+  no per-call-site `expose_secret()` churn, and keeps the trait/wire signatures byte-identical;
+  pulling `secrecy` in for one field is disproportionate. Audited every token holder in
+  `crates/tui/src/`: redacted `Session.token` (`app/mod.rs`), all 17 `ClientRequest::*` `token`
+  fields and `Outcome::ListProfiles.token` (`app/protocol.rs`) — these all derive `Debug` and carried
+  the bare secret. The worker (`client/worker.rs`) exposes the bearer string only at the point of use
+  (`token.expose()` into the client call); the test worker-analogue executor (`tests/common/mod.rs`)
+  got the same mechanical `&token` → `token.expose()` adaptation (no test-intent change). The
+  `Client` trait `token: &str` params are ephemeral borrows at point of use, not stored
+  Debug-reachable fields — left as-is; the wire bearer string is unchanged. No bare `token: String`
+  field remains in `crates/tui/src/`. `./ok.sh build | lint | fmt --check | test` all green (the
+  `SessionToken` doctest asserts `format!("{token:?}") == "[REDACTED]"`). No `contract`/wire (#2), no
+  domain-structure (#3), no observable behaviour change beyond `Debug` rendering.
+
 - [x] 2026-06-25 [operator] High-priority: this is a serious problem — a session JWT reachable
       from a derived `Debug`. Why did it pass our guidelines (secrecy / manual `Debug`)?
       **Root cause (answered):** the `Session` struct was introduced in 0004 (`4b9eda0`,

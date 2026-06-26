@@ -17,6 +17,7 @@ pub mod protocol;
 pub mod task_add;
 pub mod task_list;
 pub mod timer;
+pub mod token;
 
 pub use auth::{AuthField, AuthMode, AuthState};
 pub use notes::{NoteForm, NotesMode, NotesState};
@@ -25,6 +26,7 @@ pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
 pub use task_add::{AddTaskState, EditTaskState};
 pub use task_list::TaskListState;
 pub use timer::{DurationEditState, Timer};
+pub use token::SessionToken;
 
 use contract::ErrorCode;
 
@@ -105,8 +107,9 @@ pub struct Dispatch {
 /// Never persisted (hard-constraint #1).
 #[derive(Debug, Clone)]
 pub struct Session {
-    /// The bearer token returned by register/login.
-    pub token: String,
+    /// The bearer token returned by register/login, held redacted so it never leaks through a
+    /// derived `Debug`, a log line, or a trace span (see [`SessionToken`]).
+    pub token: SessionToken,
     /// The auto-selected active profile id.
     pub profile_id: String,
     /// The active profile's display name.
@@ -572,7 +575,7 @@ impl App {
     ) -> Option<Dispatch> {
         match result {
             Ok(session) => {
-                let token = session.token;
+                let token = SessionToken::new(session.token);
                 Some(self.dispatch_screen(ClientRequest::ListProfiles { token }))
             }
             Err(err) => {
@@ -588,7 +591,7 @@ impl App {
     /// post-auth bootstrap it establishes the session and chains the initial task load.
     fn apply_profiles(
         &mut self,
-        token: String,
+        token: SessionToken,
         result: crate::client::ClientResult<Vec<contract::Profile>>,
     ) -> Option<Dispatch> {
         if matches!(self.screen, Screen::Profiles(_)) {
