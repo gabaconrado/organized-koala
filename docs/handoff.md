@@ -5,6 +5,61 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-26 (0014 — TUI layout shell: tabs, centred auth/title, tight footer; `feature`)
+
+Phase 1 of the three-part TUI overhaul (0014 → 0015 → 0016). A **`tui`-crate-only** reshape of the
+structural shell — navigation model, auth screen, title bar, footer position — with **no
+`contract`/server/domain change** (the boundary is binding per [ADR-0010][adr-0010-0014] §5). Branch
+`feature/0014-tui-layout-shell`; reviewer **approved** + verifier **verified**, both pinned to
+code-hash `bf65aa9612bf1633bf75e64f66a3dfddcfb4aa10` (commit `c8b1217`). Stopped at the AI-terminal
+`awaiting-merge` on the branch.
+
+What shipped (on the branch, `tui` crate only — **no** wire surface touched):
+
+- **Tabbed post-auth view.** `Screen::TaskList`/`Notes`/`Profiles` collapsed into one
+  `Screen::Main(Box<MainState>)` holding the active `Tab{Tasks,Notes,Profiles}` + all three live
+  panes (new `crates/tui/src/app/main_view.rs`). New `Event::NextTab`/`PrevTab`; `map_key` remaps
+  `Tab`/`BackTab` to tab-switching on an idle list (cycle both directions), arrows move list
+  selection, a tab switch re-derives the active pane from a **fresh server load** for the active
+  profile (#1, #4) preserving the selected row. Removed `OpenNotes`/`OpenProfiles`/`Back`, the
+  idle-`Esc`-back path, and the `n`/`s` cross-screen bindings; `t` left **deliberately unbound** for
+  0016's timer. Pick-active re-homed onto the Profiles tab. Every other binding unchanged — no
+  sub-flow/CRUD behaviour change.
+- **`Session`/`AuthState` gained `account: String`** — the entered identifier captured **client-side**
+  at auth time (no new wire; ADR-0010 §2) so the title renders `<user>`.
+- **Presentation.** Centred bounded auth form (toggle + all fields + error band intact); centred
+  verbatim title `organized koala - <user> @ [<profile>]` (literal hyphen + brackets); footer flushed
+  to the bottom row (outer margin dropped, band kept at 3 rows — caption + spinner + cancel still fit
+  at 80×24). Full captions retained (caption trim is 0015).
+
+Tests: new `crates/tui/tests/navigation.rs` (14 tests) covering every 0014 acceptance criterion, plus
+the existing `TestBackend` suites re-pointed to the tabbed shell (tab-switch via `NextTab`/`PrevTab`
+replaces the removed cross-screen events; pane accessors replace the old destructures), preserving each
+test's intent (CRUD reachability, error-code branching, in-flight, JWT redaction). Only mock is the
+`Client` trait.
+
+coverage: **72.96%** line (the headline `TOTAL` from a fresh `./ok.sh coverage` in the worktree;
+docker plus the throwaway test Postgres booted cleanly). Report-only — never a gate.
+
+**Cycle ran clean** — docker available, no cross-worktree migration-history conflict (0014 adds no
+migration), no scope creep into 0015/0016, no review/verify friction. **No new gotcha and no
+agent/skill/standards change** is warranted (none manufactured).
+
+**Forward note (load-bearing for the next two cycles).** [ADR-0010][adr-0010-0014] governs the whole
+0014–0016 arc: its **presentation-only boundary (§5)** and the **tab/Esc/keymap invariants** bind 0015
+and 0016. Those phases **inherit and cite ADR-0010** rather than opening new TUI-shell ADRs — a new
+shell ADR is only warranted if a phase needs a wire/server/domain change (none is expected; 0015 is
+the dialog system + caption trim + focus styling, 0016 is detail views + the full hotkey remap incl.
+`t` for the timer). 0015 `depends-on: [0014]`; 0016 `depends-on: [0015]` — merge 0014 first.
+
+**Follow-ups / ideas filed this cycle:** none. The verifier noted footer-caption wrapping at 80×24,
+but caption trimming is **already planned for 0015** (per the 0014 item's out-of-scope list and
+ADR-0010) — not a new unplanned follow-up, so no idea filed.
+
+[adr-0010-0014]: ./adr/0010-tui-navigation-and-interaction-model.md
+
+---
+
 ## Handoff — 2026-06-26 (0013 — redact the session JWT in the `tui` `Session` Debug leak; high `chore`)
 
 A security `chore`: the `tui` session **bearer JWT was held as a bare `String`** inside structs and
