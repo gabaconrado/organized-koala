@@ -2,7 +2,7 @@
 id: 0015
 title: TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0014]
@@ -468,3 +468,10 @@ code-hash `b9884943f36f3ac6c9d56fd2be46e31057a9060a`.
 
 coverage: 73.80% line (the headline `TOTAL` line-coverage from a fresh `./ok.sh coverage` in the
 worktree; docker plus the throwaway test Postgres booted cleanly). Report-only — never a gate.
+
+- [x] 2026-06-26 [orchestrator] Step-7 freshen: rebased onto `main@a739006` (docs/handoff +
+  dashboard advance only). `./ok.sh code-hash HEAD` = `b9884943f36f3ac6c9d56fd2be46e31057a9060a`,
+  **unchanged** from the attested hash — code byte-identical, so the reviewer `approved` + verifier
+  `VERIFIED` verdicts carry forward untouched (no relabelling). Re-ran gates on the rebased tree:
+  test 0 failures (32 `test result: ok`), lint clean, fmt --check clean. Branch is current on `main`.
+  → `review` → `awaiting-merge`. Cycle terminal; human performs the ff-merge.
