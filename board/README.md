@@ -51,8 +51,8 @@ backlog".
 | [0011](./features/0011-task-update-delete-reopen.md) | Task update + delete + reopen — generalize close into PATCH (breaking) | feature | merged | medium | — | — (merged) |
 | [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | merged | medium | — | — (merged) |
 | [0013](./features/0013-session-token-debug-leak.md) | Redact the JWT in `tui` `Session` — bare `String` reachable via derived `Debug` (rust-standards secret-leak violation) | chore | merged | high | — | — (merged) |
-| [0014](./features/0014-tui-layout-shell.md) | TUI layout shell — top-level tabs, centred title, centred auth form, tight footer | feature | working (branch: awaiting-merge) | medium | — | `feature/0014-tui-layout-shell` (active) |
-| [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | inbox | medium | 0014 | — |
+| [0014](./features/0014-tui-layout-shell.md) | TUI layout shell — top-level tabs, centred title, centred auth form, tight footer | feature | merged | medium | — | — (merged) |
+| [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | inbox | medium | 0014 (merged ✓) | — |
 | [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | inbox | medium | 0015 | — |
 
 > **0010 — Notes — MERGED.** The final missing
@@ -128,7 +128,7 @@ backlog".
 > `missing_debug_implementations`-lint-vs-secret-redaction tension. Operator approved the code;
 > fast-forwarded to `main` (linear, no merge commit); worktree + branch removed.
 >
-> **0014 — TUI layout shell — AWAITING-MERGE (active branch, Phase 1 of 3).** A **`tui`-crate-only**
+> **0014 — TUI layout shell — MERGED (Phase 1 of 3).** A **`tui`-crate-only**
 > reshape of the structural shell — navigation, auth screen, title, footer — with **no
 > `contract`/server/domain change** (boundary binding per
 > [ADR-0010](../docs/adr/0010-tui-navigation-and-interaction-model.md) §5). `Screen::TaskList`/
@@ -142,7 +142,8 @@ backlog".
 > Tests: new `crates/tui/tests/navigation.rs` (14) + re-pointed `TestBackend` suites. Reviewer
 > **approved** + verifier **verified**, both pinned to code-hash
 > `bf65aa9612bf1633bf75e64f66a3dfddcfb4aa10` (commit `c8b1217`); coverage 72.96% line (report-only).
-> ADR-0010 binds 0015/0016 — those phases inherit and cite it. Awaiting the human's merge.
+> ADR-0010 binds 0015/0016 — those phases inherit and cite it. Fast-forward merged into `main`
+> (linear history); **0015 is now unblocked.**
 >
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**

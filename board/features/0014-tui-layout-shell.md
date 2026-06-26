@@ -2,7 +2,7 @@
 id: 0014
 title: TUI layout shell — top-level tabs, centered title, centered auth form, tight footer
 type: feature      # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []
@@ -278,6 +278,8 @@ the acceptance criteria):
   approved+verified verdicts above **carry forward untouched** (no relabelling). Re-ran the gates on
   the rebased tree: `fmt --check`/`lint` exit 0, `./ok.sh test` all suites `ok` 0 failed (`navigation`
   14). `review`→`awaiting-merge`. **Terminal for the AI cycle — awaiting the human's ff-merge.**
+- [x] 2026-06-26 [operator] Approved and **fast-forward merged** into `main` (`f218ab9..c0c816d`,
+  linear history, no merge commit). `awaiting-merge`→`merged`; worktree removed, branch deleted.
 
 ## Summary
 
