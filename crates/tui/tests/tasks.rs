@@ -299,11 +299,16 @@ fn first_delete_arms_confirm_and_issues_no_request() {
     );
     assert_eq!(list.tasks.len(), 1, "the row is still present while armed");
 
-    // The confirm affordance renders.
+    // 0015: the armed two-step affordance now renders as a centred confirmation dialog (the second
+    // `x` still confirms, `Esc` cancels — behaviour preserved, only the render site moved).
     let text = render(&app, W, H);
     assert!(
-        text.contains("Press x again to confirm"),
-        "the confirm affordance is shown:\n{text}",
+        text.contains("Delete task") && text.contains("Delete this task?"),
+        "the confirmation dialog is shown:\n{text}",
+    );
+    assert!(
+        text.contains("x: confirm delete") && text.contains("Esc: cancel"),
+        "the dialog hint keeps the second-`x`-confirms / Esc-cancels affordance:\n{text}",
     );
 }
 
@@ -397,9 +402,10 @@ fn delete_in_flight_renders_spinner_and_keeps_caption() {
     assert!(app.is_pending(), "task list in-flight during the delete");
 
     let text = render(&app, W, H);
-    // The command caption is kept (not replaced) and the spinner's cancel affordance is appended.
+    // The trimmed footer caption is kept (not replaced) and the spinner's cancel affordance is
+    // appended (0015: the per-pane action keys moved into the `?` help modal).
     assert!(
-        text.contains("a: add") && text.contains("x: del"),
+        text.contains("switch tab") && text.contains("q: quit"),
         "the caption is not replaced while pending:\n{text}",
     );
     assert!(

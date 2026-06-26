@@ -36,8 +36,8 @@ use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use tui::app::{
     AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, Dispatch,
-    EditTaskState, Event, MainState, NotesState, Outcome, ProfileForm, ProfilesMode, ProfilesState,
-    RequestId, Screen, Tab, TaskListState,
+    EditTaskState, Event, MainState, NoteForm, NotesMode, NotesState, Outcome, ProfileForm,
+    ProfilesMode, ProfilesState, RequestId, Screen, Tab, TaskListState,
 };
 use tui::client::{Client, ClientError, ClientResult};
 
@@ -737,6 +737,42 @@ pub fn render(app: &App, width: u16, height: u16) -> String {
     render_at(app, width, height, 0)
 }
 
+/// Render the app onto a `TestBackend` and return the raw `ratatui` [`Buffer`], so a test can
+/// inspect per-cell styling (e.g. the purple focus-border foreground) rather than only the flat
+/// text. Rendered at tick 0.
+#[must_use]
+pub fn render_buffer(app: &App, width: u16, height: u16) -> Buffer {
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    let _completed = terminal
+        .draw(|frame| tui::ui::draw(frame, app, 0))
+        .expect("draw");
+    terminal.backend().buffer().clone()
+}
+
+/// The number of cells carrying `fg` as their foreground colour on the buffer row that contains
+/// the first occurrence of `label`. A bordered field's title sits on the top border row, so when
+/// the field is focused that whole row's border cells carry the purple border style — many `fg`
+/// cells; a non-focused field's title row carries only the surrounding chrome's `fg` (e.g. the two
+/// magenta edge columns of an enclosing dialog box), far fewer. Comparing the count between a
+/// focused and a non-focused field's row distinguishes the focus cue robustly inside a dialog
+/// (whose outer box border is itself magenta). Returns `0` if the label is not found.
+#[must_use]
+pub fn row_fg_count(buffer: &Buffer, label: &str, fg: ratatui::style::Color) -> usize {
+    let area = buffer.area();
+    let flat = buffer_text(buffer);
+    let Some(row) = flat.lines().position(|line| line.contains(label)) else {
+        return 0;
+    };
+    let Ok(y) = u16::try_from(row) else {
+        return 0;
+    };
+    if y >= area.height {
+        return 0;
+    }
+    (0..area.width).filter(|&x| buffer[(x, y)].fg == fg).count()
+}
+
 /// Flatten a `ratatui` buffer into newline-joined, right-trimmed rows of text.
 fn buffer_text(buffer: &Buffer) -> String {
     let area = buffer.area();
@@ -834,6 +870,29 @@ pub fn refresh_timer(app: &mut App, client: &FakeClient) {
 // the other panes empty; the `task_list_screen*` / `profiles_screen*` names are kept so the
 // keybinding suite reads unchanged.
 
+/// The screen-derivable part of [`App::overlay_capturing_input`](tui::app::App), for the pure
+/// `map_key` keybinding tests. `map_key` takes the unified overlay-capturing predicate as a
+/// parameter; the production value comes from `App`, but these tests build a bare `Screen`, so this
+/// mirrors the predicate's screen-driven branch (`help_open` / timer-editing are passed separately
+/// by the caller). It is `true` whenever the active pane has an add/edit/confirm-delete sub-flow
+/// open; `false` on the auth/offline screens (the auth form is its own always-text-entry context,
+/// not an overlay).
+#[must_use]
+pub fn screen_overlay_capturing(screen: &Screen) -> bool {
+    match screen {
+        Screen::Main(main) => match main.active_tab {
+            Tab::Tasks => {
+                main.tasks.adding.is_some()
+                    || main.tasks.editing.is_some()
+                    || main.tasks.confirming_delete.is_some()
+            }
+            Tab::Notes => main.notes.in_sub_flow(),
+            Tab::Profiles => main.profiles.in_sub_flow(),
+        },
+        Screen::Auth(_) | Screen::Offline { .. } => false,
+    }
+}
+
 /// A bare empty task pane.
 fn empty_tasks_pane() -> TaskListState {
     TaskListState {
@@ -877,7 +936,18 @@ fn two_profiles_pane() -> ProfilesState {
 
 /// Wrap three panes into the post-auth tabbed view with `active` selected.
 fn main_screen(active: Tab, tasks: TaskListState, profiles: ProfilesState) -> Screen {
-    let mut main = MainState::new(tasks, NotesState::new(Vec::new()), profiles);
+    main_screen_full(active, tasks, NotesState::new(Vec::new()), profiles)
+}
+
+/// Wrap all three panes (including a populated notes pane) into the tabbed view with `active`
+/// selected.
+fn main_screen_full(
+    active: Tab,
+    tasks: TaskListState,
+    notes: NotesState,
+    profiles: ProfilesState,
+) -> Screen {
+    let mut main = MainState::new(tasks, notes, profiles);
     main.active_tab = active;
     Screen::Main(Box::new(main))
 }
@@ -1001,4 +1071,68 @@ pub fn profiles_screen_renaming() -> Screen {
 /// Notes-tab command keys.
 pub fn notes_screen() -> Screen {
     main_screen(Tab::Notes, empty_tasks_pane(), two_profiles_pane())
+}
+
+/// The tabbed view on the Tasks tab with the delete-confirmation dialog armed (a non-text-entry
+/// overlay that still captures input — the two-step `x`-again affordance, Assumption A5).
+pub fn task_list_screen_confirming_delete() -> Screen {
+    let mut tasks = one_task_pane();
+    tasks.confirming_delete = Some("00000000-0000-0000-0000-000000000001".to_owned());
+    main_screen(Tab::Tasks, tasks, two_profiles_pane())
+}
+
+/// A notes pane listing one note in the bare list mode, first selected.
+fn one_note_pane() -> NotesState {
+    let mut notes = NotesState::new(vec![note("n1", "a note", "body", "2026-06-18T10:00:00Z")]);
+    notes.selected = Some(0);
+    notes
+}
+
+/// The tabbed view on the Notes tab with the create sub-flow open (a text-entry overlay).
+pub fn notes_screen_creating() -> Screen {
+    let mut notes = one_note_pane();
+    notes.mode = NotesMode::Creating(NoteForm {
+        on_title: true,
+        title: String::new(),
+        content: String::new(),
+        error: None,
+    });
+    main_screen_full(Tab::Notes, empty_tasks_pane(), notes, two_profiles_pane())
+}
+
+/// The tabbed view on the Notes tab with the edit sub-flow open (a text-entry overlay).
+pub fn notes_screen_editing() -> Screen {
+    let mut notes = one_note_pane();
+    notes.mode = NotesMode::Editing {
+        note_id: "n1".to_owned(),
+        form: NoteForm {
+            on_title: true,
+            title: "a note".to_owned(),
+            content: "body".to_owned(),
+            error: None,
+        },
+    };
+    main_screen_full(Tab::Notes, empty_tasks_pane(), notes, two_profiles_pane())
+}
+
+/// The tabbed view on the Notes tab with the delete-confirmation dialog open (a non-text-entry
+/// overlay that still captures input — globals suppressed, `Enter` confirms, `Esc` cancels).
+pub fn notes_screen_confirming_delete() -> Screen {
+    let mut notes = one_note_pane();
+    notes.mode = NotesMode::ConfirmingDelete {
+        note_id: "n1".to_owned(),
+        title: "a note".to_owned(),
+    };
+    main_screen_full(Tab::Notes, empty_tasks_pane(), notes, two_profiles_pane())
+}
+
+/// The tabbed view on the Profiles tab with the delete-confirmation dialog open (a non-text-entry
+/// overlay that still captures input).
+pub fn profiles_screen_confirming_delete() -> Screen {
+    let mut profiles = two_profiles_pane();
+    profiles.mode = ProfilesMode::ConfirmingDelete {
+        profile_id: "p1".to_owned(),
+        name: "work".to_owned(),
+    };
+    main_screen(Tab::Profiles, empty_tasks_pane(), profiles)
 }

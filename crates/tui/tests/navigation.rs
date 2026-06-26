@@ -214,6 +214,7 @@ fn letter_keys_do_not_switch_tabs_end_to_end() {
     for c in ['t', 'n', 's'] {
         if let Some(event) = map_key(
             app.screen(),
+            app.overlay_capturing_input(),
             app.is_editing_duration(),
             key(KeyCode::Char(c)),
         ) {
@@ -407,10 +408,10 @@ fn footer_sits_flush_near_the_bottom_row() {
     let text = render(&app, W, H);
     let rows: Vec<&str> = text.lines().collect();
 
-    // The caption starts with the stable "Tab: switch tab" segment; locate its row.
+    // The trimmed footer caption carries the "switch tab" segment; locate its row.
     let caption_row = rows
         .iter()
-        .position(|r| r.contains("Tab: switch tab"))
+        .position(|r| r.contains("switch tab"))
         .expect("the hotkey caption is rendered");
     assert!(
         caption_row >= rows.len().saturating_sub(4),

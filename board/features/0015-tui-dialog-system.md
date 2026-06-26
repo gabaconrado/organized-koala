@@ -352,3 +352,27 @@ seam early but the suite goes green as 2/3 land). All five are within `crates/tu
   unified `overlay_capturing_input()` overlay model. Files: `crates/tui/src/app/mod.rs`,
   `crates/tui/src/ui/mod.rs`, `crates/tui/src/terminal/mod.rs`. Production build/lint/fmt green
   (existing `tests/` call the old `map_key` signature — those land in tester's slice 5).
+- [x] 2026-06-26 [tester] Slice 5: extended the `TestBackend` suite for the dialog surface. Fixed the
+  broken 4-arg `map_key(screen, overlay_capturing, editing_duration, key)` call sites (`keybindings.rs`
+  `map`/`map_editing` now derive `overlay_capturing` from a new `common::screen_overlay_capturing`;
+  `navigation.rs` passes `app.overlay_capturing_input()`). Added `common` builders/helpers:
+  `screen_overlay_capturing`, `render_buffer`, `row_fg_count`, and screen builders for the
+  task/note/profile delete-confirm + note create/edit dialogs. New `tests/dialogs.rs` (16 tests):
+  centred-dialog rendering for add/edit/delete/timer/help (title + magenta border, centred, NOT in the
+  2-row message band); trimmed-footer asserts (movement + tab-switch + `?` + `q`, no per-pane keys);
+  global-hotkey suppression end-to-end through `map_key` (a typed char — incl. `q`/`r`/`p`/`d`/`?` —
+  lands in the focused field, no global fires); two-tiered `Esc` (cancels an open dialog, still quits
+  idle post-auth, still cancels an in-flight request); `?` help modal (opens, lists the full
+  reference, closes on `Esc`); purple `Color::Magenta` focus border on the auth form + a dialog field
+  (focused vs non-focused row contrast); and a behaviour-preserved add-task submit→chained-refresh.
+  Extended `keybindings.rs` with the unified suppression pins (every dialog kind across the three
+  tabs, the task-delete `x`-again confirm, `?`-opens-only-when-idle, Esc-cancels-in-every-dialog).
+  Updated the stale footer-caption assertions in `rendering.rs`/`tasks.rs`/`timer.rs`/`navigation.rs`
+  to the trimmed `FOOTER_CAPTION`, and the armed-task-delete render assertion to the new confirmation
+  dialog. **Finding flagged for review (not worked around — no src edit):** a live `?` keypress is
+  suppressed by the open help overlay at the keymap, so today only `Esc` closes help via the keyboard,
+  yet `draw_help`'s footer hint advertises `?/Esc: close`. The app core *does* fold `Event::ToggleHelp`
+  into a close (`handle_event`), so the gap is purely the keymap not emitting it while an overlay
+  captures input. Pinned by `question_mark_keypress_is_suppressed_while_help_is_open` +
+  `help_modal_toggle_close_event_is_supported_by_the_core`. `./ok.sh test` 380 passed / 0 failed;
+  `./ok.sh lint` clean (`--all-targets`); `./ok.sh fmt --check` clean.

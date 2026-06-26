@@ -1,11 +1,15 @@
-//! Pins the keybinding contract: `terminal::map_key(screen, editing_duration, key) -> Option<Event>`
-//! is pure, so these tests lock every binding `tui-dev` chose and the context-sensitivity that lets
-//! a printable key be a command on the task list but typed text in a form (slice-3 acceptance 1).
+//! Pins the keybinding contract:
+//! `terminal::map_key(screen, overlay_capturing, editing_duration, key) -> Option<Event>` is pure,
+//! so these tests lock every binding `tui-dev` chose and the context-sensitivity that lets a
+//! printable key be a command on the task list but typed text in a form (slice-3 acceptance 1).
 //!
 //! The timer is no longer a screen (ADR-0006 §8): its controls (`p` toggle, `d` edit) are global on
 //! every post-auth screen, and the duration-edit sub-flow is a global text-entry mode signalled by
-//! the `editing_duration` bool — not a `Screen` variant. These tests pin that new signature and the
-//! global-timer bindings, and guard the absence of the old dedicated-timer navigation.
+//! the `editing_duration` bool — not a `Screen` variant. 0015 adds the unified `overlay_capturing`
+//! predicate (ADR-0010 §3): while any dialog/overlay owns input — an add/edit form, a delete-confirm
+//! dialog, the duration edit, or the `?` help overlay — every global hotkey (`q`/`r`/`?`/`p`/`d` and
+//! tab-switch) is suppressed and `Esc` cancels. These tests pin that signature, the global-timer
+//! bindings, and guard the absence of the old dedicated-timer navigation.
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
@@ -16,9 +20,12 @@ use tui::app::Event;
 use tui::terminal::map_key;
 
 use common::{
-    auth_screen, auth_screen_pending, notes_screen, offline_screen, offline_screen_pending,
-    profiles_screen, profiles_screen_creating, profiles_screen_pending, profiles_screen_renaming,
-    task_list_screen, task_list_screen_adding, task_list_screen_editing, task_list_screen_pending,
+    auth_screen, auth_screen_pending, notes_screen, notes_screen_confirming_delete,
+    notes_screen_creating, notes_screen_editing, offline_screen, offline_screen_pending,
+    profiles_screen, profiles_screen_confirming_delete, profiles_screen_creating,
+    profiles_screen_pending, profiles_screen_renaming, screen_overlay_capturing, task_list_screen,
+    task_list_screen_adding, task_list_screen_confirming_delete, task_list_screen_editing,
+    task_list_screen_pending,
 };
 
 fn key(code: KeyCode) -> KeyEvent {
@@ -29,14 +36,18 @@ fn ctrl(c: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
 }
 
-/// `map_key` with the duration-edit sub-flow closed — the common case for non-edit bindings.
+/// `map_key` with the global duration-edit sub-flow closed — the common case for non-edit bindings.
+/// The unified `overlay_capturing` predicate is derived from the screen (the production value comes
+/// from `App`; these tests build a bare `Screen`, so the screen-driven branch is mirrored in
+/// [`screen_overlay_capturing`]).
 fn map(screen: &tui::app::Screen, k: KeyEvent) -> Option<Event> {
-    map_key(screen, false, k)
+    map_key(screen, screen_overlay_capturing(screen), false, k)
 }
 
-/// `map_key` with the global duration-edit sub-flow active (the text-entry overlay).
+/// `map_key` with the global duration-edit sub-flow active (the text-entry overlay). The duration
+/// edit is itself an input-capturing overlay, so `overlay_capturing` is `true`.
 fn map_editing(screen: &tui::app::Screen, k: KeyEvent) -> Option<Event> {
-    map_key(screen, true, k)
+    map_key(screen, true, true, k)
 }
 
 // ---- Global / cross-screen ----
@@ -563,4 +574,133 @@ fn global_timer_keys_live_on_the_idle_switcher() {
         map(&screen, key(KeyCode::Char('d'))),
         Some(Event::BeginEditDuration),
     );
+}
+
+// ---- 0015: unified overlay-hotkey suppression (ADR-0010 §3, slice-5 acceptance 4) ----
+
+#[test]
+fn global_hotkeys_are_suppressed_while_a_dialog_captures_input() {
+    // With any input-capturing overlay open — a text-entry add/edit form OR a non-text-entry
+    // delete-confirmation dialog — every global hotkey (`q`/`r`/`p`/`d`/`?`/Tab) must NOT fire its
+    // global action: it is either typed text (in a text-entry form), or unbound (in a confirmation
+    // dialog), but crucially never the global event. This pins the suppression rule for every
+    // dialog kind across the three tabs (Risk R1).
+    let text_entry_dialogs = [
+        task_list_screen_adding(),
+        task_list_screen_editing(),
+        notes_screen_creating(),
+        notes_screen_editing(),
+        profiles_screen_creating(),
+        profiles_screen_renaming(),
+    ];
+    for screen in &text_entry_dialogs {
+        for c in ['q', 'r', 'p', 'd', '?'] {
+            // In a text-entry overlay these land as literal Char, never the global action.
+            assert_eq!(
+                map(screen, key(KeyCode::Char(c))),
+                Some(Event::Char(c)),
+                "{c:?} must be literal text (global suppressed) in {screen:?}",
+            );
+        }
+        // Tab switches the focused field, never cycles the top-level tabs.
+        assert_eq!(
+            map(screen, key(KeyCode::Tab)),
+            Some(Event::Next),
+            "Tab switches field (global tab-switch suppressed) in {screen:?}",
+        );
+    }
+
+    // The non-text-entry confirmation dialogs capture input too: a global letter is NOT its global
+    // action — it is unbound (so the global never fires), except the task-delete `x`-again confirm.
+    let confirm_dialogs = [
+        notes_screen_confirming_delete(),
+        profiles_screen_confirming_delete(),
+    ];
+    for screen in &confirm_dialogs {
+        for c in ['q', 'r', 'p', 'd', '?'] {
+            assert_eq!(
+                map(screen, key(KeyCode::Char(c))),
+                None,
+                "{c:?} must be suppressed (no global action) in the confirm dialog {screen:?}",
+            );
+        }
+        // Tab does not cycle tabs while a confirmation dialog is open.
+        let tab = map(screen, key(KeyCode::Tab));
+        assert!(
+            !matches!(tab, Some(Event::NextTab)),
+            "Tab must not cycle tabs in the confirm dialog {screen:?} (got {tab:?})",
+        );
+    }
+}
+
+#[test]
+fn task_delete_confirmation_accepts_only_x_to_confirm_and_esc_to_cancel() {
+    // The task-delete dialog is the two-step `x`-again affordance (Assumption A5): while armed it
+    // captures input (globals suppressed), but a second `x` must still CONFIRM (DeleteSelected),
+    // and `Esc` cancels. The other globals are suppressed.
+    let screen = task_list_screen_confirming_delete();
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('x'))),
+        Some(Event::DeleteSelected),
+        "a second `x` confirms the armed delete",
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Esc)),
+        Some(Event::Cancel),
+        "Esc cancels the armed delete (not Quit)",
+    );
+    // Other globals are suppressed while the confirmation is armed.
+    for c in ['q', 'r', 'p', 'd', '?', 'a', 'e', 'c'] {
+        assert_eq!(
+            map(&screen, key(KeyCode::Char(c))),
+            None,
+            "{c:?} must be suppressed while the task-delete confirmation is armed",
+        );
+    }
+}
+
+#[test]
+fn question_mark_opens_help_only_on_an_idle_post_auth_screen() {
+    // `?` is a global, live only on an idle post-auth screen with no overlay capturing input.
+    for screen in [task_list_screen(), notes_screen(), profiles_screen()] {
+        assert_eq!(
+            map(&screen, key(KeyCode::Char('?'))),
+            Some(Event::ToggleHelp),
+            "? opens help on the idle post-auth screen {screen:?}",
+        );
+    }
+    // `?` is inert off a post-auth screen: literal text on the auth form, unbound on offline.
+    assert_eq!(
+        map(&auth_screen(), key(KeyCode::Char('?'))),
+        Some(Event::Char('?')),
+        "? is literal text in the auth form",
+    );
+    assert_eq!(
+        map(&offline_screen(), key(KeyCode::Char('?'))),
+        None,
+        "? is unbound on the offline screen",
+    );
+}
+
+#[test]
+fn esc_cancels_inside_every_dialog_kind() {
+    // The two-tiered Esc (ADR-0010 §3): Esc inside ANY open dialog cancels it (Event::Cancel),
+    // never Quit — text-entry forms and confirmation dialogs alike.
+    for screen in [
+        task_list_screen_adding(),
+        task_list_screen_editing(),
+        task_list_screen_confirming_delete(),
+        notes_screen_creating(),
+        notes_screen_editing(),
+        notes_screen_confirming_delete(),
+        profiles_screen_creating(),
+        profiles_screen_renaming(),
+        profiles_screen_confirming_delete(),
+    ] {
+        assert_eq!(
+            map(&screen, key(KeyCode::Esc)),
+            Some(Event::Cancel),
+            "Esc cancels (never Quit) inside the dialog {screen:?}",
+        );
+    }
 }

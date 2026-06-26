@@ -78,10 +78,24 @@ fn global_timer_widget_renders_on_the_task_list() {
         text.contains("timer idle") && text.contains("30 min"),
         "idle timer widget shows on the task-list buffer:\n{text}",
     );
-    // Criterion 7: the bottom-left caption lists the `p` start/stop hotkey (the help-menu entry).
+    // 0015: the `p` start/stop hotkey is no longer in the trimmed footer — it moved into the `?`
+    // help modal. The footer carries only the essentials.
     assert!(
-        text.contains("p: timer"),
-        "the `p` toggle is listed in the hotkey caption:\n{text}",
+        !text.contains("p: timer"),
+        "the `p` toggle is no longer enumerated in the trimmed footer:\n{text}",
+    );
+    assert!(
+        text.contains("switch tab") && text.contains("?: help"),
+        "the trimmed footer carries the essentials (tab switch + help):\n{text}",
+    );
+
+    // Opening the `?` help modal surfaces the full reference, including the `p` timer toggle.
+    let mut app = app;
+    let _ = app.handle_event(Event::ToggleHelp);
+    let help = render(&app, W, H);
+    assert!(
+        help.contains("start / stop the focus timer"),
+        "the `p` timer toggle is documented in the help modal:\n{help}",
     );
 }
 
@@ -293,13 +307,16 @@ fn in_flight_appends_a_spinner_without_replacing_the_caption() {
     // The regression guard: the stable hotkey caption is STILL present (not replaced by a
     // "working…" string), and the cancel affordance plus a trailing spinner glyph are appended.
     let text = render_at(&app, W, H, 1);
+    // 0015: the footer is trimmed to essentials (movement, tab switch, help, quit) and the per-pane
+    // action keys moved into the `?` help modal — so the regression guard now pins the trimmed
+    // caption stays present (not replaced by a "working…" string) while in flight.
     assert!(
-        text.contains("p: timer"),
+        text.contains("?: help"),
         "the hotkey caption is NOT replaced while in flight (no flicker):\n{text}",
     );
     assert!(
-        text.contains("a: add") && text.contains("q: quit"),
-        "the full caption stays present while in flight:\n{text}",
+        text.contains("switch tab") && text.contains("q: quit"),
+        "the trimmed caption stays present while in flight:\n{text}",
     );
     // The cancel affordance is appended (the caption may wrap at the narrow 80-col width when the
     // timer label takes the right column, splitting "Esc to cancel" across rows — assert the stable
@@ -317,10 +334,11 @@ fn in_flight_appends_a_spinner_without_replacing_the_caption() {
 
 #[test]
 fn idle_caption_has_no_spinner_or_cancel_affordance() {
-    // Contrast: with nothing in flight the caption is the bare hotkey list — no spinner, no cancel.
+    // Contrast: with nothing in flight the caption is the bare trimmed footer — no spinner, no
+    // cancel affordance (the per-pane action keys live in the `?` modal now).
     let (_client, app) = logged_in_with_idle_timer(30);
     let text = render(&app, W, H);
-    assert!(text.contains("p: timer"), "caption present:\n{text}");
+    assert!(text.contains("switch tab"), "caption present:\n{text}");
     assert!(
         !text.contains("Esc to cancel"),
         "no cancel affordance when idle:\n{text}",

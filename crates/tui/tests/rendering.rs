@@ -126,28 +126,32 @@ fn task_list_renders_newest_first_with_markers() {
 }
 
 #[test]
-fn task_list_command_hint_and_add_flow_hint() {
+fn task_list_trimmed_footer_and_add_flow_dialog() {
+    // 0015: the footer caption is trimmed to essentials only — movement, tab switch, help, quit —
+    // and the per-pane action keys (`a`/`e`/`c`/`x`/`r`) move into the `?` help modal. The idle
+    // footer must NOT enumerate the action keys.
     let app = logged_in_with(vec![open_task("t1", "task one", "2026-06-18T10:00:00Z")]);
     let text = render(&app, W, H);
     assert!(
-        text.contains("a: add")
-            && text.contains("e: edit")
-            && text.contains("c: done")
-            && text.contains("x: del")
-            && text.contains("r: refresh"),
-        "command hint:\n{text}",
+        text.contains("switch tab") && text.contains("?: help") && text.contains("q: quit"),
+        "trimmed footer shows movement + tab switch + help + quit:\n{text}",
+    );
+    // The per-pane action keys are gone from the footer (they live in the `?` modal now).
+    assert!(
+        !text.contains("a: add") && !text.contains("e: edit") && !text.contains("c: done"),
+        "the trimmed footer does NOT enumerate the per-pane action keys:\n{text}",
     );
 
-    // Open the add-task flow; the hint and the in-progress fields render.
+    // Open the add-task flow; it now renders as a centred dialog over the pane, not in the band.
     let mut app = app;
     let _ = app.handle_event(Event::BeginAddTask);
     for c in "Buy milk".chars() {
         let _ = app.handle_event(Event::Char(c));
     }
     let text = render(&app, W, H);
-    assert!(text.contains("Add task"), "add-task panel:\n{text}");
+    assert!(text.contains("Add task"), "add-task dialog title:\n{text}");
     assert!(text.contains("Buy milk"), "typed title echoes:\n{text}");
-    assert!(text.contains("Esc: cancel"), "add-flow hint:\n{text}");
+    assert!(text.contains("Esc: cancel"), "dialog footer hint:\n{text}");
 }
 
 #[test]
@@ -247,12 +251,12 @@ fn task_list_in_flight_appends_spinner_without_replacing_the_caption() {
     assert!(app.is_pending(), "task list in-flight after toggle-done");
 
     let text = render(&app, W, H);
-    // The command caption stays present (not replaced) — the regression guard. (The caption wraps
-    // at ` | ` separators when the timer label takes the right column, so assert on the stable
-    // leading segments that never split mid-token.)
+    // The trimmed footer caption stays present (not replaced) — the regression guard. (The caption
+    // wraps at ` | ` separators when the timer label takes the right column, so assert on the
+    // stable segments that never split mid-token.)
     assert!(
-        text.contains("Tab: switch tab") && text.contains("a: add"),
-        "the command caption is NOT replaced while pending:\n{text}",
+        text.contains("switch tab") && text.contains("q: quit"),
+        "the footer caption is NOT replaced while pending:\n{text}",
     );
     assert!(
         !text.contains("working…"),
