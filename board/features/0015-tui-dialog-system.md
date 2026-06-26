@@ -376,3 +376,15 @@ seam early but the suite goes green as 2/3 land). All five are within `crates/tu
   captures input. Pinned by `question_mark_keypress_is_suppressed_while_help_is_open` +
   `help_modal_toggle_close_event_is_supported_by_the_core`. `./ok.sh test` 380 passed / 0 failed;
   `./ok.sh lint` clean (`--all-targets`); `./ok.sh fmt --check` clean.
+- [x] 2026-06-26 [tui-dev] Fix-now (tester's pre-review finding): make `?` close the help overlay
+  so the advertised `?/Esc: close` affordance works. Threaded `help_open` distinctly into `map_key`
+  and special-cased `?` to **toggle** help — it opens from an idle post-auth screen and closes
+  while the help overlay is the active overlay (the core already folds `Event::ToggleHelp` into a
+  close). `?` stays suppressed while a *non-help* dialog (add/edit/confirm/duration) captures input
+  (A3); the two-tiered `Esc` and all other suppression are unchanged. New signature:
+  `map_key(screen, overlay_capturing, help_open, editing_duration, key)`. File:
+  `crates/tui/src/terminal/mod.rs`. Production build/lint/fmt green; the two `map_key` call sites
+  in the test suite and the two pinning tests
+  (`question_mark_keypress_is_suppressed_while_help_is_open`,
+  `help_modal_toggle_close_event_is_supported_by_the_core`) need updating by tester for the new
+  arity + flipped `?`-closes-help behaviour.

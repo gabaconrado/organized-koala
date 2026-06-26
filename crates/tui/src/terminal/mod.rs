@@ -92,9 +92,13 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
 ///   [`Event::Submit`], folded by the app core into a client-side re-scope), `a` →
 ///   [`Event::BeginAddProfile`], `e` → [`Event::BeginRenameProfile`], `x` →
 ///   [`Event::BeginDeleteProfile`].
-/// - On any post-auth screen (idle, no overlay): `?` → [`Event::ToggleHelp`] (open the help
-///   overlay), `p` → [`Event::ToggleTimer`], `d` → [`Event::BeginEditDuration`] (the global timer
-///   controls, ADR-0006 §8.2), `r` → [`Event::Refresh`], `q` → [`Event::Quit`].
+/// - On any post-auth screen (idle, no overlay): `p` → [`Event::ToggleTimer`], `d` →
+///   [`Event::BeginEditDuration`] (the global timer controls, ADR-0006 §8.2), `r` →
+///   [`Event::Refresh`], `q` → [`Event::Quit`].
+/// - `?` → [`Event::ToggleHelp`] **toggles** the help overlay: it opens help from an idle
+///   post-auth screen and closes help while the help overlay (`help_open`) is the active overlay
+///   (the core folds `ToggleHelp` into a close). `?` stays suppressed while a *non-help* dialog
+///   captures input (Assumption A3). `Esc` also closes the help overlay.
 /// - On the offline screen: `r` → [`Event::Refresh`].
 ///
 /// While a request is outstanding, `Esc` maps to [`Event::Cancel`] (abandon the request) rather
@@ -105,6 +109,7 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
 pub fn map_key(
     screen: &Screen,
     overlay_capturing: bool,
+    help_open: bool,
     editing_duration: bool,
     key: KeyEvent,
 ) -> Option<Event> {
@@ -172,7 +177,10 @@ pub fn map_key(
         KeyCode::Char('x') if on_profiles && globals_live => Some(Event::BeginDeleteProfile),
         // Global hotkeys, live only on an idle post-auth screen (suppressed while an overlay
         // captures input — the unified rule, ADR-0010 §3).
-        KeyCode::Char('?') if globals_live => Some(Event::ToggleHelp),
+        // `?` *toggles* the help overlay: it opens help from an idle post-auth screen and closes
+        // help while the help overlay is the active overlay (the core folds `ToggleHelp` into a
+        // close). It stays suppressed while a *non-help* dialog owns input (Assumption A3).
+        KeyCode::Char('?') if globals_live || help_open => Some(Event::ToggleHelp),
         KeyCode::Char('p') if globals_live => Some(Event::ToggleTimer),
         KeyCode::Char('d') if globals_live => Some(Event::BeginEditDuration),
         KeyCode::Char('r') if globals_live => Some(Event::Refresh),
@@ -254,6 +262,7 @@ pub fn run(
             && let Some(mapped) = map_key(
                 app.screen(),
                 app.overlay_capturing_input(),
+                app.help_open(),
                 app.is_editing_duration(),
                 key,
             )
