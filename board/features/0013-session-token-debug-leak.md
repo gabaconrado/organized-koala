@@ -2,7 +2,7 @@
 id: 0013
 title: Redact the JWT in tui `Session` — bare `String` reachable via derived `Debug`
 type: chore         # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high      # high | medium | low
 parent: null
 depends-on: []
@@ -116,6 +116,12 @@ re-type it `feature` (with an ADR if a wire change is involved), per the CLAUDE.
   domain-structure change #3. No fix-now blockers, no nits.
   CODE-HASH: `e5925c5139e52846d8593c4be3ab2d0516d49fa0`
   (last code sha `e86f956`; verdict committed at `4fbb11b`).
+
+- 2026-06-26 [orchestrator] Step-7 freshen: rebased branch onto `main` (eng-manager's `docs/`,
+  `.claude/`, dashboard advance). `./ok.sh code-hash HEAD` unchanged at
+  `e5925c5139e52846d8593c4be3ab2d0516d49fa0` — code byte-identical, so the reviewer `approved`
+  verdict carries forward untouched (no relabelling). Gates re-run on the rebased tree:
+  `test | lint | fmt --check` all green. Status → awaiting-merge.
 
 - [x] 2026-06-25 [operator] High-priority: this is a serious problem — a session JWT reachable
       from a derived `Debug`. Why did it pass our guidelines (secrecy / manual `Debug`)?
