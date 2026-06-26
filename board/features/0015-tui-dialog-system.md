@@ -388,3 +388,14 @@ seam early but the suite goes green as 2/3 land). All five are within `crates/tu
   (`question_mark_keypress_is_suppressed_while_help_is_open`,
   `help_modal_toggle_close_event_is_supported_by_the_core`) need updating by tester for the new
   arity + flipped `?`-closes-help behaviour.
+- [x] 2026-06-26 [tester] Slice 5 follow-up: updated the suite for tui-dev's `4b1a1b7` fix. All six
+  `map_key` call sites moved to the 5-arg `(screen, overlay_capturing, help_open, editing_duration,
+  key)` form (`keybindings.rs` `map`/`map_editing` pass `help_open=false`; `navigation.rs` and the
+  `dialogs.rs` `press` helper + in-flight-Esc call pass `app.help_open()`). Re-pinned the
+  `?`-closes-help behaviour: `question_mark_keypress_is_suppressed_while_help_is_open` →
+  `question_mark_closes_help_while_open` (a second `?` now closes via the keymap end-to-end), and
+  `help_modal_toggle_close_event_is_supported_by_the_core` → `help_close_is_reachable_from_the_keyboard_via_question_mark`
+  (asserts `map_key` returns `Some(ToggleHelp)` while help is open, then the core folds it into a
+  close). Kept the A3 pin `question_mark_is_inert_while_another_dialog_is_open` (a non-help dialog
+  open ⇒ `?` is typed text, no help). `./ok.sh test` 380 passed / 0 failed; `./ok.sh lint` clean
+  (`--all-targets`); `./ok.sh fmt --check` clean.

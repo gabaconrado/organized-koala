@@ -215,6 +215,7 @@ fn letter_keys_do_not_switch_tabs_end_to_end() {
         if let Some(event) = map_key(
             app.screen(),
             app.overlay_capturing_input(),
+            app.help_open(),
             app.is_editing_duration(),
             key(KeyCode::Char(c)),
         ) {

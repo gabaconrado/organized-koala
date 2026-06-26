@@ -12,10 +12,10 @@
 //!   field (`overlay_capturing_input()` exercised end-to-end through `map_key`).
 //! - **Two-tiered `Esc`:** Esc with a dialog open cancels it (no Quit); Esc with no overlay on a
 //!   post-auth screen still quits; Esc with a request in flight still cancels the request.
-//! - **`?` help modal:** opens on an idle post-auth screen, lists the full reference, `Esc` closes
-//!   it (and the core also folds `Event::ToggleHelp` into a close); inert while another dialog is
-//!   open. NOTE: a live `?` keypress is suppressed by the open overlay at the keymap, so today only
-//!   `Esc` closes via the keyboard — a gap flagged for review (the help footer advertises `?/Esc`).
+//! - **`?` help modal:** opens on an idle post-auth screen, lists the full reference, and closes on
+//!   `Esc` *or* a second `?` (the keymap's `?` arm fires on `globals_live || help_open`, so the
+//!   advertised `?/Esc: close` affordance works from the keyboard); inert while a *non-help* dialog
+//!   captures input (A3 — both `globals_live` and `help_open` are false there).
 //! - **Purple focus border:** the focused field's border row carries the magenta fg (auth form +
 //!   a dialog); a non-focused field's does not.
 
@@ -64,6 +64,7 @@ fn press(app: &mut App, client: &FakeClient, code: KeyCode) {
     if let Some(event) = map_key(
         app.screen(),
         app.overlay_capturing_input(),
+        app.help_open(),
         app.is_editing_duration(),
         key(code),
     ) {
@@ -319,6 +320,7 @@ fn esc_with_a_request_in_flight_cancels_the_request() {
     let mapped = map_key(
         app.screen(),
         app.overlay_capturing_input(),
+        app.help_open(),
         app.is_editing_duration(),
         key(KeyCode::Esc),
     );
@@ -360,42 +362,46 @@ fn help_modal_closes_with_esc() {
 }
 
 #[test]
-fn help_modal_toggle_close_event_is_supported_by_the_core() {
-    // The app core supports closing help via `Event::ToggleHelp` (the `?` toggle): `handle_event`
-    // folds `ToggleHelp` while help is open into closing it. NOTE: through the real keymap, `?` is
-    // currently *suppressed* while the help overlay captures input (it is a global hotkey, and an
-    // open overlay suppresses globals), so a live `?` keypress does NOT reach the core to close the
-    // modal — only `Esc` does today. This test pins the core's `ToggleHelp` close-fold directly; the
-    // keymap gap (help's own footer hint advertises `?/Esc: close`, but the keymap honours only
-    // `Esc`) is flagged for review, not worked around here.
+fn question_mark_closes_help_while_open() {
+    // After the fix-now correction (`map_key`'s `?` arm now fires on `globals_live || help_open`),
+    // a live `?` keypress CLOSES the help overlay while it is open — the advertised `?/Esc: close`
+    // affordance works from the keyboard. The whole path runs through the real keymap (`press`).
+    let (client, mut app) = logged_in(vec![]);
+    press(&mut app, &client, KeyCode::Char('?'));
+    assert!(app.help_open(), "? opened the help overlay");
+    press(&mut app, &client, KeyCode::Char('?'));
+    assert!(
+        !app.help_open(),
+        "? closes the help overlay while it is open"
+    );
+    assert!(!app.should_quit(), "closing help via ? does not quit");
+}
+
+#[test]
+fn help_close_is_reachable_from_the_keyboard_via_question_mark() {
+    // The keymap now reaches the core's `ToggleHelp` close-fold via a `?` keypress while help is
+    // open: `map_key` returns `Some(Event::ToggleHelp)` (not `None`), and `handle_event` folds it
+    // into closing the overlay, dispatching nothing.
     let (_client, mut app) = logged_in(vec![]);
     let _ = app.handle_event(Event::ToggleHelp);
     assert!(app.help_open(), "ToggleHelp opened help");
+    let mapped = map_key(
+        app.screen(),
+        app.overlay_capturing_input(),
+        app.help_open(),
+        app.is_editing_duration(),
+        key(KeyCode::Char('?')),
+    );
+    assert_eq!(
+        mapped,
+        Some(Event::ToggleHelp),
+        "? maps to ToggleHelp while help is open (it is no longer suppressed)",
+    );
     let closed = app.handle_event(Event::ToggleHelp);
     assert!(closed.is_none(), "closing help dispatches nothing");
     assert!(
         !app.help_open(),
         "ToggleHelp folds into closing the help overlay"
-    );
-}
-
-#[test]
-fn question_mark_keypress_is_suppressed_while_help_is_open() {
-    // Documents the keymap gap noted above: with the help overlay open, a `?` keypress maps to
-    // `None` (a global suppressed by the open overlay), so it does NOT toggle the modal shut. Esc is
-    // the working close key today. Pinning this so the behaviour is explicit, not accidental.
-    let (_client, mut app) = logged_in(vec![]);
-    let _ = app.handle_event(Event::ToggleHelp);
-    assert!(app.help_open());
-    let mapped = map_key(
-        app.screen(),
-        app.overlay_capturing_input(),
-        app.is_editing_duration(),
-        key(KeyCode::Char('?')),
-    );
-    assert_eq!(
-        mapped, None,
-        "? is suppressed by the open help overlay (keymap gap — Esc is the working close key)",
     );
 }
 

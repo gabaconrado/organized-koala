@@ -1,7 +1,7 @@
 //! Pins the keybinding contract:
-//! `terminal::map_key(screen, overlay_capturing, editing_duration, key) -> Option<Event>` is pure,
-//! so these tests lock every binding `tui-dev` chose and the context-sensitivity that lets a
-//! printable key be a command on the task list but typed text in a form (slice-3 acceptance 1).
+//! `terminal::map_key(screen, overlay_capturing, help_open, editing_duration, key) -> Option<Event>`
+//! is pure, so these tests lock every binding `tui-dev` chose and the context-sensitivity that lets
+//! a printable key be a command on the task list but typed text in a form (slice-3 acceptance 1).
 //!
 //! The timer is no longer a screen (ADR-0006 §8): its controls (`p` toggle, `d` edit) are global on
 //! every post-auth screen, and the duration-edit sub-flow is a global text-entry mode signalled by
@@ -36,18 +36,20 @@ fn ctrl(c: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
 }
 
-/// `map_key` with the global duration-edit sub-flow closed — the common case for non-edit bindings.
-/// The unified `overlay_capturing` predicate is derived from the screen (the production value comes
-/// from `App`; these tests build a bare `Screen`, so the screen-driven branch is mirrored in
-/// [`screen_overlay_capturing`]).
+/// `map_key` with the global duration-edit sub-flow closed and no help overlay — the common case
+/// for non-edit bindings. The unified `overlay_capturing` predicate is derived from the screen (the
+/// production value comes from `App`; these tests build a bare `Screen`, so the screen-driven branch
+/// is mirrored in [`screen_overlay_capturing`]). `help_open` is `false`: these screen builders model
+/// no open help overlay (the help-overlay keypaths are exercised in the `dialogs` suite via `App`).
 fn map(screen: &tui::app::Screen, k: KeyEvent) -> Option<Event> {
-    map_key(screen, screen_overlay_capturing(screen), false, k)
+    map_key(screen, screen_overlay_capturing(screen), false, false, k)
 }
 
 /// `map_key` with the global duration-edit sub-flow active (the text-entry overlay). The duration
-/// edit is itself an input-capturing overlay, so `overlay_capturing` is `true`.
+/// edit is itself an input-capturing overlay, so `overlay_capturing` is `true`; `help_open` is
+/// `false` (the help overlay and the duration edit never stack — one overlay at a time, A3).
 fn map_editing(screen: &tui::app::Screen, k: KeyEvent) -> Option<Event> {
-    map_key(screen, true, true, k)
+    map_key(screen, true, false, true, k)
 }
 
 // ---- Global / cross-screen ----
