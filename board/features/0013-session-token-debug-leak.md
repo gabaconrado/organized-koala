@@ -2,7 +2,7 @@
 id: 0013
 title: Redact the JWT in tui `Session` — bare `String` reachable via derived `Debug`
 type: chore         # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high      # high | medium | low
 parent: null
 depends-on: []
@@ -70,6 +70,9 @@ alter observable behaviour, it is **no longer a chore**: set `blocked` and route
 re-type it `feature` (with an ADR if a wire change is involved), per the CLAUDE.md scope guard.
 
 ## Log / comments
+
+- 2026-06-26 [orchestrator] Claimed minted chore; cut worktree
+  `feature/0013-session-token-debug-leak` from `main@3b60289`; status → working. Session: drive-0013.
 
 - [x] 2026-06-25 [operator] High-priority: this is a serious problem — a session JWT reachable
       from a derived `Debug`. Why did it pass our guidelines (secrecy / manual `Debug`)?
