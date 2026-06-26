@@ -2,7 +2,7 @@
 id: 0013
 title: Redact the JWT in tui `Session` — bare `String` reachable via derived `Debug`
 type: chore         # feature | chore
-status: inbox           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high      # high | medium | low
 parent: null
 depends-on: []
