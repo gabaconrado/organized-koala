@@ -2,7 +2,7 @@
 id: 0015
 title: TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus
 type: feature      # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0014]
@@ -315,3 +315,9 @@ seam early but the suite goes green as 2/3 land). All five are within `crates/tu
   containment, but the plan flags it so the cycle does not expect new live-API assertions.*
 
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
+
+## Log / comments
+
+- [x] 2026-06-26 [orchestrator] Claimed `ready` → `working`. Worktree
+  `.claude/worktrees/0015-tui-dialog-system` cut from `main@c9ccd4f` (carries the plan +
+  ADR-0010). Session: drive cycle for 0015. tui-dev builds slices 1–4, tester slice 5.
