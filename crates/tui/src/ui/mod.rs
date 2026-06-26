@@ -3,12 +3,18 @@
 //! No state lives here — every widget is derived from the current [`Screen`] and the global
 //! [`Timer`]. Splitting rendering out from the app core lets the same draw path run against a
 //! `TestBackend` for buffer-snapshot assertions (ADR-0003).
+//!
+//! Every add/edit/delete-confirm sub-flow, the timer duration edit, and the `?` help reference
+//! render as a **centred floating dialog** ([`draw_dialog`], drawn after the main panes so it
+//! overlays them; ADR-0010 §3). The post-auth message band then carries only the active pane's
+//! transient status/error message. A focused field's border is drawn **purple**
+//! ([`Color::Magenta`]) to signal focus, on the auth form and in every dialog.
 
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Flex, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::app::{
     App, AuthField, AuthMode, AuthState, MainState, NotesMode, NotesState, ProfilesMode,
@@ -19,26 +25,13 @@ use contract::{Note, TaskStatus, TimerSession};
 /// The frames of the in-flight spinner, cycled by the poll loop's tick counter.
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 
-/// The base hotkey caption for the Tasks tab (idle, not in a sub-flow). `Tab` switches tabs (the
-/// tab bar replaces the old `n: notes`/`s: profiles` cross-screen keys); the global timer keys
-/// (`p`, `d`) are shown on every post-auth pane so they are discoverable (ADR-0006 §8.2).
-/// ` | `-separated so wrap points fall on separators. The phrasing is kept compact so that — once
-/// the in-flight spinner + ` (Esc to cancel)` affordance is appended — the wrapped caption stays
-/// within the bottom band at the 80×24 test viewport without clipping the cancel affordance
-/// (ADR-0006 §8.3, learned 0010).
-const TASK_LIST_CAPTION: &str = "Tab: switch tab | a: add | e: edit | c: done | x: del | p: timer | d: dur | r: refresh | q: quit";
-
-/// The base hotkey caption for the Notes tab (idle list). The notes commands (`a` create, `e`
-/// edit, `x` delete, Enter open) with `Tab` switching tabs. Kept short enough that the caption
-/// plus the appended spinner + cancel affordance stays within the bottom band at the 80×24
-/// viewport (ADR-0006 §8.3).
-const NOTES_CAPTION: &str = "Tab: switch tab | a: add | e: edit | x: del | Enter: open | p: timer | d: dur | r: refresh | q: quit";
-
-/// The base hotkey caption for the Profiles tab (idle list). `Enter` picks the selected profile
-/// (client-side re-scope; ADR-0009 §5), `Tab` switches tabs. Kept short enough that the caption
-/// plus the appended spinner + cancel affordance stays within the bottom band at the 80×24
-/// viewport (ADR-0006 §8.3, learned 0010).
-const PROFILES_CAPTION: &str = "Tab: switch tab | Enter: switch | a: add | e: rename | x: del | p: timer | d: dur | r: refresh | q: quit";
+/// The single trimmed footer caption for every post-auth pane (ADR-0010 §3, criterion 2): the
+/// essentials only — movement, tab switch, quit, and help. The full per-pane hotkey reference now
+/// lives in the `?` help overlay ([`draw_help`]), so the footer no longer enumerates the action
+/// keys. ` | `-separated so wrap points fall on separators; kept short so that — once the in-flight
+/// spinner + ` (Esc to cancel)` affordance is appended — the caption stays within the bottom band
+/// at the 80×24 test viewport without clipping the affordance (ADR-0006 §8.3, learned 0010).
+const FOOTER_CAPTION: &str = "↑↓: move | Tab/Shift+Tab: switch tab | ?: help | q: quit";
 
 /// Height (rows) of the bottom band on a post-auth screen: the hotkey caption (which may wrap)
 /// on the left and the global timer widget on the right. Three rows so the wrapped caption plus
@@ -178,11 +171,259 @@ fn draw_main(frame: &mut Frame, main: &MainState, app: &App, tick: u64) {
     }
 
     if let Some(slot) = chunks.get(4) {
-        let base = main_caption_base(main, app.timer());
         let pending = pane_pending(main) || app.timer().is_pending();
-        let caption = caption_with_spinner(base, pending, tick);
+        let caption = caption_with_spinner(FOOTER_CAPTION, pending, tick);
         draw_bottom_row(frame, *slot, &caption, app.timer());
     }
+
+    // Dialogs and the help overlay are drawn last so they float over the panes (ADR-0010 §3).
+    if app.help_open() {
+        draw_help(frame);
+    } else {
+        draw_active_dialog(frame, main, app.timer());
+    }
+}
+
+/// Draw the open overlay dialog (if any) over the active pane. The global duration edit takes
+/// precedence (it overlays any pane, ADR-0006 §8); otherwise the active pane's add/edit/confirm
+/// sub-flow renders as a dialog. A no-op when no sub-flow is open. Temporary display strings are
+/// owned locally so each [`Dialog`] can borrow them.
+fn draw_active_dialog(frame: &mut Frame, main: &MainState, timer: &Timer) {
+    if let Some(edit) = &timer.editing {
+        draw_dialog(
+            frame,
+            &Dialog {
+                title: "Timer duration",
+                fields: vec![DialogField {
+                    label: "Duration (minutes)",
+                    value: &edit.buffer,
+                    focused: true,
+                    masked: false,
+                }],
+                body: Vec::new(),
+                error: edit.error.as_deref(),
+                hint: "Enter: save | Esc: cancel",
+            },
+        );
+        return;
+    }
+    match main.active_tab {
+        Tab::Tasks => draw_task_dialog(frame, &main.tasks),
+        Tab::Notes => draw_note_dialog(frame, &main.notes),
+        Tab::Profiles => draw_profile_dialog(frame, &main.profiles),
+    }
+}
+
+/// The task add / edit / delete-confirm dialog, if one is open.
+fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
+    if let Some(add) = &list.adding {
+        draw_dialog(
+            frame,
+            &Dialog {
+                title: "Add task",
+                fields: vec![
+                    DialogField {
+                        label: "Title",
+                        value: &add.title,
+                        focused: add.on_title,
+                        masked: false,
+                    },
+                    DialogField {
+                        label: "Description",
+                        value: &add.description,
+                        focused: !add.on_title,
+                        masked: false,
+                    },
+                ],
+                body: Vec::new(),
+                error: add.error.as_deref(),
+                hint: "Enter: save | Tab: switch field | Esc: cancel",
+            },
+        );
+    } else if let Some(edit) = &list.editing {
+        draw_dialog(
+            frame,
+            &Dialog {
+                title: "Edit task",
+                fields: vec![
+                    DialogField {
+                        label: "Title",
+                        value: &edit.title,
+                        focused: edit.on_title,
+                        masked: false,
+                    },
+                    DialogField {
+                        label: "Description",
+                        value: &edit.description,
+                        focused: !edit.on_title,
+                        masked: false,
+                    },
+                ],
+                body: Vec::new(),
+                error: edit.error.as_deref(),
+                hint: "Enter: save | Tab: switch field | Esc: cancel",
+            },
+        );
+    } else if list.confirming_delete.is_some() {
+        draw_dialog(
+            frame,
+            &Dialog {
+                title: "Delete task",
+                fields: Vec::new(),
+                body: vec![Line::from("Delete this task?")],
+                error: None,
+                hint: "x: confirm delete | Esc: cancel",
+            },
+        );
+    }
+}
+
+/// The note add / edit / delete-confirm dialog, if one is open. The read-only Viewing mode is the
+/// 0016 detail view and is **not** a dialog (Assumption A6).
+fn draw_note_dialog(frame: &mut Frame, notes: &NotesState) {
+    match &notes.mode {
+        NotesMode::Creating(form) => draw_dialog(
+            frame,
+            &Dialog {
+                title: "New note",
+                fields: vec![
+                    DialogField {
+                        label: "Title",
+                        value: &form.title,
+                        focused: form.on_title,
+                        masked: false,
+                    },
+                    DialogField {
+                        label: "Content",
+                        value: &form.content,
+                        focused: !form.on_title,
+                        masked: false,
+                    },
+                ],
+                body: Vec::new(),
+                error: form.error.as_deref(),
+                hint: "Enter: save | Tab: switch field | Esc: cancel",
+            },
+        ),
+        NotesMode::Editing { form, .. } => draw_dialog(
+            frame,
+            &Dialog {
+                title: "Edit note",
+                fields: vec![
+                    DialogField {
+                        label: "Title",
+                        value: &form.title,
+                        focused: form.on_title,
+                        masked: false,
+                    },
+                    DialogField {
+                        label: "Content",
+                        value: &form.content,
+                        focused: !form.on_title,
+                        masked: false,
+                    },
+                ],
+                body: Vec::new(),
+                error: form.error.as_deref(),
+                hint: "Enter: save | Tab: switch field | Esc: cancel",
+            },
+        ),
+        NotesMode::ConfirmingDelete { title, .. } => {
+            let prompt = format!("Delete note '{title}'?");
+            draw_dialog(
+                frame,
+                &Dialog {
+                    title: "Delete note",
+                    fields: Vec::new(),
+                    body: vec![Line::from(prompt)],
+                    error: None,
+                    hint: "Enter: confirm delete | Esc: cancel",
+                },
+            );
+        }
+        NotesMode::List | NotesMode::Viewing(_) => {}
+    }
+}
+
+/// The profile add / rename / delete-confirm dialog, if one is open. The 0012/ADR-0009
+/// last-profile delete guard is preserved: its server refusal still surfaces on the pane message
+/// band, unchanged.
+fn draw_profile_dialog(frame: &mut Frame, profiles: &ProfilesState) {
+    match &profiles.mode {
+        ProfilesMode::Creating(form) => draw_dialog(
+            frame,
+            &Dialog {
+                title: "New profile",
+                fields: vec![DialogField {
+                    label: "Name",
+                    value: &form.name,
+                    focused: true,
+                    masked: false,
+                }],
+                body: Vec::new(),
+                error: form.error.as_deref(),
+                hint: "Enter: save | Esc: cancel",
+            },
+        ),
+        ProfilesMode::Renaming { form, .. } => draw_dialog(
+            frame,
+            &Dialog {
+                title: "Rename profile",
+                fields: vec![DialogField {
+                    label: "Name",
+                    value: &form.name,
+                    focused: true,
+                    masked: false,
+                }],
+                body: Vec::new(),
+                error: form.error.as_deref(),
+                hint: "Enter: save | Esc: cancel",
+            },
+        ),
+        ProfilesMode::ConfirmingDelete { name, .. } => {
+            let prompt = format!("Delete profile '{name}'?");
+            draw_dialog(
+                frame,
+                &Dialog {
+                    title: "Delete profile",
+                    fields: Vec::new(),
+                    body: vec![Line::from(prompt)],
+                    error: None,
+                    hint: "Enter: confirm delete | Esc: cancel",
+                },
+            );
+        }
+        ProfilesMode::List => {}
+    }
+}
+
+/// The `?` help overlay: a centred dialog listing the full post-auth hotkey reference (the keys
+/// the trimmed footer no longer enumerates), derived from the action keys 0014 documents plus the
+/// globals (Assumption A7). Closed with `Esc` / `?`.
+fn draw_help(frame: &mut Frame) {
+    let body = vec![
+        Line::from("Global"),
+        Line::from("  Tab / Shift+Tab   switch tab (Tasks / Notes / Profiles)"),
+        Line::from("  Up / Down         move the selection"),
+        Line::from("  p                 start / stop the focus timer"),
+        Line::from("  d                 set the timer duration"),
+        Line::from("  r                 refresh the current view"),
+        Line::from("  ? / Esc  close help    q  quit"),
+        Line::from(""),
+        Line::from("Tasks    a add · e edit · c toggle done · x delete"),
+        Line::from("Notes    a add · e edit · x delete · Enter open"),
+        Line::from("Profiles Enter switch · a add · e rename · x delete"),
+    ];
+    draw_dialog(
+        frame,
+        &Dialog {
+            title: "Help — hotkeys",
+            fields: Vec::new(),
+            body,
+            error: None,
+            hint: "?/Esc: close",
+        },
+    );
 }
 
 /// The `Tasks | Notes | Profiles` tab bar with the active tab bold-highlighted.
@@ -212,30 +453,14 @@ fn pane_pending(main: &MainState) -> bool {
     }
 }
 
-/// The message line for the active pane: a duration-edit overlay takes precedence (it overlays any
-/// post-auth pane, ADR-0006 §8), then the pane's own message/sub-flow line.
+/// The message line for the active pane: the active pane's transient status/error message (e.g. a
+/// list-load error or the `last_profile` refusal) plus a timer status message. The add/edit/delete
+/// and duration sub-flows no longer render here — they are dialogs (ADR-0010 §3).
 fn main_message_line(main: &MainState, timer: &Timer) -> String {
-    if let Some(edit) = &timer.editing {
-        let err = edit.error.as_deref().unwrap_or("");
-        return format!("Set duration (min): {}  {err}", edit.buffer);
-    }
     match main.active_tab {
         Tab::Tasks => task_message_line(&main.tasks, timer),
         Tab::Notes => note_message_line(&main.notes),
         Tab::Profiles => profile_message_line(&main.profiles),
-    }
-}
-
-/// The base hotkey caption for the active pane: a duration edit takes precedence, then the pane's
-/// own caption.
-fn main_caption_base(main: &MainState, timer: &Timer) -> &'static str {
-    if timer.editing.is_some() {
-        return "Enter: save  Esc: cancel";
-    }
-    match main.active_tab {
-        Tab::Tasks => task_caption_base(&main.tasks),
-        Tab::Notes => notes_caption_base(&main.notes, timer),
-        Tab::Profiles => profiles_caption_base(&main.profiles, timer),
     }
 }
 
@@ -366,6 +591,123 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     cell
 }
 
+/// A single editable field within a [`Dialog`].
+struct DialogField<'a> {
+    /// The field's label, shown as the bordered box title.
+    label: &'a str,
+    /// The current field value.
+    value: &'a str,
+    /// Whether this field has focus (drawn with a purple border).
+    focused: bool,
+    /// Whether the value is rendered masked (e.g. a password). Always `false` for dialogs today.
+    masked: bool,
+}
+
+/// A centred floating modal: a titled, bordered box overlaying the active view, carrying any
+/// editable fields, an optional confirmation prompt, an optional inline error line, and a footer
+/// hint. The single widget all six dialog kinds (task/note/profile add-edit, the three
+/// delete-confirms, the timer duration edit) and the help overlay feed (ADR-0010 §3).
+struct Dialog<'a> {
+    /// The dialog title shown on the border.
+    title: &'a str,
+    /// The editable fields, in focus order. Empty for a confirmation dialog.
+    fields: Vec<DialogField<'a>>,
+    /// Free-form body lines (a confirmation question, or the help reference). Rendered above the
+    /// hint, below the fields.
+    body: Vec<Line<'a>>,
+    /// An inline error to surface inside the dialog, if any.
+    error: Option<&'a str>,
+    /// The footer hint (e.g. `Enter: save | Tab: switch field | Esc: cancel`).
+    hint: &'a str,
+}
+
+/// The width of a centred dialog box. Wide enough for the field hints and the help reference
+/// without dominating the 80-column test viewport.
+const DIALOG_WIDTH: u16 = 64;
+
+/// Draw a centred floating [`Dialog`] over the current view: clear its footprint, render the
+/// bordered titled box, then lay out fields / body / error / hint inside it. A deep, narrow helper
+/// — one function the six dialog kinds and the help overlay all feed (coding-standards).
+fn draw_dialog(frame: &mut Frame, dialog: &Dialog) {
+    let field_rows = u16::try_from(dialog.fields.len())
+        .unwrap_or(0)
+        .saturating_mul(3);
+    let body_rows = u16::try_from(dialog.body.len()).unwrap_or(0);
+    // Box: top+bottom border (2), fields (3 each), body lines, a blank+error row, the hint row.
+    let inner = field_rows
+        .saturating_add(body_rows)
+        .saturating_add(1) // error line
+        .saturating_add(1); // hint line
+    let box_height = inner.saturating_add(2);
+    let area = centered_rect(DIALOG_WIDTH, box_height, frame.area());
+
+    // Clear the footprint so the underlying panes do not bleed through the modal.
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Magenta))
+        .title(Span::styled(
+            dialog.title.to_owned(),
+            Style::default().add_modifier(Modifier::BOLD),
+        ));
+    let body_area = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut constraints = vec![Constraint::Length(3); dialog.fields.len()];
+    if body_rows > 0 {
+        constraints.push(Constraint::Length(body_rows));
+    }
+    constraints.push(Constraint::Length(1)); // error
+    constraints.push(Constraint::Length(1)); // hint
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(body_area);
+
+    let mut idx = 0;
+    for field in &dialog.fields {
+        if let Some(slot) = chunks.get(idx) {
+            draw_field(
+                frame,
+                *slot,
+                field.label,
+                field.value,
+                field.focused,
+                field.masked,
+            );
+        }
+        idx += 1;
+    }
+    if body_rows > 0 {
+        if let Some(slot) = chunks.get(idx) {
+            frame.render_widget(
+                Paragraph::new(dialog.body.clone()).wrap(Wrap { trim: false }),
+                *slot,
+            );
+        }
+        idx += 1;
+    }
+    if let Some(slot) = chunks.get(idx)
+        && let Some(err) = dialog.error
+    {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                err.to_owned(),
+                Style::default().fg(Color::Red),
+            ))
+            .wrap(Wrap { trim: true }),
+            *slot,
+        );
+    }
+    idx += 1;
+    if let Some(slot) = chunks.get(idx) {
+        frame.render_widget(
+            Paragraph::new(Span::raw(dialog.hint.to_owned())).wrap(Wrap { trim: true }),
+            *slot,
+        );
+    }
+}
+
 fn draw_field(
     frame: &mut Frame,
     area: Rect,
@@ -383,7 +725,9 @@ fn draw_field(
         .borders(Borders::ALL)
         .title(label.to_owned());
     if focused {
-        block = block.border_style(Style::default().add_modifier(Modifier::BOLD));
+        // A focused field is signalled by a purple border (ADR-0010 §3, criterion 6), replacing
+        // the former bold-border cue. Applied uniformly to auth fields and dialog fields.
+        block = block.border_style(Style::default().fg(Color::Magenta));
     }
     frame.render_widget(Paragraph::new(shown).block(block), area);
 }
@@ -411,42 +755,13 @@ fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
     frame.render_stateful_widget(widget, area, &mut state);
 }
 
-/// The message line for the Tasks pane: the open add/edit form fields + inline error, the delete
-/// confirmation, the timer message, or the pane's transient message.
+/// The message line for the Tasks pane: the timer message, or the pane's own transient message.
+/// The add/edit/delete sub-flows render as dialogs now, not here (ADR-0010 §3).
 fn task_message_line(list: &TaskListState, timer: &Timer) -> String {
-    if let Some(add) = &list.adding {
-        let field = if add.on_title { "Title" } else { "Description" };
-        let err = add.error.as_deref().unwrap_or("");
-        format!(
-            "Add task — {field}: title='{}' desc='{}'  {err}",
-            add.title, add.description
-        )
-    } else if let Some(edit) = &list.editing {
-        let field = if edit.on_title {
-            "Title"
-        } else {
-            "Description"
-        };
-        let err = edit.error.as_deref().unwrap_or("");
-        format!(
-            "Edit task — {field}: title='{}' desc='{}'  {err}",
-            edit.title, edit.description
-        )
-    } else if list.confirming_delete.is_some() {
-        "Delete this task? Press x again to confirm, any other key to cancel.".to_owned()
-    } else if let Some(msg) = &timer.message {
+    if let Some(msg) = &timer.message {
         msg.clone()
     } else {
         list.message.clone().unwrap_or_default()
-    }
-}
-
-/// The base hotkey caption for the Tasks pane, varying by the open sub-flow.
-fn task_caption_base(list: &TaskListState) -> &'static str {
-    if list.adding.is_some() || list.editing.is_some() {
-        "Enter: save  Tab: switch field  Esc: cancel"
-    } else {
-        TASK_LIST_CAPTION
     }
 }
 
@@ -493,47 +808,11 @@ fn draw_notes_pane(frame: &mut Frame, area: Rect, notes: &NotesState) {
     }
 }
 
-/// The message line for the notes screen: the open create/edit form's fields + inline error, the
-/// delete confirmation prompt, the timer message, or the screen's transient message.
+/// The message line for the notes screen: the screen's transient message. The create/edit/delete
+/// sub-flows render as dialogs now (ADR-0010 §3); the read-only Viewing mode is unchanged
+/// (Assumption A6) and shows no message-band text.
 fn note_message_line(notes: &NotesState) -> String {
-    match &notes.mode {
-        NotesMode::Creating(form) => {
-            let field = if form.on_title { "Title" } else { "Content" };
-            let err = form.error.as_deref().unwrap_or("");
-            format!(
-                "New note — {field}: title='{}' content='{}'  {err}",
-                form.title, form.content
-            )
-        }
-        NotesMode::Editing { form, .. } => {
-            let field = if form.on_title { "Title" } else { "Content" };
-            let err = form.error.as_deref().unwrap_or("");
-            format!(
-                "Edit note — {field}: title='{}' content='{}'  {err}",
-                form.title, form.content
-            )
-        }
-        NotesMode::ConfirmingDelete { title, .. } => {
-            format!("Delete note '{title}'? Enter: confirm  Esc: cancel")
-        }
-        NotesMode::List | NotesMode::Viewing(_) => notes.message.clone().unwrap_or_default(),
-    }
-}
-
-/// The base hotkey caption for the notes screen, varying by the open sub-flow.
-fn notes_caption_base(notes: &NotesState, timer: &Timer) -> &'static str {
-    if timer.editing.is_some() {
-        "Enter: save  Esc: cancel"
-    } else {
-        match &notes.mode {
-            NotesMode::Creating(_) | NotesMode::Editing { .. } => {
-                "Enter: save  Tab: switch field  Esc: cancel"
-            }
-            NotesMode::ConfirmingDelete { .. } => "Enter: confirm delete  Esc: cancel",
-            NotesMode::Viewing(_) => "Esc: back to list",
-            NotesMode::List => NOTES_CAPTION,
-        }
-    }
+    notes.message.clone().unwrap_or_default()
 }
 
 /// Render the profile switcher: the account's profiles (the active one marked), or the open
@@ -561,37 +840,10 @@ fn draw_profiles_pane(frame: &mut Frame, area: Rect, profiles: &ProfilesState, a
     frame.render_stateful_widget(widget, area, &mut state);
 }
 
-/// The message line for the switcher: the open create/rename form's name + inline error, the
-/// delete confirmation prompt, the timer message, or the screen's transient message (e.g. the
-/// `last_profile` refusal).
+/// The message line for the switcher: the screen's transient message (e.g. the `last_profile`
+/// refusal, ADR-0009 §4). The create/rename/delete sub-flows render as dialogs now (ADR-0010 §3).
 fn profile_message_line(profiles: &ProfilesState) -> String {
-    match &profiles.mode {
-        ProfilesMode::Creating(form) => {
-            let err = form.error.as_deref().unwrap_or("");
-            format!("New profile — name: '{}'  {err}", form.name)
-        }
-        ProfilesMode::Renaming { form, .. } => {
-            let err = form.error.as_deref().unwrap_or("");
-            format!("Rename profile — name: '{}'  {err}", form.name)
-        }
-        ProfilesMode::ConfirmingDelete { name, .. } => {
-            format!("Delete profile '{name}'? Enter: confirm  Esc: cancel")
-        }
-        ProfilesMode::List => profiles.message.clone().unwrap_or_default(),
-    }
-}
-
-/// The base hotkey caption for the switcher, varying by the open sub-flow.
-fn profiles_caption_base(profiles: &ProfilesState, timer: &Timer) -> &'static str {
-    if timer.editing.is_some() {
-        "Enter: save  Esc: cancel"
-    } else {
-        match &profiles.mode {
-            ProfilesMode::Creating(_) | ProfilesMode::Renaming { .. } => "Enter: save  Esc: cancel",
-            ProfilesMode::ConfirmingDelete { .. } => "Enter: confirm delete  Esc: cancel",
-            ProfilesMode::List => PROFILES_CAPTION,
-        }
-    }
+    profiles.message.clone().unwrap_or_default()
 }
 
 /// Format a note's `created_at` for display, at the render seam, from the DTO's `DateTime`

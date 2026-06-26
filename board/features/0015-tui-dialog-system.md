@@ -329,3 +329,19 @@ seam early but the suite goes green as 2/3 land). All five are within `crates/tu
   input, `Esc`→`Cancel` (two-tiered Esc preserved; idle post-auth Esc still quits; in-flight
   Esc-cancel preserved). Help reuses `Event::Cancel` to close (Assumption A2). Files:
   `crates/tui/src/app/mod.rs`, `crates/tui/src/terminal/mod.rs`. Build green.
+  **Task-delete (A5): kept the two-step `x`-again affordance, now rendered as a confirmation
+  dialog** — the armed `confirming_delete` state captures input (globals suppressed) but a second
+  `x` still confirms and `Esc` cancels; behaviour-preserving, the smallest change.
+- [x] 2026-06-26 [tui-dev] Slices 2+3 (committed together — the render-layer changes are
+  interdependent): reusable `draw_dialog` widget + purple focus border + `?` help modal + trimmed
+  footer. Added a deep `draw_dialog` helper (one `Dialog` struct fed by all six dialog kinds + the
+  help overlay) drawn after the panes via `Clear` + `centered_rect`; `draw_field` now renders a
+  **purple** (`Color::Magenta`) border on a focused field (auth form + all dialog fields) instead
+  of `Modifier::BOLD`. Moved task add/edit/delete-confirm, note add/edit/delete-confirm, profile
+  add/rename/delete-confirm, and the timer duration edit OUT of the 2-row message band and INTO
+  dialogs; the message band now shows only the pane's transient status/error (incl. the
+  `last_profile` refusal, preserved). Note "Viewing" mode left as-is (A6). Added the `?` help
+  overlay (`draw_help`) listing the full hotkey reference, toggled by `Event::ToggleHelp`,
+  participating in `overlay_capturing_input()`. Replaced the three long `*_CAPTION` constants with
+  one short `FOOTER_CAPTION` (movement, tab switch, `?`, `q`) + the unchanged spinner/cancel
+  affordance. File: `crates/tui/src/ui/mod.rs`. Build + production-target lint + fmt green.
