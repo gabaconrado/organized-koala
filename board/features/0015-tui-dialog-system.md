@@ -399,23 +399,72 @@ seam early but the suite goes green as 2/3 land). All five are within `crates/tu
   close). Kept the A3 pin `question_mark_is_inert_while_another_dialog_is_open` (a non-help dialog
   open ⇒ `?` is typed text, no help). `./ok.sh test` 380 passed / 0 failed; `./ok.sh lint` clean
   (`--all-targets`); `./ok.sh fmt --check` clean.
-
 - [x] 2026-06-26 [reviewer] Cold review — `REVIEW-STATUS: approved`
   pinned to code-hash `b9884943f36f3ac6c9d56fd2be46e31057a9060a` (last code commit `22c7e92`).
   Gates green (test 380 pass / 0 fail, lint `--all-targets` clean, fmt clean). ADR-0010 §5
-  presentation-only boundary holds (`contract`/`server` untouched; diff is `crates/tui/src/{app,terminal,ui}/mod.rs`
-  + tests only). #1 statelessness preserved (`help_open` transient; state machines/error routing untouched —
-  `last_profile` guard intact). No 0016 creep (`t`/`Space`/detail views absent; only `?` is new). All six
-  acceptance criteria met; `?`-closes-help fix verified. No fix-now findings, no out-of-scope ideas.
-
+  presentation-only boundary holds (`contract`/`server` untouched; diff is
+  `crates/tui/src/{app,terminal,ui}/mod.rs` plus tests only). #1 statelessness preserved
+  (`help_open` transient; state machines/error routing untouched —
+  `last_profile` guard intact). No 0016 creep (`t`/`Space`/detail views absent; only `?` is new).
+  All six acceptance criteria met; `?`-closes-help fix verified. No fix-now findings, no
+  out-of-scope ideas.
 - [x] 2026-06-26 [verifier] Live verify — **VERIFIED** pinned to code-hash
   `b9884943f36f3ac6c9d56fd2be46e31057a9060a` (head commit `ad0dd70`). No-delta premise confirmed
-  (`contract`/`server`/`migrations`/`deploy`/`ok.sh` byte-identical to main; diff is `crates/tui/src/{app,terminal,ui}/mod.rs`
-  + tui tests). Clause-4 part 1: `TestBackend` suite green — `tests/dialogs.rs` 21/0 covering all six
-  acceptance criteria + supporting suites all 0-fail. Clause-4 part 2: `./ok.sh up` booted clean (postgres
-  healthy, one-shot `migrate` exit 0 — no history conflict, server healthy on :8080); exercised live the
+  (`contract`/`server`/`migrations`/`deploy`/`ok.sh` byte-identical to main; diff is
+  `crates/tui/src/{app,terminal,ui}/mod.rs` plus tui tests). Clause-4 part 1: `TestBackend` suite
+  green — `tests/dialogs.rs` 21/0 covering all six acceptance criteria + supporting suites all
+  0-fail. Clause-4 part 2: `./ok.sh up` booted clean (postgres healthy, one-shot `migrate` exit 0
+  — no history conflict, server healthy on :8080); exercised live the
   reqwest/API paths the dialogs drive — auth register/login (+401 invalid_credentials), profiles list,
   tasks/notes create(201)/list/delete(204), timer config(GET/PUT)+session start/stop, error contract
   (400 validation_failed, 401 unauthenticated), profile-scoping (404 not_found, no cross-profile read),
   OTel per-handler spans. All shapes/status/error-contract/scoping unchanged. Left `deploy_postgres-data`
   intact (no `down -v`).
+
+## Summary
+
+Phase 2 of the three-part TUI overhaul (0014 → **0015** → 0016): a **`tui`-crate-only** dialog
+system, with **no** `contract`/server/domain change (the presentation-only boundary binds per
+[ADR-0010][adr-0010] §5; reviewer + verifier both confirmed `contract`/`server`/`migrations`/
+`deploy`/`ok.sh` byte-identical to `main`).
+
+What shipped (on the branch, `crates/tui/` only):
+
+- **Reusable dialog framework.** A deep, narrow `draw_dialog` helper in `ui/mod.rs` — one
+  `Dialog` struct fed by all six dialog kinds + the help overlay — drawn after the panes via
+  `Clear` + `centered_rect` so it floats centred over the tabbed view, carrying a title, fields
+  and/or a confirm/cancel prompt, and an optional inline error line.
+- **`?` help modal + trimmed footer.** A transient `App.help_open` flag toggled by
+  `Event::ToggleHelp` (`?`) renders a centred help modal listing the full hotkey reference; the
+  three long `*_CAPTION` constants collapse into one short `FOOTER_CAPTION` (movement, tab switch,
+  `?`, `q`) plus the unchanged in-flight spinner + "(Esc to cancel)" affordance.
+- **Add / delete / timer dialogs.** Task add/edit (title+description), note add/edit
+  (title+content), profile add/rename (name), the three delete-confirmations, and the timer
+  duration edit all moved **out of the 2-row message band and into dialogs**; the message band now
+  carries only the pane's transient status/error (the `last_profile` refusal preserved). State
+  machines + submit/cancel + chained-refresh + error routing are untouched — only the render site
+  moved.
+- **Purple focus border.** `draw_field` renders a focused field's border in `Color::Magenta`
+  (replacing `Modifier::BOLD`), applied to the auth form fields + all dialog fields; non-focused
+  fields keep the plain border.
+- **Unified suppression rule + two-tiered Esc.** A single `App::overlay_capturing_input()`
+  predicate replaces the scattered `adding.is_some()`/`in_sub_flow()`/`editing_duration` gates: while
+  any overlay captures input the globals (`q`/`r`/`?`/`p`/`d`/tab-switch) are suppressed and `Esc`
+  cancels the overlay; `Esc` with no overlay on a post-auth screen still quits, and in-flight
+  `Esc`-cancel is preserved.
+- **`?`-closes-help fix (in-cycle).** `map_key` gained a distinct `help_open` param (5-arg
+  `(screen, overlay_capturing, help_open, editing_duration, key)`) so a second `?` closes the help
+  overlay end-to-end through the keymap — the advertised `?/Esc: close` affordance now works; `?`
+  stays suppressed while a non-help dialog captures input (A3).
+
+Agents involved: **tui-dev** (slice 1 overlay/suppression seam, slices 2+3 dialog framework + help
+modal + footer trim, slice 4 docs, + the `?`-closes-help fix-now) and **tester** (slice 5
+`TestBackend` suite — new `tests/dialogs.rs` + extensions across the existing suites, plus the
+follow-up updating the suite for the 5-arg `map_key` and flipped `?`-closes-help behaviour).
+
+Gate results: `./ok.sh test` **380 passed / 0 failed**; `./ok.sh lint` clean (`--all-targets`);
+`./ok.sh fmt --check` clean. **reviewer approved** + **verifier VERIFIED**, both pinned to
+code-hash `b9884943f36f3ac6c9d56fd2be46e31057a9060a`.
+
+coverage: 73.80% line (the headline `TOTAL` line-coverage from a fresh `./ok.sh coverage` in the
+worktree; docker plus the throwaway test Postgres booted cleanly). Report-only — never a gate.
