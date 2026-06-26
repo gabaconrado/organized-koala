@@ -2,7 +2,7 @@
 id: 0014
 title: TUI layout shell — top-level tabs, centered title, centered auth form, tight footer
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []
@@ -271,6 +271,13 @@ the acceptance criteria):
   `{code,message}` (401 unauthenticated/invalid_credentials), profile-scoping #4 (cross-profile
   read → 404 not_found, no leak), OTel spans `service.name: organized-koalad` for every path.
   No server/contract delta to exercise (presentation-only, as scoped). Stack torn down (no `-v`).
+- [x] 2026-06-26 [orchestrator] **Step-7 freshen.** Rebased onto `main` (which advanced in step 6
+  with the handoff + dashboard/build-plan, docs/board only). The one conflict was this Board file
+  (`main`'s frozen pointer vs. the branch's authoritative copy) — resolved in favour of the branch.
+  `./ok.sh code-hash HEAD` is **unchanged** at `bf65aa9612bf1633bf75e64f66a3dfddcfb4aa10`, so the
+  approved+verified verdicts above **carry forward untouched** (no relabelling). Re-ran the gates on
+  the rebased tree: `fmt --check`/`lint` exit 0, `./ok.sh test` all suites `ok` 0 failed (`navigation`
+  14). `review`→`awaiting-merge`. **Terminal for the AI cycle — awaiting the human's ff-merge.**
 
 ## Summary
 
