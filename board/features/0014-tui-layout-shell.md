@@ -3,8 +3,6 @@ id: 0014
 title: TUI layout shell — top-level tabs, centered title, centered auth form, tight footer
 type: feature      # feature | chore
 status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
-# ^ FROZEN at claim snapshot — authoritative copy is on branch feature/0014-tui-layout-shell
-#   (cut from main@6511941). The human's merge brings the finished item back to main.
 priority: medium    # high | medium | low
 parent: null
 depends-on: []
@@ -217,6 +215,13 @@ the acceptance criteria):
   phase against ADR-0010's phase boundary.
 
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
+
+## Log / comments
+
+- [x] 2026-06-26 [orchestrator] Claimed `ready`→`working`. Worktree
+  `.claude/worktrees/0014-tui-layout-shell` cut from `main@6511941` (carries ADR-0010 + the
+  plan). Session: drive-0014. Build proceeds in plan slice order (slices 1–4 `tui-dev`, slice 5
+  `tester`).
 
 <!-- feature: needs an `architect` plan (`plan` skill) writing a `## Plan(s)` block before code. -->
 <!-- Open question for the architect: does the new TUI interaction model (tabs + later dialogs + detail views, 0014–0016) warrant its own ADR for the TUI shell, or is it presentation-only and ADR-free? Settle before planning 0015/0016. -->
