@@ -2,7 +2,7 @@
 id: 0014
 title: TUI layout shell — top-level tabs, centered title, centered auth form, tight footer
 type: feature      # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []
