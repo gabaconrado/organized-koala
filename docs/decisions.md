@@ -13,6 +13,7 @@ One row per ADR. Newest at the bottom.
 | [0007][adr-0007] | Notes wire contract — module, CRUD routes, flat shape | Accepted | 2026-06-24 |
 | [0008][adr-0008] | Task mutation — generalize `close` into PATCH, add DELETE | Accepted | 2026-06-24 |
 | [0009][adr-0009] | Profile mutations — create/rename/delete-cascade, last-profile guard, name uniqueness | Accepted | 2026-06-24 |
+| [0010][adr-0010] | TUI navigation and interaction model (tabs, dialogs, detail views) | Accepted | 2026-06-26 |
 
 [adr-0001]: ./adr/0001-foundational-architecture.md
 [adr-0002]: ./adr/0002-pomodoro-timer-authority.md
@@ -23,3 +24,4 @@ One row per ADR. Newest at the bottom.
 [adr-0007]: ./adr/0007-notes-wire-contract.md
 [adr-0008]: ./adr/0008-task-mutation-generalization.md
 [adr-0009]: ./adr/0009-profile-mutations.md
+[adr-0010]: ./adr/0010-tui-navigation-and-interaction-model.md
