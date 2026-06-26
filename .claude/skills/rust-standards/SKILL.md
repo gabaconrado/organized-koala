@@ -115,6 +115,29 @@ Idiomatic Rust layout (see [Rust by Example — Testing](https://doc.rust-lang.o
 - **Never** `#[derive(Debug)]` a struct, error variant, or DTO that holds a bare secret —
   hold it as a `Secret<_>` (or hand-write a redacting `Debug`). A bare secret reachable from a
   `Debug` impl, a log, or auto-instrumentation is a review-blocking leak.
+- **The `missing_debug_implementations = "deny"` lint actively pulls *against* this rule —
+  resolve the tension with a redacting holder, never a bare derive (learned 0013).** The
+  workspace denies `rust::missing_debug_implementations`, so every public type *must* be
+  `Debug`; the path of least resistance is `#[derive(Debug)]`, which on a type holding a bare
+  secret is exactly the leak above. The lint and the secret rule are not in conflict once the
+  secret is **not a bare field**: wrap it so the type can satisfy `Debug` *and* redact in one
+  move. The two sanctioned holders, both already templated in-repo, are:
+  - `contract::Password` — a newtype with a hand-written `Debug` → `[REDACTED]` and an
+    `expose()`/point-of-use accessor; and
+  - `tui::app::SessionToken` (`crates/tui/src/app/token.rs`, 0013) — the same shape for the
+    session bearer JWT, chosen over `secrecy` to avoid a new dependency for one field (the
+    newtype redacts but does **not** zeroize; `secrecy::SecretString` redacts **and** zeroizes
+    on drop — prefer it when zeroize-on-drop matters).
+
+  So: a public type that needs a secret field derives `Debug` freely **as long as** the secret
+  is held in a redacting newtype, never as a bare `String`/`Vec<u8>`. **This lint is mechanical;
+  the secret rule is prose-only and cold review is diff-scoped** — a bare-secret-in-`Debug`
+  introduced in one cycle is invisible to every later cold reviewer (this is how the 0013 leak,
+  introduced in 0004 after both this rule and the `Password` template existed, survived through
+  0011). When you add a secret field, treat it as a checklist item: *is this secret in a
+  redacting holder before I derive `Debug`?* A future mechanical guard (a clippy/CI check for
+  "bare secret reachable from `Debug`") would close the gap durably and is a candidate Board
+  `chore`; until then this callout is the safety net.
 
 ### General
 

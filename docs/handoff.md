@@ -5,6 +5,95 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-26 (0013 — redact the session JWT in the `tui` `Session` Debug leak; high `chore`)
+
+A security `chore`: the `tui` session **bearer JWT was held as a bare `String`** inside structs and
+enums that `#[derive(Debug)]` (`Session`, all 17 `ClientRequest::*` variants, `Outcome::ListProfiles`),
+so the secret was reachable through any `{:?}` — a log line, a `tracing` span field, a panic message,
+or future auto-instrumentation. A direct violation of `rust-standards` → *Sensitive data*. Branch
+`feature/0013-session-token-debug-leak`; cold reviewer **approved** (chore invariant attested), the
+live verifier pass correctly **skipped** (chore track — no live-observable change). Stopped at the
+AI-terminal `awaiting-merge` on the branch.
+
+What shipped (on the branch, `tui` crate only — **no** wire surface touched):
+
+- **`crates/tui/src/app/token.rs`** (new) — a `SessionToken(String)` newtype with a **hand-written
+  `Debug` → `[REDACTED]`** (no `Display`/`Serialize`) and `expose(&self) -> &str` for use only at the
+  point the bearer string is attached. Mirrors the in-repo `contract::Password` template; doctest
+  asserts both `expose()` returns the value AND `format!("{token:?}") == "[REDACTED]"`.
+- Bare `token: String` → `SessionToken` across every Debug-reachable holder: `Session.token`
+  (`app/mod.rs`), all 17 `ClientRequest::*` `token` fields + `Outcome::ListProfiles.token`
+  (`app/protocol.rs`). The worker (`client/worker.rs`) exposes the bearer string only at point of use
+  (`token.expose()` → `bearer_auth`); the test worker-analogue executor got the same mechanical
+  `&token` → `token.expose()` adaptation (no test-intent change). The `Client` trait's `token: &str`
+  params are ephemeral point-of-use borrows (not stored Debug-reachable fields) — left as-is; the wire
+  bearer string is byte-identical. No bare `token: String` remains in `crates/tui/src/`.
+- **Tests** — `crates/tui/tests/redaction.rs` (public-API only): three tests formatting `{:?}` of
+  `Session`, `ClientRequest::ListTasks`, and `Outcome::ListProfiles`, each asserting the token
+  substring is **absent** and `[REDACTED]` is **present**, with a non-plausible placeholder token
+  (`SECRET.JWT.VALUE`) so the secret scan passes.
+
+**Redaction-shape decision.** Implementer chose the **local redacting newtype over
+`secrecy::SecretString`** — the `Password` pattern is already in-repo, the `Client` methods take
+`token: &str` so the newtype redacts in one type with no new dependency and no per-call-site
+`expose_secret()` churn, keeping trait/wire signatures byte-identical. Trade-off recorded: the
+newtype redacts but does **not** zeroize on drop (which `secrecy` would) — acceptable for a
+process-lifetime in-memory token under #1.
+
+coverage: **66.90%** line (the headline `TOTAL` from a fresh `./ok.sh coverage` in the worktree;
+docker + throwaway test Postgres booted cleanly). Report-only — never a gate.
+
+Verdict (@ code-hash `e5925c5139e52846d8593c4be3ab2d0516d49fa0`, last code sha `e86f956`):
+
+- **reviewer — REVIEW-STATUS: approved.** Mechanical gate green (`fmt --check`/`lint`/`test`); leak
+  closure confirmed (`SessionToken` redacts, exposed only at point of use, nothing re-exposes it; all
+  17 variants + `Outcome::ListProfiles` + `Session` covered — redaction complete, not merely moved).
+  **Chore invariant attested:** no behaviour change (wire bearer string byte-identical), no
+  `contract`/wire change #2 (`git diff main..HEAD -- crates/contract/` empty; no `Cargo.toml`/
+  `Cargo.lock` change), no domain-structure change #3.
+
+**The load-bearing learning this cycle — a mechanical lint pulls *against* a prose-only secret
+rule, and that tension is how the leak survived from 0004 through 0011.** The operator's root-cause
+comment nailed it: the `Session` struct was introduced in 0004 (`4b9eda0`) **after** both the
+`rust-standards` secret rule and the `contract::Password` redacting template already existed — so it
+was a violation of a **pre-existing documented rule**, missed by the 0004 author and cold reviewer,
+then carried silently through 0005/0008/0010/0011 because **cold review is diff-scoped** (pre-existing
+code is out of each cycle's review scope) until 0012's reviewer flagged it. Two contributing factors:
+(1) the secret rule is **prose-only**, with no clippy/lint enforcement for "bare secret reachable from
+`Debug`"; (2) `[workspace.lints] rust.missing_debug_implementations = "deny"` actively pushes devs to
+add `#[derive(Debug)]` to **every** public type — colliding with the secret rule, and by default the
+bare derive wins. Durable fix this cycle: a **`rust-standards` callout** (home #1, on `main`) under
+*Sensitive data* making the `missing_debug_implementations`-vs-secret tension explicit and naming the
+resolution pattern (a redacting newtype: `contract::Password` / `tui::app::SessionToken`), framed as
+a per-secret-field checklist item since cold review can't catch the pre-existing case. **A mechanical
+guard remains the real durable fix** — recorded below as a recommended future Board `chore`.
+
+Durable learnings: **one `rust-standards` addition** — the Debug-lint-vs-secret-redaction callout
+(above). **No new ADR** (a `tui`-internal representation change, no contract/domain decision), **no
+new crate → no new dev agent** (`SessionToken` is a module inside the existing `tui` crate, already
+owned by `tui-dev`). **No new CLAUDE.md hard-constraint or gotcha** earned this cycle: the secret-leak
+rule already lives in `rust-standards` (its correct home); this cycle sharpens that skill rather than
+adding a cross-cutting domain rule.
+
+**Recommended future Board item (mintable `chore`, low priority) — a mechanical secret-in-`Debug`
+guard.** The prose callout is the safety net, not the fix. The durable fix is a **mechanical check**
+that a bare secret cannot be reachable from a derived `Debug` (e.g. a clippy lint / custom static
+check / a CI grep-and-fail over `token`/`password`/`secret`-typed bare fields on `#[derive(Debug)]`
+types, or a marker-trait convention the lint keys on). This is its own scoped piece of work (likely
+`platform-dev` + a tooling decision), **not** in scope for 0013 — flagged here so the orchestrator can
+mint it directly. Until it exists, the `rust-standards` callout + the two redacting-newtype templates
+are the guard.
+
+**Homes.** Feature-local on the branch (home #2): the item's `## Summary` (with the coverage line),
+committed on `feature/0013-session-token-debug-leak` (Board-only, code-hash unchanged → verdict
+intact). Cross-cutting/derived on `main` (homes #1/#3): this `docs/handoff.md` entry (+ the "What
+works right now" snapshot refreshed for the 0013 state), the `rust-standards` callout, the brought-
+current `docs/build-plan.md`, and the regenerated `board/README.md`. **`main`'s frozen copy of
+`board/features/0013-session-token-debug-leak.md` stays untouched** at the claim snapshot (`ready`)
+until the human's merge. The orchestrator flips the branch status to `awaiting-merge` after this step.
+
+---
+
 ## Handoff — 2026-06-25 (0012 — Profiles create/update/delete + TUI switcher; the final domain feature)
 
 The **last domain feature** shipped: full profile management. Today's only profile surface was
@@ -1431,8 +1520,8 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   re-passed); an operator-authorized doc-only README fix then moved the hash to
   `97cbc025523bdff1907e9552fd3636d3a874b589` (verdicts carried forward by authorization).
   Fast-forwarded to `main` at `9635608`; worktree + branch removed.
-- **Profiles create/update/delete + TUI switcher is at `awaiting-merge` on
-  `feature/0012-profiles-crud-and-switcher`** (0012, a `feature`, live-verified — **the final
+- **Profiles create/update/delete + TUI switcher is MERGED on `main`**
+  (0012, a `feature`, live-verified — **the final
   domain feature; organized-koala is now functionally complete**): the only profile surface was
   list + register-time bootstrap; 0012 adds `POST /api/profiles` (201), `PATCH /api/profiles/{id}`
   (200), `DELETE /api/profiles/{id}` (204) under [ADR-0009][adr-0009], plus a client-side TUI
@@ -1448,4 +1537,18 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   `71fb7ecf327fbd42a14cb19456207885c782fe49`; coverage 66.91% line. The cycle's load-bearing
   learning — `./ok.sh prepare` is now self-contained (`3e0094b` on `main`), completing the
   "every DB-needing `ok.sh` verb self-boots the shared test PG" pattern (`test`/`coverage`/`prepare`).
-  Awaiting the human's merge.
+  Fast-forwarded to `main` at `685b4de`; worktree + branch removed. The reviewer's pre-existing
+  `Session.token` JWT-`Debug`-leak nit was promoted to **0013** (high `chore`).
+- **The session JWT `Debug` leak in the `tui` is at `awaiting-merge` on
+  `feature/0013-session-token-debug-leak`** (0013, a high `chore`, cold-review-approved; live
+  verifier correctly skipped): the bearer JWT, previously a bare `String` reachable from a derived
+  `Debug` on `Session` + all 17 `ClientRequest::*` variants + `Outcome::ListProfiles`, is now held in
+  a `SessionToken(String)` newtype (`crates/tui/src/app/token.rs`) with a hand-written `Debug` →
+  `[REDACTED]` and an `expose()` accessor used only at the point the `Authorization: Bearer` header
+  is attached. Mirrors the in-repo `contract::Password` template (chosen over `secrecy` to avoid a new
+  dependency for one field); the wire bearer string is byte-identical. `tui`-only — no `contract`/wire
+  (#2), no domain (#3), no behaviour change beyond `Debug` rendering. Reviewer **approved** with the
+  chore invariant attested (code-hash `e5925c5139e52846d8593c4be3ab2d0516d49fa0`); coverage 66.90%
+  line. This cycle sharpened `rust-standards` with a callout on the
+  `missing_debug_implementations`-lint-vs-secret-redaction tension (the root cause that let this leak
+  survive from 0004 through 0011 under diff-scoped cold review). Awaiting the human's merge.
