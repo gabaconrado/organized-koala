@@ -5,44 +5,47 @@
 //! `TestBackend` for buffer-snapshot assertions (ADR-0003).
 
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Alignment, Constraint, Direction, Flex, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::app::{
-    App, AuthField, AuthMode, AuthState, NotesMode, NotesState, ProfilesMode, ProfilesState,
-    Screen, TaskListState, Timer,
+    App, AuthField, AuthMode, AuthState, MainState, NotesMode, NotesState, ProfilesMode,
+    ProfilesState, Screen, Tab, TaskListState, Timer,
 };
 use contract::{Note, TaskStatus, TimerSession};
 
 /// The frames of the in-flight spinner, cycled by the poll loop's tick counter.
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 
-/// The base hotkey caption for the task-list screen (idle, not in a sub-flow). The global timer
-/// keys (`p`, `d`) are shown on every post-auth screen so they are discoverable (ADR-0006 §8.2).
+/// The base hotkey caption for the Tasks tab (idle, not in a sub-flow). `Tab` switches tabs (the
+/// tab bar replaces the old `n: notes`/`s: profiles` cross-screen keys); the global timer keys
+/// (`p`, `d`) are shown on every post-auth pane so they are discoverable (ADR-0006 §8.2).
 /// ` | `-separated so wrap points fall on separators. The phrasing is kept compact so that — once
 /// the in-flight spinner + ` (Esc to cancel)` affordance is appended — the wrapped caption stays
 /// within the bottom band at the 80×24 test viewport without clipping the cancel affordance
 /// (ADR-0006 §8.3, learned 0010).
-const TASK_LIST_CAPTION: &str = "a: add | e: edit | c: done | x: del | n: notes | s: profiles | p: timer | d: dur | r: refresh | q: quit";
+const TASK_LIST_CAPTION: &str = "Tab: switch tab | a: add | e: edit | c: done | x: del | p: timer | d: dur | r: refresh | q: quit";
 
-/// The base hotkey caption for the notes screen (idle list). Mirrors the task-list caption with
-/// the notes commands (`a` create, `e` edit, `x` delete, Enter open) and an `Esc` back-to-tasks.
-/// Kept short enough that the caption plus the appended spinner + cancel affordance stays within
-/// the bottom band at the 80×24 viewport (ADR-0006 §8.3).
-const NOTES_CAPTION: &str = "a: add | e: edit | x: del | Enter: open | Esc: back | p: timer | d: dur | r: refresh | q: quit";
+/// The base hotkey caption for the Notes tab (idle list). The notes commands (`a` create, `e`
+/// edit, `x` delete, Enter open) with `Tab` switching tabs. Kept short enough that the caption
+/// plus the appended spinner + cancel affordance stays within the bottom band at the 80×24
+/// viewport (ADR-0006 §8.3).
+const NOTES_CAPTION: &str = "Tab: switch tab | a: add | e: edit | x: del | Enter: open | p: timer | d: dur | r: refresh | q: quit";
 
-/// The base hotkey caption for the profile switcher (idle list). `Enter` picks the selected
-/// profile (client-side re-scope; ADR-0009 §5). Kept short enough that the caption plus the
-/// appended spinner + cancel affordance stays within the bottom band at the 80×24 viewport
-/// (ADR-0006 §8.3, learned 0010).
-const PROFILES_CAPTION: &str = "Enter: switch | a: add | e: rename | x: del | Esc: back | p: timer | d: dur | r: refresh | q: quit";
+/// The base hotkey caption for the Profiles tab (idle list). `Enter` picks the selected profile
+/// (client-side re-scope; ADR-0009 §5), `Tab` switches tabs. Kept short enough that the caption
+/// plus the appended spinner + cancel affordance stays within the bottom band at the 80×24
+/// viewport (ADR-0006 §8.3, learned 0010).
+const PROFILES_CAPTION: &str = "Tab: switch tab | Enter: switch | a: add | e: rename | x: del | p: timer | d: dur | r: refresh | q: quit";
 
 /// Height (rows) of the bottom band on a post-auth screen: the hotkey caption (which may wrap)
 /// on the left and the global timer widget on the right. Three rows so the wrapped caption plus
 /// the appended in-flight spinner + cancel affordance stays fully visible at the 80×24 viewport
-/// without clipping the cancel affordance (ADR-0006 §8.3).
+/// without clipping the cancel affordance (ADR-0006 §8.3, learned 0010). The footer is pulled
+/// flush to the bottom row by removing the outer bottom margin, not by shrinking this band
+/// (Assumption A5).
 const BOTTOM_BAND_ROWS: u16 = 3;
 
 /// The spinner glyph for the given tick, or empty when not pending. Pure so the spinner cadence
@@ -99,26 +102,148 @@ pub fn timer_widget_label(timer: &Timer) -> String {
 pub fn draw(frame: &mut Frame, app: &App, tick: u64) {
     match app.screen() {
         Screen::Auth(auth) => draw_auth(frame, auth, tick),
-        Screen::TaskList(list) => {
-            let profile = app.session().map_or("", |s| s.profile_name.as_str());
-            draw_task_list(frame, list, app.timer(), profile, tick);
-        }
-        Screen::Notes(notes) => {
-            let profile = app.session().map_or("", |s| s.profile_name.as_str());
-            draw_notes(frame, notes, app.timer(), profile, tick);
-        }
-        Screen::Profiles(profiles) => {
-            let active = app.session().map_or("", |s| s.profile_id.as_str());
-            draw_profiles(frame, profiles, app.timer(), active, tick);
-        }
+        Screen::Main(main) => draw_main(frame, main, app, tick),
         Screen::Offline { message, pending } => {
             draw_offline(frame, message, pending.is_some(), tick);
         }
     }
 }
 
+/// The post-auth tabbed view (ADR-0010 §1–2): a centred contextual title, the
+/// `Tasks | Notes | Profiles` tab bar, the active pane as the main content, a message line, and
+/// the footer (caption + timer) pulled flush to the bottom row.
+fn draw_main(frame: &mut Frame, main: &MainState, app: &App, tick: u64) {
+    // Keep the left/right/top inset but pull the footer flush to the bottom row: a uniform
+    // `margin(1)` would leave a blank row below the footer, so the bottom margin is dropped to 0
+    // while the top + sides keep their 1-row inset (ADR-0010 §2 "tight footer").
+    let full = frame.area();
+    let area = Rect {
+        x: full.x.saturating_add(1),
+        y: full.y.saturating_add(1),
+        width: full.width.saturating_sub(2),
+        height: full.height.saturating_sub(1),
+    };
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            // Title (centred), tab bar, the active pane, the message line, then the flush footer.
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(3),
+            Constraint::Length(2),
+            Constraint::Length(BOTTOM_BAND_ROWS),
+        ])
+        .split(area);
+
+    if let Some(slot) = chunks.first() {
+        let account = app.session().map_or("", |s| s.account.as_str());
+        let profile = app.session().map_or("", |s| s.profile_name.as_str());
+        // The exact, load-bearing title format (literal brackets, a hyphen, `organized koala` with
+        // a space; ADR-0010 §2): `organized koala - <user> @ [<profile>]`.
+        let title = format!("organized koala - {account} @ [{profile}]");
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                title,
+                Style::default().add_modifier(Modifier::BOLD),
+            ))
+            .alignment(Alignment::Center),
+            *slot,
+        );
+    }
+
+    if let Some(slot) = chunks.get(1) {
+        frame.render_widget(
+            Paragraph::new(tab_bar_line(main.active_tab)).alignment(Alignment::Center),
+            *slot,
+        );
+    }
+
+    if let Some(slot) = chunks.get(2) {
+        match main.active_tab {
+            Tab::Tasks => draw_task_pane(frame, *slot, &main.tasks),
+            Tab::Notes => draw_notes_pane(frame, *slot, &main.notes),
+            Tab::Profiles => {
+                let active = app.session().map_or("", |s| s.profile_id.as_str());
+                draw_profiles_pane(frame, *slot, &main.profiles, active);
+            }
+        }
+    }
+
+    if let Some(slot) = chunks.get(3) {
+        let text = main_message_line(main, app.timer());
+        frame.render_widget(
+            Paragraph::new(Span::raw(text)).wrap(Wrap { trim: true }),
+            *slot,
+        );
+    }
+
+    if let Some(slot) = chunks.get(4) {
+        let base = main_caption_base(main, app.timer());
+        let pending = pane_pending(main) || app.timer().is_pending();
+        let caption = caption_with_spinner(base, pending, tick);
+        draw_bottom_row(frame, *slot, &caption, app.timer());
+    }
+}
+
+/// The `Tasks | Notes | Profiles` tab bar with the active tab bold-highlighted.
+fn tab_bar_line(active: Tab) -> Line<'static> {
+    let tab_span = |label: &'static str, tab: Tab| {
+        if tab == active {
+            Span::styled(label, Style::default().add_modifier(Modifier::REVERSED))
+        } else {
+            Span::raw(label)
+        }
+    };
+    Line::from(vec![
+        tab_span("Tasks", Tab::Tasks),
+        Span::raw(" | "),
+        tab_span("Notes", Tab::Notes),
+        Span::raw(" | "),
+        tab_span("Profiles", Tab::Profiles),
+    ])
+}
+
+/// Whether the active pane has a request outstanding (drives the footer spinner).
+fn pane_pending(main: &MainState) -> bool {
+    match main.active_tab {
+        Tab::Tasks => main.tasks.is_pending(),
+        Tab::Notes => main.notes.is_pending(),
+        Tab::Profiles => main.profiles.is_pending(),
+    }
+}
+
+/// The message line for the active pane: a duration-edit overlay takes precedence (it overlays any
+/// post-auth pane, ADR-0006 §8), then the pane's own message/sub-flow line.
+fn main_message_line(main: &MainState, timer: &Timer) -> String {
+    if let Some(edit) = &timer.editing {
+        let err = edit.error.as_deref().unwrap_or("");
+        return format!("Set duration (min): {}  {err}", edit.buffer);
+    }
+    match main.active_tab {
+        Tab::Tasks => task_message_line(&main.tasks, timer),
+        Tab::Notes => note_message_line(&main.notes),
+        Tab::Profiles => profile_message_line(&main.profiles),
+    }
+}
+
+/// The base hotkey caption for the active pane: a duration edit takes precedence, then the pane's
+/// own caption.
+fn main_caption_base(main: &MainState, timer: &Timer) -> &'static str {
+    if timer.editing.is_some() {
+        return "Enter: save  Esc: cancel";
+    }
+    match main.active_tab {
+        Tab::Tasks => task_caption_base(&main.tasks),
+        Tab::Notes => notes_caption_base(&main.notes, timer),
+        Tab::Profiles => profiles_caption_base(&main.profiles, timer),
+    }
+}
+
+/// The width of the centred auth box. Wide enough for the longest hint without dominating the
+/// terminal; the box is centred on both axes (ADR-0010 §2).
+const AUTH_BOX_WIDTH: u16 = 60;
+
 fn draw_auth(frame: &mut Frame, auth: &AuthState, tick: u64) {
-    let area = frame.area();
     let (title, base_hint) = match auth.mode {
         AuthMode::Login => (
             "Login",
@@ -174,22 +299,28 @@ fn draw_auth(frame: &mut Frame, auth: &AuthState, tick: u64) {
         ],
     };
 
+    // The box is just tall enough for the title, every field (3 rows each), the error band, and
+    // the hint — then centred on both axes (Flex::Center).
+    let field_rows = u16::try_from(fields.len()).unwrap_or(0).saturating_mul(3);
+    let box_height = field_rows.saturating_add(1 + 2 + 2);
+    let box_area = centered_rect(AUTH_BOX_WIDTH, box_height, frame.area());
+
     let mut constraints = vec![Constraint::Length(1)];
     constraints.extend(std::iter::repeat_n(Constraint::Length(3), fields.len()));
     constraints.push(Constraint::Length(2));
-    constraints.push(Constraint::Min(0));
+    constraints.push(Constraint::Length(2));
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .margin(1)
         .constraints(constraints)
-        .split(area);
+        .split(box_area);
 
     if let Some(slot) = chunks.first() {
         frame.render_widget(
             Paragraph::new(Span::styled(
-                format!("organized-koala — {title}"),
+                format!("organized koala - {title}"),
                 Style::default().add_modifier(Modifier::BOLD),
-            )),
+            ))
+            .alignment(Alignment::Center),
             *slot,
         );
     }
@@ -219,6 +350,22 @@ fn draw_auth(frame: &mut Frame, auth: &AuthState, tick: u64) {
     }
 }
 
+/// A `width × height` rectangle centred on both axes within `area` (clamped to `area`). Used for
+/// the centred auth box (ADR-0010 §2).
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let [row] = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(height.min(area.height))])
+        .flex(Flex::Center)
+        .areas(area);
+    let [cell] = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(width.min(area.width))])
+        .flex(Flex::Center)
+        .areas(row);
+    cell
+}
+
 fn draw_field(
     frame: &mut Frame,
     area: Rect,
@@ -241,193 +388,108 @@ fn draw_field(
     frame.render_widget(Paragraph::new(shown).block(block), area);
 }
 
-fn draw_task_list(
-    frame: &mut Frame,
-    list: &TaskListState,
-    timer: &Timer,
-    profile: &str,
-    tick: u64,
-) {
-    let area = frame.area();
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(1)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Min(3),
-            Constraint::Length(2),
-            Constraint::Length(BOTTOM_BAND_ROWS),
-        ])
-        .split(area);
-
-    if let Some(slot) = chunks.first() {
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                format!("organized-koala — tasks [{profile}]"),
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
-            *slot,
-        );
-    }
-
-    if let Some(slot) = chunks.get(1) {
-        let items: Vec<ListItem> = list
-            .tasks
-            .iter()
-            .map(|task| {
-                let marker = match task.status {
-                    TaskStatus::Done => "[x]",
-                    TaskStatus::Open => "[ ]",
-                };
-                ListItem::new(Line::from(format!("{marker} {}", task.title)))
-            })
-            .collect();
-        let widget = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title("Tasks"))
-            .highlight_symbol("> ")
-            .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-        let mut state = ListState::default();
-        state.select(list.selected);
-        frame.render_stateful_widget(widget, *slot, &mut state);
-    }
-
-    if let Some(slot) = chunks.get(2) {
-        let text = if let Some(edit) = &timer.editing {
-            // The duration-edit sub-flow overlays the active screen's message line (ADR-0006 §8).
-            let err = edit.error.as_deref().unwrap_or("");
-            format!("Set duration (min): {}  {err}", edit.buffer)
-        } else if let Some(add) = &list.adding {
-            let field = if add.on_title { "Title" } else { "Description" };
-            let err = add.error.as_deref().unwrap_or("");
-            format!(
-                "Add task — {field}: title='{}' desc='{}'  {err}",
-                add.title, add.description
-            )
-        } else if let Some(edit) = &list.editing {
-            let field = if edit.on_title {
-                "Title"
-            } else {
-                "Description"
+/// Render the Tasks pane (the active profile's task list) into `area`. The title, tab bar, message
+/// line, and footer are owned by [`draw_main`].
+fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
+    let items: Vec<ListItem> = list
+        .tasks
+        .iter()
+        .map(|task| {
+            let marker = match task.status {
+                TaskStatus::Done => "[x]",
+                TaskStatus::Open => "[ ]",
             };
-            let err = edit.error.as_deref().unwrap_or("");
-            format!(
-                "Edit task — {field}: title='{}' desc='{}'  {err}",
-                edit.title, edit.description
-            )
-        } else if list.confirming_delete.is_some() {
-            "Delete this task? Press x again to confirm, any other key to cancel.".to_owned()
-        } else if let Some(msg) = &timer.message {
-            msg.clone()
-        } else {
-            list.message.clone().unwrap_or_default()
-        };
-        frame.render_widget(
-            Paragraph::new(Span::raw(text)).wrap(Wrap { trim: true }),
-            *slot,
-        );
-    }
+            ListItem::new(Line::from(format!("{marker} {}", task.title)))
+        })
+        .collect();
+    let widget = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title("Tasks"))
+        .highlight_symbol("> ")
+        .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+    let mut state = ListState::default();
+    state.select(list.selected);
+    frame.render_stateful_widget(widget, area, &mut state);
+}
 
-    if let Some(slot) = chunks.get(3) {
-        let base = if timer.editing.is_some() {
-            "Enter: save  Esc: cancel"
-        } else if list.adding.is_some() || list.editing.is_some() {
-            "Enter: save  Tab: switch field  Esc: cancel"
+/// The message line for the Tasks pane: the open add/edit form fields + inline error, the delete
+/// confirmation, the timer message, or the pane's transient message.
+fn task_message_line(list: &TaskListState, timer: &Timer) -> String {
+    if let Some(add) = &list.adding {
+        let field = if add.on_title { "Title" } else { "Description" };
+        let err = add.error.as_deref().unwrap_or("");
+        format!(
+            "Add task — {field}: title='{}' desc='{}'  {err}",
+            add.title, add.description
+        )
+    } else if let Some(edit) = &list.editing {
+        let field = if edit.on_title {
+            "Title"
         } else {
-            TASK_LIST_CAPTION
+            "Description"
         };
-        // The spinner is appended (never replaces the caption) and reflects either the screen's
-        // request or the global timer's request being in flight (ADR-0006 §8.3).
-        let pending = list.is_pending() || timer.is_pending();
-        let caption = caption_with_spinner(base, pending, tick);
-        draw_bottom_row(frame, *slot, &caption, timer);
+        let err = edit.error.as_deref().unwrap_or("");
+        format!(
+            "Edit task — {field}: title='{}' desc='{}'  {err}",
+            edit.title, edit.description
+        )
+    } else if list.confirming_delete.is_some() {
+        "Delete this task? Press x again to confirm, any other key to cancel.".to_owned()
+    } else if let Some(msg) = &timer.message {
+        msg.clone()
+    } else {
+        list.message.clone().unwrap_or_default()
     }
 }
 
-/// Render the active profile's notes view: the list with title + created_at (newest-first as
-/// returned), or the open create/edit/view/delete sub-flow, plus the shared bottom row.
-fn draw_notes(frame: &mut Frame, notes: &NotesState, timer: &Timer, profile: &str, tick: u64) {
-    let area = frame.area();
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(1)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Min(3),
-            Constraint::Length(2),
-            Constraint::Length(BOTTOM_BAND_ROWS),
-        ])
-        .split(area);
+/// The base hotkey caption for the Tasks pane, varying by the open sub-flow.
+fn task_caption_base(list: &TaskListState) -> &'static str {
+    if list.adding.is_some() || list.editing.is_some() {
+        "Enter: save  Tab: switch field  Esc: cancel"
+    } else {
+        TASK_LIST_CAPTION
+    }
+}
 
-    if let Some(slot) = chunks.first() {
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                format!("organized-koala — notes [{profile}]"),
+/// Render the Notes pane (the active profile's notes, or the open view sub-flow) into `area`. The
+/// title, tab bar, message line, and footer are owned by [`draw_main`].
+fn draw_notes_pane(frame: &mut Frame, area: Rect, notes: &NotesState) {
+    // The viewing sub-flow replaces the list with the single note's title + body; otherwise the
+    // list of notes is shown with its selection highlight.
+    if let NotesMode::Viewing(note) = &notes.mode {
+        let body = vec![
+            Line::from(Span::styled(
+                note.title.clone(),
                 Style::default().add_modifier(Modifier::BOLD),
             )),
-            *slot,
-        );
-    }
-
-    if let Some(slot) = chunks.get(1) {
-        // The viewing sub-flow replaces the list with the single note's title + body; otherwise the
-        // list of notes is shown with its selection highlight.
-        if let NotesMode::Viewing(note) = &notes.mode {
-            let body = vec![
-                Line::from(Span::styled(
-                    note.title.clone(),
-                    Style::default().add_modifier(Modifier::BOLD),
-                )),
-                Line::from(Span::raw(format_created_at(note))),
-                Line::from(""),
-                Line::from(Span::raw(note.content.clone())),
-            ];
-            frame.render_widget(
-                Paragraph::new(body)
-                    .block(Block::default().borders(Borders::ALL).title("Note"))
-                    .wrap(Wrap { trim: false }),
-                *slot,
-            );
-        } else {
-            let items: Vec<ListItem> = notes
-                .notes
-                .iter()
-                .map(|note| {
-                    ListItem::new(Line::from(format!(
-                        "{}  ({})",
-                        note.title,
-                        format_created_at(note)
-                    )))
-                })
-                .collect();
-            let widget = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title("Notes"))
-                .highlight_symbol("> ")
-                .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-            let mut state = ListState::default();
-            state.select(notes.selected);
-            frame.render_stateful_widget(widget, *slot, &mut state);
-        }
-    }
-
-    if let Some(slot) = chunks.get(2) {
-        let text = if let Some(edit) = &timer.editing {
-            // The duration-edit sub-flow overlays the active screen's message line (ADR-0006 §8).
-            let err = edit.error.as_deref().unwrap_or("");
-            format!("Set duration (min): {}  {err}", edit.buffer)
-        } else {
-            note_message_line(notes)
-        };
+            Line::from(Span::raw(format_created_at(note))),
+            Line::from(""),
+            Line::from(Span::raw(note.content.clone())),
+        ];
         frame.render_widget(
-            Paragraph::new(Span::raw(text)).wrap(Wrap { trim: true }),
-            *slot,
+            Paragraph::new(body)
+                .block(Block::default().borders(Borders::ALL).title("Note"))
+                .wrap(Wrap { trim: false }),
+            area,
         );
-    }
-
-    if let Some(slot) = chunks.get(3) {
-        let base = notes_caption_base(notes, timer);
-        let pending = notes.is_pending() || timer.is_pending();
-        let caption = caption_with_spinner(base, pending, tick);
-        draw_bottom_row(frame, *slot, &caption, timer);
+    } else {
+        let items: Vec<ListItem> = notes
+            .notes
+            .iter()
+            .map(|note| {
+                ListItem::new(Line::from(format!(
+                    "{}  ({})",
+                    note.title,
+                    format_created_at(note)
+                )))
+            })
+            .collect();
+        let widget = List::new(items)
+            .block(Block::default().borders(Borders::ALL).title("Notes"))
+            .highlight_symbol("> ")
+            .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+        let mut state = ListState::default();
+        state.select(notes.selected);
+        frame.render_stateful_widget(widget, area, &mut state);
     }
 }
 
@@ -477,74 +539,26 @@ fn notes_caption_base(notes: &NotesState, timer: &Timer) -> &'static str {
 /// Render the profile switcher: the account's profiles (the active one marked), or the open
 /// create/rename/delete sub-flow, plus the shared bottom row. `active_id` marks which row is the
 /// currently-scoped profile.
-fn draw_profiles(
-    frame: &mut Frame,
-    profiles: &ProfilesState,
-    timer: &Timer,
-    active_id: &str,
-    tick: u64,
-) {
-    let area = frame.area();
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(1)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Min(3),
-            Constraint::Length(2),
-            Constraint::Length(BOTTOM_BAND_ROWS),
-        ])
-        .split(area);
-
-    if let Some(slot) = chunks.first() {
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                "organized-koala — profiles".to_owned(),
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
-            *slot,
-        );
-    }
-
-    if let Some(slot) = chunks.get(1) {
-        let items: Vec<ListItem> = profiles
-            .profiles
-            .iter()
-            .map(|profile| {
-                // The active (currently-scoped) profile is marked so the switch target is clear.
-                let marker = if profile.id == active_id { "* " } else { "  " };
-                ListItem::new(Line::from(format!("{marker}{}", profile.name)))
-            })
-            .collect();
-        let widget = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title("Profiles"))
-            .highlight_symbol("> ")
-            .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-        let mut state = ListState::default();
-        state.select(profiles.selected);
-        frame.render_stateful_widget(widget, *slot, &mut state);
-    }
-
-    if let Some(slot) = chunks.get(2) {
-        let text = if let Some(edit) = &timer.editing {
-            // The duration-edit sub-flow overlays the active screen's message line (ADR-0006 §8).
-            let err = edit.error.as_deref().unwrap_or("");
-            format!("Set duration (min): {}  {err}", edit.buffer)
-        } else {
-            profile_message_line(profiles)
-        };
-        frame.render_widget(
-            Paragraph::new(Span::raw(text)).wrap(Wrap { trim: true }),
-            *slot,
-        );
-    }
-
-    if let Some(slot) = chunks.get(3) {
-        let base = profiles_caption_base(profiles, timer);
-        let pending = profiles.is_pending() || timer.is_pending();
-        let caption = caption_with_spinner(base, pending, tick);
-        draw_bottom_row(frame, *slot, &caption, timer);
-    }
+/// Render the Profiles pane (the account's profiles, the active one marked) into `area`.
+/// `active_id` marks the currently-scoped profile. The title, tab bar, message line, and footer
+/// are owned by [`draw_main`].
+fn draw_profiles_pane(frame: &mut Frame, area: Rect, profiles: &ProfilesState, active_id: &str) {
+    let items: Vec<ListItem> = profiles
+        .profiles
+        .iter()
+        .map(|profile| {
+            // The active (currently-scoped) profile is marked so the switch target is clear.
+            let marker = if profile.id == active_id { "* " } else { "  " };
+            ListItem::new(Line::from(format!("{marker}{}", profile.name)))
+        })
+        .collect();
+    let widget = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title("Profiles"))
+        .highlight_symbol("> ")
+        .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+    let mut state = ListState::default();
+    state.select(profiles.selected);
+    frame.render_stateful_widget(widget, area, &mut state);
 }
 
 /// The message line for the switcher: the open create/rename form's name + inline error, the
