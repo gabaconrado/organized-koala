@@ -475,7 +475,6 @@ worktree; docker plus the throwaway test Postgres booted cleanly). Report-only �
   `VERIFIED` verdicts carry forward untouched (no relabelling). Re-ran gates on the rebased tree:
   test 0 failures (32 `test result: ok`), lint clean, fmt --check clean. Branch is current on `main`.
   → `review` → `awaiting-merge`. Cycle terminal; human performs the ff-merge.
-
 - [x] 2026-06-26 [human] The footer (hotkey caption) sits too high — 2 blank rows of bottom
   margin in the terminal; want 0. Root cause (orchestrator triage): 0015 trimmed the caption to
   a single non-wrapping line but left `BOTTOM_BAND_ROWS = 3` (sized for the OLD wrapping captions
@@ -484,3 +483,20 @@ worktree; docker plus the throwaway test Postgres booted cleanly). Report-only �
   Folded back into 0015 (operator decision): `awaiting-merge` → `working`; prior approved+verified
   verdicts VOID once code changes (code-hash will differ); re-runs review + verify. tui-dev shrinks
   the band to fit the single-line caption + timer widget; tester pins "no blank trailing rows".
+- [x] 2026-06-26 [tui-dev] Footer fix per ADR-0006 §8.3 (amended 2026-06-26, on disk in this
+  worktree): the in-flight spinner still appends to the stable caption and `Esc` still cancels in
+  flight (keymap unchanged), but the textual `(Esc to cancel)` affordance is removed from
+  `caption_with_spinner` and documented in the `?` help modal instead (`draw_help` gains an
+  `Esc cancel an in-flight / loading request` line). With the affordance gone the footer is one
+  flush row: `BOTTOM_BAND_ROWS 3 → 1` (doc comment rewritten — no stale 3-row/wrapping rationale).
+  Pending caption now 60 cols (was 76), so no wrap; on the rare wide-timer state the trailing
+  spinner glyph may clip at the row edge — accepted per the single-row decision (no wrap-growth).
+  Pure `tui::ui` presentation; #1/#2/#3 untouched. File: `crates/tui/src/ui/mod.rs`. Production
+  build + `cargo clippy --lib --bins -p tui` + `fmt --check` green. The `--all-targets` suite is
+  red on the stale `Esc to cancel` footer asserts (tester's next): `rendering.rs`
+  `auth_in_flight_appends_spinner_without_replacing_the_caption`,
+  `task_list_in_flight_appends_spinner_without_replacing_the_caption`,
+  `offline_retry_in_flight_appends_spinner_without_replacing_the_caption`; `tasks.rs`
+  `delete_in_flight_renders_spinner_and_keeps_caption`; `timer.rs`
+  `in_flight_appends_a_spinner_without_replacing_the_caption` (its comment cites the old wrap).
+  The negative pin `timer.rs idle_caption_has_no_spinner_or_cancel_affordance` still passes.
