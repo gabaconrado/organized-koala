@@ -251,6 +251,16 @@ the acceptance criteria):
   centred auth box with toggle + all fields + inline error band. `./ok.sh test | lint | fmt --check`
   all green (tui integration suite incl. `navigation`). Only mock is the `Client` trait; no `src/`
   change.
+- [x] 2026-06-26 [reviewer] **REVIEW-STATUS: approved** — code commit `c8b1217`, code-hash
+  `bf65aa9612bf1633bf75e64f66a3dfddcfb4aa10`. Mechanical gate green (`fmt --check`/`lint`/`test`
+  all exit 0; `navigation` 14 tests + all re-pointed CRUD/timer/error/in-flight suites pass).
+  Hard constraints confirmed: TUI-only (diff `6511941..c8b1217` touches only `crates/tui/` + the
+  Board file; nothing under `contract`/`server`), stateless #1 (panes re-derived from server
+  responses; selection is transient; `account` is a client-captured identifier, never persisted),
+  profile-scoped #4 (tab switch loads only the active profile's data), no secret leak. All 0014
+  acceptance criteria met by code + a real test, incl. the verbatim title (+ em-dash guard). No
+  0015/0016 scope creep (`t` unbound; no modal/detail/keymap-remap; full captions retained). No
+  fix-now findings, no out-of-scope nits. Smallest correct change.
 
 <!-- feature: needs an `architect` plan (`plan` skill) writing a `## Plan(s)` block before code. -->
 <!-- Open question for the architect: does the new TUI interaction model (tabs + later dialogs + detail views, 0014–0016) warrant its own ADR for the TUI shell, or is it presentation-only and ADR-free? Settle before planning 0015/0016. -->
