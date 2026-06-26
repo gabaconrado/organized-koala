@@ -261,6 +261,16 @@ the acceptance criteria):
   acceptance criteria met by code + a real test, incl. the verbatim title (+ em-dash guard). No
   0015/0016 scope creep (`t` unbound; no modal/detail/keymap-remap; full captions retained). No
   fix-now findings, no out-of-scope nits. Smallest correct change.
+- [x] 2026-06-26 [verifier] **VERIFY-STATUS: verified** — code commit `c8b1217`, code-hash
+  `bf65aa9612bf1633bf75e64f66a3dfddcfb4aa10`. Part 1: `./ok.sh test` exit 0, TUI `TestBackend`
+  suites green incl. new `navigation.rs` (14 tests covering every 0014 acceptance criterion) + all
+  re-pointed CRUD/timer/error/in-flight suites. Part 2: docker available; `./ok.sh up` booted the
+  one-shot migrate + a healthy server on :8080 (no migration-history conflict — no-migration
+  branch). Exercised the live reqwest paths the tabs drive: register/login (201/200), list
+  profiles/tasks/notes + create (200/201, flat DTOs), timer config (200), error contract
+  `{code,message}` (401 unauthenticated/invalid_credentials), profile-scoping #4 (cross-profile
+  read → 404 not_found, no leak), OTel spans `service.name: organized-koalad` for every path.
+  No server/contract delta to exercise (presentation-only, as scoped). Stack torn down (no `-v`).
 
 <!-- feature: needs an `architect` plan (`plan` skill) writing a `## Plan(s)` block before code. -->
 <!-- Open question for the architect: does the new TUI interaction model (tabs + later dialogs + detail views, 0014–0016) warrant its own ADR for the TUI shell, or is it presentation-only and ADR-free? Settle before planning 0015/0016. -->
