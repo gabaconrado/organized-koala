@@ -399,3 +399,11 @@ seam early but the suite goes green as 2/3 land). All five are within `crates/tu
   close). Kept the A3 pin `question_mark_is_inert_while_another_dialog_is_open` (a non-help dialog
   open ⇒ `?` is typed text, no help). `./ok.sh test` 380 passed / 0 failed; `./ok.sh lint` clean
   (`--all-targets`); `./ok.sh fmt --check` clean.
+
+- [x] 2026-06-26 [reviewer] Cold review — `REVIEW-STATUS: approved`
+  pinned to code-hash `b9884943f36f3ac6c9d56fd2be46e31057a9060a` (last code commit `22c7e92`).
+  Gates green (test 380 pass / 0 fail, lint `--all-targets` clean, fmt clean). ADR-0010 §5
+  presentation-only boundary holds (`contract`/`server` untouched; diff is `crates/tui/src/{app,terminal,ui}/mod.rs`
+  + tests only). #1 statelessness preserved (`help_open` transient; state machines/error routing untouched —
+  `last_profile` guard intact). No 0016 creep (`t`/`Space`/detail views absent; only `?` is new). All six
+  acceptance criteria met; `?`-closes-help fix verified. No fix-now findings, no out-of-scope ideas.
