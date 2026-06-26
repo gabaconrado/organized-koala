@@ -103,6 +103,20 @@ re-type it `feature` (with an ADR if a wire change is involved), per the CLAUDE.
   `outcome_list_profiles_debug_redacts_token` (`Outcome::ListProfiles`). No source touched (test file
   only). `./ok.sh test | lint | fmt --check` all green; the three redaction tests pass.
 
+- 2026-06-26 [reviewer] Cold review — **REVIEW-STATUS: approved**. Mechanical gate all green
+  (`fmt --check` / `lint` / `test`). Leak closure confirmed: `SessionToken` (`app/token.rs`) has a
+  hand-written `Debug` → `[REDACTED]` (no `Display`/`Serialize`); no bare `token: String` remains in
+  `crates/tui/src/`; inner value exposed only at point of use (`expose()` → `bearer_auth`); no
+  log/`tracing`/`format!` re-exposes it. Redaction complete, not merely moved (all 17 `ClientRequest`
+  variants + `Outcome::ListProfiles` + `Session`). Tests genuinely assert criterion 1 (token absent
+  AND `[REDACTED]` present) on `Session` + `ClientRequest::ListTasks` + `Outcome::ListProfiles`;
+  placeholder token is non-plausible. **Chore-invariant attested:** no behaviour change (wire bearer
+  string byte-identical; trait `token: &str` + `bearer_auth` unchanged), no `contract`/wire change #2
+  (`git diff main..HEAD -- crates/contract/` empty; no `Cargo.toml`/`Cargo.lock` change), no
+  domain-structure change #3. No fix-now blockers, no nits.
+  CODE-HASH: `e5925c5139e52846d8593c4be3ab2d0516d49fa0`
+  (last code sha `e86f956`; verdict committed at `4fbb11b`).
+
 - [x] 2026-06-25 [operator] High-priority: this is a serious problem — a session JWT reachable
       from a derived `Debug`. Why did it pass our guidelines (secrecy / manual `Debug`)?
       **Root cause (answered):** the `Session` struct was introduced in 0004 (`4b9eda0`,
