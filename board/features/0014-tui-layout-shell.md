@@ -222,6 +222,20 @@ the acceptance criteria):
   `.claude/worktrees/0014-tui-layout-shell` cut from `main@6511941` (carries ADR-0010 + the
   plan). Session: drive-0014. Build proceeds in plan slice order (slices 1–4 `tui-dev`, slice 5
   `tester`).
+- [x] 2026-06-26 [tui-dev] Slices 1–4 done. Slice 1: `Screen::TaskList`/`Notes`/`Profiles`
+  collapsed into `Screen::Main(Box<MainState>)` (active `Tab` + three live panes); added
+  `Event::NextTab`/`PrevTab`; per-pane apply/cancel routing; tab switch re-derives the pane from a
+  fresh server load preserving the selected row; removed `OpenNotes`/`OpenProfiles`/`Back`;
+  pick-active re-homed onto Profiles. Slice 2: `map_key` drives `Tab`/`BackTab`→tab-switch on an
+  idle list (sub-flow keeps field-switch), arrows move selection, removed `n`/`s`/idle-`Esc`-back;
+  every other binding kept; `t` left unbound. Slice 3: `AuthState.account`/`Session.account`
+  capture the entered identifier client-side (no new wire). Slice 4: centred title
+  `organized koala - <user> @ [<profile>]`, `Tasks | Notes | Profiles` tab bar, per-pane content,
+  footer pulled flush to the bottom row (outer bottom margin dropped, band kept at 3 rows;
+  verified caption+spinner+cancel fits at 80×24), centred bounded auth box. `build`/`fmt
+  --check`/lib+bins `clippy` green; doctests pass. Test suites (`tester`-owned) fail to compile —
+  expected, slice 5 updates them (see report). Stayed within ADR-0010 §5 (no contract/server/domain
+  change).
 
 <!-- feature: needs an `architect` plan (`plan` skill) writing a `## Plan(s)` block before code. -->
 <!-- Open question for the architect: does the new TUI interaction model (tabs + later dialogs + detail views, 0014–0016) warrant its own ADR for the TUI shell, or is it presentation-only and ADR-free? Settle before planning 0015/0016. -->
