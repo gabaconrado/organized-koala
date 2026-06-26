@@ -2,7 +2,7 @@
 id: 0013
 title: Redact the JWT in tui `Session` — bare `String` reachable via derived `Debug`
 type: chore         # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high      # high | medium | low
 parent: null
 depends-on: []
@@ -49,17 +49,17 @@ same redaction so the secret is not merely moved from one derived `Debug` to ano
 
 **Acceptance criteria:**
 
-- [ ] The bearer JWT is **not reachable** from any derived/`{:?}` `Debug` in `crates/tui/` — a test
+- [x] The bearer JWT is **not reachable** from any derived/`{:?}` `Debug` in `crates/tui/` — a test
       asserts `format!("{:?}", session)` (and any protocol/worker type that carries the token) does
       **not** contain the token and renders `[REDACTED]` (mirroring `contract`'s `Password` doctest
       `assert_eq!(format!("{:?}", req.password), "[REDACTED]")`).
-- [ ] The token still flows correctly: register/login → authenticated task/note/profile/timer calls
+- [x] The token still flows correctly: register/login → authenticated task/note/profile/timer calls
       all still carry the correct bearer string (exposed only at the point of use). No behavioural
       change to the wire surface.
-- [ ] No `contract`/wire change (#2): `Session` is a `tui`-internal struct, **not** a `contract` DTO;
+- [x] No `contract`/wire change (#2): `Session` is a `tui`-internal struct, **not** a `contract` DTO;
       `SessionResponse`/`Password` and all wire shapes are untouched. No domain-structure change (#3),
       no observable product-behaviour change beyond `Debug` rendering.
-- [ ] Lighter `chore` DoD: `./ok.sh test | lint | fmt --check` green; cold `reviewer` **approved**
+- [x] Lighter `chore` DoD: `./ok.sh test | lint | fmt --check` green; cold `reviewer` **approved**
       with the **chore-invariant attestation** (no behaviour / no `contract`-wire (#2) / no
       domain-structure (#3) change), pinned to `./ok.sh code-hash`. Live verifier pass **skipped**
       (chore track — no live-observable change).
