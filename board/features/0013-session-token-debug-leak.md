@@ -132,3 +132,51 @@ re-type it `feature` (with an ADR if a wire change is involved), per the CLAUDE.
       the secret rule — and by default the bare derive wins. Possible `eng-manager` follow-up
       (separate from this fix): a mechanical guard and/or a `rust-standards` callout on the
       `missing_debug_implementations`-vs-secret-redaction tension.
+
+## Summary
+
+Closed an operator-flagged **high-priority secret leak**: the `tui` session bearer JWT was held
+as a bare `String` inside structs/enums that `#[derive(Debug)]`, so it was reachable through any
+`{:?}` — a log line, a `tracing` span field, a panic message, or future auto-instrumentation.
+This is a direct violation of `rust-standards` → *Sensitive data*.
+
+**What changed (`tui` crate only, no wire surface):**
+
+- New `crates/tui/src/app/token.rs` — a `SessionToken(String)` newtype with a **hand-written
+  `Debug`** that renders `[REDACTED]` (no `Display`/`Serialize`), and `expose(&self) -> &str`
+  for use only at the point the bearer string is attached. Doctest asserts both
+  `token.expose() == "jwt.abc.123"` and `format!("{token:?}") == "[REDACTED]"`, mirroring
+  `contract::Password`.
+- The bare `token: String` replaced by `SessionToken` across every Debug-reachable holder in
+  `crates/tui/src/`: `Session.token` (`app/mod.rs`), all 17 `ClientRequest::*` `token` fields and
+  `Outcome::ListProfiles.token` (`app/protocol.rs`). The worker (`client/worker.rs`) exposes the
+  bearer string only at point of use (`token.expose()` into `bearer_auth`); the test
+  worker-analogue executor got the same mechanical `&token` → `token.expose()` adaptation (no
+  test-intent change). The `Client` trait's `token: &str` params are ephemeral borrows at point
+  of use — not stored Debug-reachable fields — and are unchanged. No bare `token: String` field
+  remains in `crates/tui/src/`.
+
+**Redaction-shape decision.** Implementer chose a **local redacting newtype** over
+`secrecy::SecretString`. The in-repo `contract::Password` template already establishes this exact
+pattern; the `Client` methods take `token: &str`, so the newtype redacts in one type with no new
+dependency and no per-call-site `expose_secret()` churn, and the trait/wire signatures stay
+byte-identical. Pulling `secrecy` in for a single field was judged disproportionate. (Trade-off:
+the newtype redacts but does **not** zeroize on drop, which `secrecy` would — acceptable for a
+process-lifetime in-memory token under hard-constraint #1.)
+
+**Chore-invariant attestation outcome — approved.** Cold `reviewer` posted
+`REVIEW-STATUS: approved` attesting: **no behaviour change** (wire bearer string byte-identical;
+trait `token: &str` + `bearer_auth` unchanged), **no `contract`/wire change (#2)**
+(`git diff main..HEAD -- crates/contract/` empty; no `Cargo.toml`/`Cargo.lock` change), **no
+domain-structure change (#3)**. Pinned to code-hash `e5925c5139e52846d8593c4be3ab2d0516d49fa0`
+(last code sha `e86f956`). Acceptance tests (`tester`, `crates/tui/tests/redaction.rs`,
+public-API only) assert criterion 1 on `Session` + `ClientRequest::ListTasks` +
+`Outcome::ListProfiles` (token substring absent AND `[REDACTED]` present) with a non-plausible
+placeholder token.
+
+**Lighter chore DoD.** Clauses 1–3 green (`./ok.sh test | lint | fmt --check`); clause 6 the
+invariant-attesting reviewer approval above. The **live verifier pass (clause 4) is correctly
+skipped** per the chore track — the change has no live-observable effect (only `Debug` rendering
+changes), so there is nothing new for a live boot to exercise.
+
+coverage: 66.90%
