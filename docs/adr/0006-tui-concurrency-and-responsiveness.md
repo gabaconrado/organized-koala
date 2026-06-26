@@ -1,6 +1,6 @@
 # ADR-0006: TUI concurrency and responsiveness model
 
-**Status:** Accepted · 2026-06-22 (amended 2026-06-23 — §8; see Board 0008)
+**Status:** Accepted · 2026-06-22 (amended 2026-06-23 §8 Board 0008; 2026-06-26 §8.3 Board 0015)
 
 ## Context
 
@@ -237,6 +237,29 @@ rendering change — the spinner is still the §5 transient process-lifetime mar
 additively. §5's substance (a spinner communicates "busy"; it animates on the poll tick; it is
 never persisted) is unchanged.
 
+> **Amendment 2026-06-26 (Board [0015][feat-0015]) — the "(Esc to cancel)" affordance moves
+> out of the footer caption.** The original §8.3 above kept the textual *"(Esc to cancel)"*
+> hint "as part of the stable caption or alongside the spinner," and the footer reserved a
+> multi-row bottom band so that hint could not be clipped when it wrapped against the
+> right-column timer widget (§8.1). Operator decision for the 0015 dialog cycle relocates it:
+>
+> - **The spinner-append behaviour is UNCHANGED — this amendment does not touch §8.3's
+>   anti-flicker core.** A request in flight still **appends** a trailing spinner glyph to the
+>   end of the stable hotkey caption and never **replaces** the caption text; the spinner is
+>   still the §5 transient process-lifetime marker, animated on the poll tick, never persisted.
+> - **The textual "(Esc to cancel)" affordance is REMOVED from the footer caption** and is
+>   instead **documented in the `?` help modal** ([ADR-0010][adr-0010] §3): the help modal
+>   carries a line stating that `Esc` cancels an in-flight / loading request.
+> - **The footer becomes a single row, flush to the bottom** (caption-left / timer-right),
+>   enabling ADR-0010 §2's *tight footer* goal (the bottom band is pulled flush to the last
+>   row and does **not** grow). Because the longest caption no longer carries the affordance,
+>   the band can now be a **single row** — the multi-row reservation that existed only to keep
+>   the wrapping affordance from being clipped is no longer needed.
+> - **Functionally nothing changes:** `Esc` still cancels an in-flight request — the keymap /
+>   cancel semantics of §4 are untouched. Only the *location of the hint* moves from the footer
+>   caption to the `?` help modal. This is pure `tui::ui` presentation — no `contract`/wire
+>   (#2), no server, no domain (#3) change.
+
 ### 8.4 The coarse timer-session refresh cadence is ~1 minute
 
 The coarse `GetTimerSession` cadence is loosened from ~5 s to **~1 minute** (ADR-0002 §3's "coarse
@@ -278,6 +301,8 @@ still the server's authority, just confirmed less eagerly.
 
 [feat-0005]: ../../board/features/0005-tui-responsive-event-loop.md
 [feat-0008]: ../../board/features/0008-pomodoro-timer.md
+[feat-0015]: ../../board/features/0015-tui-dialog-system.md
+[adr-0010]: ./0010-tui-navigation-and-interaction-model.md
 [adr-0003]: ./0003-verification-layering.md
 [adr-0005]: ./0005-foundational-wire-contract.md
 [coding-standards]: ../../.claude/skills/coding-standards/SKILL.md
