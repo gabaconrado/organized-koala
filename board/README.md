@@ -42,7 +42,7 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 | [0010](./features/0010-notes.md) | Notes — full feature (contract module, migration, server CRUD, TUI views) | feature | merged | medium | — | — (merged) |
 | [0011](./features/0011-task-update-delete-reopen.md) | Task update + delete + reopen — generalize close into PATCH (breaking) | feature | merged | medium | — | — (merged) |
 | [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | merged | medium | — | — (merged) |
-| [0013](./features/0013-session-token-debug-leak.md) | Redact the JWT in `tui` `Session` — bare `String` reachable via derived `Debug` (rust-standards secret-leak violation) | chore | inbox | high | — | — |
+| [0013](./features/0013-session-token-debug-leak.md) | Redact the JWT in `tui` `Session` — bare `String` reachable via derived `Debug` (rust-standards secret-leak violation) | chore | ready | high | — | feature/0013-session-token-debug-leak (awaiting-merge) |
 
 > **0010 — Notes — MERGED.** The final missing
 > domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
@@ -100,14 +100,21 @@ the no-change invariant is the safety net. A missing `type:` in an item's frontm
 > `685b4de` (linear, no merge commit); worktree + branch removed. The reviewer's pre-existing
 > `Session.token` bare-`String`/derived-`Debug` JWT-leak nit was promoted to **0013** (high chore).
 >
-> **0013 — Session JWT `Debug` leak — INBOX (high `chore`).** The `tui` `Session` holds the bearer
-> JWT as a bare `String` in a `#[derive(Debug)]` struct — a `rust-standards` *Sensitive data*
-> violation (a secret reachable from a derived `Debug` is a review-blocking leak). Introduced in
-> 0004 **after** the rule and the `contract::Password` redacting template already existed; missed by
-> 0004's author + reviewer and carried (diff-scoped cold review can't see pre-existing code) until
-> 0012's reviewer flagged it. Fix: hold the token as `secrecy::SecretString` (or a redacting newtype
-> à la `Password`), expose only at point of use; audit the protocol/worker types for the same.
-> Lighter chore DoD (no wire/#2, no domain/#3, no behaviour change beyond `Debug` rendering).
+> **0013 — Session JWT `Debug` leak — AWAITING-MERGE (high `chore`).** The `tui` bearer JWT, held as
+> a bare `String` reachable from a derived `Debug` on `Session`, all 17 `ClientRequest::*` variants,
+> and `Outcome::ListProfiles` (a `rust-standards` *Sensitive data* review-blocking leak, introduced
+> in 0004 after the rule + `contract::Password` template existed, carried silently through
+> 0005/0008/0010/0011 under diff-scoped cold review until 0012's reviewer flagged it), is now held in
+> a `SessionToken(String)` newtype (`crates/tui/src/app/token.rs`) with a hand-written `Debug` →
+> `[REDACTED]` and an `expose()` accessor used only at the point the `Authorization: Bearer` header
+> is attached. Local redacting newtype chosen over `secrecy::SecretString` (the in-repo `Password`
+> pattern; no new dependency for one field); the wire bearer string is byte-identical. `tui`-only —
+> no `contract`/wire (#2), no domain (#3),
+> no behaviour change beyond `Debug` rendering. Lighter chore DoD: gates green + cold `reviewer`
+> **approved** with the chore invariant attested, pinned to code-hash
+> `e5925c5139e52846d8593c4be3ab2d0516d49fa0`; live verifier **skipped** (chore track). Coverage 66.90%
+> line. This cycle sharpened `rust-standards` with a callout on the
+> `missing_debug_implementations`-lint-vs-secret-redaction tension. Awaiting the human's merge.
 >
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
