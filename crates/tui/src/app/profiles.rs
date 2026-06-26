@@ -123,7 +123,7 @@ impl ProfilesState {
     }
 
     /// Whether a sub-flow is open (any non-`List` mode). While true, `Esc` cancels the sub-flow
-    /// rather than navigating back to the task list.
+    /// and `Tab` switches the focused field rather than cycling the top-level tabs.
     #[must_use]
     pub fn in_sub_flow(&self) -> bool {
         !matches!(self.mode, ProfilesMode::List)
@@ -152,9 +152,9 @@ impl ProfilesState {
 
     /// Pure update for the switcher. Returns the [`ClientRequest`] a request-triggering event
     /// produces (create/rename submit, delete confirm, refresh), or `None` for a local edit or any
-    /// event while a request is outstanding. `Cancel`/`Quit`/`Back` and pick-active (`Submit` on
-    /// the list) are handled by the caller before reaching here. The `session` supplies the token
-    /// for the payloads.
+    /// event while a request is outstanding. `Cancel`/`Quit`, tab-switching, and pick-active
+    /// (`Submit` on the list) are handled by the caller before reaching here. The `session`
+    /// supplies the token for the payloads.
     pub(crate) fn handle_event(
         &mut self,
         event: Event,

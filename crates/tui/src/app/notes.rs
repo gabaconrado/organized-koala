@@ -141,7 +141,7 @@ impl NotesState {
     }
 
     /// Whether a sub-flow is open (any non-`List` mode). While true, `Esc` cancels the sub-flow
-    /// rather than navigating back to the task list.
+    /// and `Tab` switches the focused field rather than cycling the top-level tabs.
     #[must_use]
     pub fn in_sub_flow(&self) -> bool {
         !matches!(self.mode, NotesMode::List)
@@ -164,8 +164,9 @@ impl NotesState {
 
     /// Pure update for the notes screen. Returns the [`ClientRequest`] a request-triggering event
     /// produces (create/edit submit, delete confirm, refresh), or `None` for a local edit or any
-    /// event while a request is outstanding. `Cancel`/`Quit`/`Back` are handled by the caller
-    /// before reaching here. The `session` supplies the token + profile namespace for the payloads.
+    /// event while a request is outstanding. `Cancel`/`Quit` and tab-switching are handled by the
+    /// caller before reaching here. The `session` supplies the token + profile namespace for the
+    /// payloads.
     pub(crate) fn handle_event(
         &mut self,
         event: Event,
