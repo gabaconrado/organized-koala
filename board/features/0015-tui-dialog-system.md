@@ -2,7 +2,7 @@
 id: 0015
 title: TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus
 type: feature      # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0014]
@@ -553,3 +553,14 @@ line-coverage unchanged at 73.80%). Report-only — never a gate.
   per verdict pinning the `approved` + `VERIFIED` attestations carry forward untouched (no
   relabelling; commit shas in the verdict lines above are now stale pointers, which is expected).
   Footer-fix re-entry complete: all 7 feature DoD clauses met. `working` → `awaiting-merge`.
+- [ ] 2026-06-27 [human] Bug in the `?` help dialog: the `q  quit` entry is jammed onto the same
+  row as the `? / Esc  close help` entry, and `close help` is not tab-aligned to the description
+  column. Both should be their own properly-tabbed Global lines.
+- [x] 2026-06-27 [orchestrator] Triage: `draw_help`'s `? / Esc  close help    q  quit` line
+  (`crates/tui/src/ui/mod.rs`) crams two entries on one row, breaking the `{key:<18}{desc}`
+  layout every other Global line follows (desc aligned at col 21). Pure-presentation defect in
+  0015's own help modal — no behaviour/wire (#2)/domain (#3) change; no ADR needed (ADR-0010 /
+  ADR-0006 §8.3 already govern the help modal). Folded back into 0015 (same precedent as the
+  footer fix): `awaiting-merge` → `working`; prior approved+verified verdicts VOID once code
+  changes (code-hash will differ); re-runs review + verify. tui-dev splits the line into two
+  tabbed Global entries; tester pins the help layout.
