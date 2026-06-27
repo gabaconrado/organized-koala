@@ -511,3 +511,22 @@ worktree; docker plus the throwaway test Postgres booted cleanly). Report-only �
   `help_modal_documents_that_esc_cancels_an_in_flight_request` (affordance's new home). Test-only;
   no `src/` touched. `./ok.sh test | lint | fmt --check` all green (tui suites: dialogs 22,
   navigation 21, rendering 21, tasks 17, timer 21). Commit `a714a83`.
+- [x] 2026-06-26 [verifier] Live re-verify at code-hash `542f19aa…` — **VERIFIED**. TestBackend
+  TUI suite green (ADR-0003 owner of footer/dialog/keybinding behaviour); booted the stack
+  (`./ok.sh up`, migrate exit 0 — no 0011 conflict) and smoke-exercised the reqwest paths: auth
+  register/login (201/200), error contract `{code,message}` (401 invalid_credentials/unauthenticated,
+  400 validation_failed, 404 not_found), tasks CRUD (201/200/204 + closed_at on done), notes
+  (201/200), profiles, timer config+session (idle/running/idle), profile-scoping (#4) confirmed,
+  OTel spans live (`service.name: organized-koalad`). Reopened diff is pure presentation — wire
+  surface byte-identical to the earlier VERIFIED run; nothing regressed. Stack down clean.
+- [x] 2026-06-26 [reviewer] Re-review at code-hash `542f19aa…` — `REVIEW-STATUS: changes-requested`.
+  Mechanical gate green; behaviour change matches amended ADR-0006 §8.3; #1/#2/#3 hold; new tests
+  pin the behaviour correctly. ONE blocking finding: stale `FOOTER_CAPTION` doc comment
+  (`crates/tui/src/ui/mod.rs:31-33`) still described the removed `(Esc to cancel)` affordance +
+  old multi-row band (adjacent doc comments were updated in `a934599`, this one missed). Fix-now.
+- [x] 2026-06-26 [tui-dev] Fixed the reviewer's finding: rewrote the `FOOTER_CAPTION` doc comment
+  to describe current behaviour (single non-wrapping line; spinner glyph only — no textual
+  affordance; single flush row `BOTTOM_BAND_ROWS == 1`; Esc-cancel affordance in the `?` help
+  modal; ref → ADR-0006 §8.3 amended 2026-06-26). Comment-only (4 ins / 3 del, all within the
+  `///` block — no logic/value change). `./ok.sh test | lint | fmt --check` green. Commit
+  `cf66137`; new code-hash `b4bc0cdb93086adb620ffbe66bc5d66a524e4ffd`.
