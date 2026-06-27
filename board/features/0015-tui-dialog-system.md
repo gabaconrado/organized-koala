@@ -530,3 +530,18 @@ worktree; docker plus the throwaway test Postgres booted cleanly). Report-only �
   modal; ref → ADR-0006 §8.3 amended 2026-06-26). Comment-only (4 ins / 3 del, all within the
   `///` block — no logic/value change). `./ok.sh test | lint | fmt --check` green. Commit
   `cf66137`; new code-hash `b4bc0cdb93086adb620ffbe66bc5d66a524e4ffd`.
+- [x] 2026-06-26 [reviewer] Re-review of `cf66137` — **`REVIEW-STATUS: approved`**, pinned to
+  code-hash `b4bc0cdb93086adb620ffbe66bc5d66a524e4ffd` (commit `cf66137`; HEAD `95314d1`
+  Board-only). Single prior finding genuinely resolved (comment now matches the code exactly).
+  Confirmed comment-only vs. `542f19aa` (only `///` lines changed; `FOOTER_CAPTION` value
+  unchanged); no `contract`/wire (#2), no domain (#3), TUI stateless (#1), no `#[allow]`. Lint +
+  fmt clean; `./ok.sh test` green with DB-backed integration tests serialized (`RUST_TEST_THREADS=1`).
+  No code findings. Out-of-scope env note (not blocking): default parallel `./ok.sh test` is flaky
+  under throwaway-Postgres pool contention (intermittent `register → 500 internal` in server DB
+  suites) — a `platform-dev` infra concern; filed as a `board/ideas/` follow-up.
+- [x] 2026-06-26 [verifier] Re-attest at code-hash `b4bc0cdb93086adb620ffbe66bc5d66a524e4ffd`
+  (commit `cf66137`; HEAD `95314d1` Board-only) — **VERIFIED**. Independently confirmed the sole
+  source delta since the live pass is the `///` doc comment (`git diff a714a83..cf66137 -- crates/`
+  = one hunk; `FOOTER_CAPTION` value unchanged), and `./ok.sh test` green (TestBackend suite same
+  counts as the prior VERIFIED run). Live server API + reqwest-path attestation carries forward
+  from the byte-identical `542f19aa` tree (no wire/reqwest delta; stack not re-booted — correct).
