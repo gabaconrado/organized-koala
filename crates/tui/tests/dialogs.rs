@@ -365,6 +365,69 @@ fn help_modal_documents_that_esc_cancels_an_in_flight_request() {
 }
 
 #[test]
+fn help_modal_global_block_lists_quit_and_close_help_as_separate_aligned_rows() {
+    // Operator bug (fixed in 8c25b97): the Global block had `q` and `? / Esc` crammed onto one
+    // malformed row. This pins the corrected two-row layout on BOTH halves of the report:
+    //   1. `q … quit` is its OWN row, never jammed onto the `close help` row (and vice-versa).
+    //   2. `close help` is tab-aligned: its description starts in the SAME column as the sibling
+    //      Global rows (`quit`, `refresh`), per the shared `  {key:<18}{description}` layout.
+    let (client, mut app) = logged_in(vec![]);
+    press(&mut app, &client, KeyCode::Char('?'));
+    assert!(app.help_open(), "? opened the help overlay");
+    let text = render(&app, W, H);
+    let rows: Vec<&str> = text.lines().collect();
+
+    // Locate the three Global rows by their description text (the box border/padding indents every
+    // row, so we match on the description substring, not a column).
+    let quit_row = rows
+        .iter()
+        .find(|r| r.contains("quit"))
+        .unwrap_or_else(|| panic!("a `quit` row in the help body:\n{text}"));
+    let close_help_row = rows
+        .iter()
+        .find(|r| r.contains("close help"))
+        .unwrap_or_else(|| panic!("a `close help` row in the help body:\n{text}"));
+    let refresh_row = rows
+        .iter()
+        .find(|r| r.contains("refresh the current view"))
+        .unwrap_or_else(|| panic!("a `refresh` row in the help body:\n{text}"));
+
+    // (1) Separate rows: the `quit` and `close help` entries are NOT on a single shared row — the
+    // strongest pin against the malformed `? / Esc  close help    q  quit` regression returning.
+    assert!(
+        !close_help_row.contains("quit"),
+        "the `close help` row must NOT also carry `quit` (the malformed combined row):\n\
+         {close_help_row:?}",
+    );
+    assert!(
+        !quit_row.contains("close help"),
+        "the `quit` row must NOT also carry `close help`:\n{quit_row:?}",
+    );
+
+    // (2) Description column alignment: the `{key:<18}` field after the 2-space indent puts every
+    // Global description at the same column. Assert `close help`'s description starts at the same
+    // column as its siblings' descriptions, relative to those sibling rows (not a magic constant),
+    // so the test documents the invariant "descriptions align in a column".
+    let desc_col = |row: &str, desc: &str| {
+        row.find(desc)
+            .unwrap_or_else(|| panic!("description {desc:?} in row {row:?}"))
+    };
+    let close_help_col = desc_col(close_help_row, "close help");
+    let quit_col = desc_col(quit_row, "quit");
+    let refresh_col = desc_col(refresh_row, "refresh the current view");
+    assert_eq!(
+        close_help_col, quit_col,
+        "`close help` is tab-aligned to the `quit` row's description column \
+         (close_help={close_help_col}, quit={quit_col}):\n{text}",
+    );
+    assert_eq!(
+        close_help_col, refresh_col,
+        "`close help` is tab-aligned to the `refresh` row's description column \
+         (close_help={close_help_col}, refresh={refresh_col}):\n{text}",
+    );
+}
+
+#[test]
 fn help_modal_closes_with_esc() {
     // Esc closes the help modal (the two-tiered Esc: an overlay is open, so Esc → Cancel, which the
     // app core folds into closing the help overlay) — without quitting.
