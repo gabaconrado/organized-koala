@@ -500,3 +500,14 @@ worktree; docker plus the throwaway test Postgres booted cleanly). Report-only �
   `delete_in_flight_renders_spinner_and_keeps_caption`; `timer.rs`
   `in_flight_appends_a_spinner_without_replacing_the_caption` (its comment cites the old wrap).
   The negative pin `timer.rs idle_caption_has_no_spinner_or_cancel_affordance` still passes.
+- [x] 2026-06-26 [tester] Footer-fix test re-entry: realigned the five stale in-flight asserts to
+  the amended ADR-0006 §8.3 — `rendering.rs` (`auth_/task_list_/offline_retry_in_flight_…`),
+  `tasks.rs` `delete_in_flight_renders_spinner_and_keeps_caption`, `timer.rs`
+  `in_flight_appends_a_spinner_without_replacing_the_caption` — each now asserts the in-flight
+  render APPENDS the spinner glyph + KEEPS the base caption and that `"Esc to cancel"` is NOT in
+  the footer; module doc in `rendering.rs` rewritten. Added two positive pins: `navigation.rs`
+  `footer_is_a_single_flush_row_with_no_blank_trailing_rows` (caption AND timer on the terminal's
+  last row, last row non-empty — the operator's zero-bottom-margin ask) and `dialogs.rs`
+  `help_modal_documents_that_esc_cancels_an_in_flight_request` (affordance's new home). Test-only;
+  no `src/` touched. `./ok.sh test | lint | fmt --check` all green (tui suites: dialogs 22,
+  navigation 21, rendering 21, tasks 17, timer 21). Commit `a714a83`.
