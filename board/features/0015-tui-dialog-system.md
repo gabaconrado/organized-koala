@@ -467,7 +467,9 @@ Gate results: `./ok.sh test` **380 passed / 0 failed**; `./ok.sh lint` clean (`-
 code-hash `b9884943f36f3ac6c9d56fd2be46e31057a9060a`.
 
 coverage: 73.80% line (the headline `TOTAL` line-coverage from a fresh `./ok.sh coverage` in the
-worktree; docker plus the throwaway test Postgres booted cleanly). Report-only — never a gate.
+worktree after the footer-fix re-entry; docker plus the throwaway test Postgres booted cleanly. The
+footer fix realigned five in-flight asserts and added two pins but left the headline `TOTAL`
+line-coverage unchanged at 73.80%). Report-only — never a gate.
 
 - [x] 2026-06-26 [orchestrator] Step-7 freshen: rebased onto `main@a739006` (docs/handoff +
   dashboard advance only). `./ok.sh code-hash HEAD` = `b9884943f36f3ac6c9d56fd2be46e31057a9060a`,
