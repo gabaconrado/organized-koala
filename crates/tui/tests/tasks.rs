@@ -402,14 +402,21 @@ fn delete_in_flight_renders_spinner_and_keeps_caption() {
     assert!(app.is_pending(), "task list in-flight during the delete");
 
     let text = render(&app, W, H);
-    // The trimmed footer caption is kept (not replaced) and the spinner's cancel affordance is
-    // appended (0015: the per-pane action keys moved into the `?` help modal).
+    // The trimmed footer caption is kept (not replaced) and ONLY a trailing spinner glyph is
+    // appended (ADR-0006 §8.3 amended: the cancel hint moved into the `?` help modal, not the
+    // footer; the per-pane action keys live there too).
     assert!(
         text.contains("switch tab") && text.contains("q: quit"),
         "the caption is not replaced while pending:\n{text}",
     );
+    // ONLY a trailing spinner glyph is appended (tick 0 → "|").
     assert!(
-        text.contains("Esc to cancel"),
-        "the cancel affordance is appended while pending:\n{text}",
+        text.contains(tui::ui::spinner_frame(0)),
+        "a trailing spinner glyph is appended while pending:\n{text}",
+    );
+    // The textual cancel affordance is no longer in the footer — it moved to the `?` help modal.
+    assert!(
+        !text.contains("Esc to cancel"),
+        "the cancel hint is no longer in the footer (it lives in the ? modal):\n{text}",
     );
 }

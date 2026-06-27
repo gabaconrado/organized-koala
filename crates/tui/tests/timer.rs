@@ -305,7 +305,7 @@ fn in_flight_appends_a_spinner_without_replacing_the_caption() {
     assert!(app.timer().is_pending(), "in-flight after the toggle");
 
     // The regression guard: the stable hotkey caption is STILL present (not replaced by a
-    // "working…" string), and the cancel affordance plus a trailing spinner glyph are appended.
+    // "working…" string), and ONLY a trailing spinner glyph is appended.
     let text = render_at(&app, W, H, 1);
     // 0015: the footer is trimmed to essentials (movement, tab switch, help, quit) and the per-pane
     // action keys moved into the `?` help modal — so the regression guard now pins the trimmed
@@ -318,17 +318,15 @@ fn in_flight_appends_a_spinner_without_replacing_the_caption() {
         text.contains("switch tab") && text.contains("q: quit"),
         "the trimmed caption stays present while in flight:\n{text}",
     );
-    // The cancel affordance is appended (the caption may wrap at the narrow 80-col width when the
-    // timer label takes the right column, splitting "Esc to cancel" across rows — assert the stable
-    // `cancel` token, as the notes/profiles in-flight tests do).
-    assert!(
-        text.contains("cancel"),
-        "the cancel affordance is appended:\n{text}",
-    );
-    // A spinner glyph is appended (tick 1 → "/").
+    // ONLY a trailing spinner glyph is appended (ADR-0006 §8.3 amended) — at tick 1 that is "/".
+    // The textual "Esc to cancel" hint is no longer in the footer; it lives in the `?` help modal.
     assert!(
         text.contains('/'),
         "a trailing spinner glyph is appended at tick 1:\n{text}",
+    );
+    assert!(
+        !text.contains("Esc to cancel"),
+        "the cancel hint is no longer in the footer (it lives in the ? modal):\n{text}",
     );
 }
 

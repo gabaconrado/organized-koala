@@ -431,6 +431,47 @@ fn footer_sits_flush_near_the_bottom_row() {
     );
 }
 
+#[test]
+fn footer_is_a_single_flush_row_with_no_blank_trailing_rows() {
+    // Operator feedback (ADR-0006 §8.3 amended): the footer is a SINGLE row pulled flush to the very
+    // bottom — zero trailing blank rows beneath it. The bottom band is one row (`BOTTOM_BAND_ROWS`
+    // = 1); the caption + timer must render ON the terminal's last row, and there must be no empty
+    // row below it.
+    let (_client, app) = logged_in_as("ada", vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
+    let text = render(&app, W, H);
+    let rows: Vec<&str> = text.lines().collect();
+    let last = rows.len().saturating_sub(1);
+
+    // The footer caption renders on the very last row — nothing below it.
+    let caption_row = rows
+        .iter()
+        .position(|r| r.contains("switch tab"))
+        .expect("the hotkey caption is rendered");
+    assert_eq!(
+        caption_row,
+        last,
+        "the footer caption sits on the LAST row (row {caption_row} of {}, last index {last}):\n{text}",
+        rows.len(),
+    );
+
+    // The timer widget shares that same last row (it is the footer's right column).
+    let timer_row = rows
+        .iter()
+        .position(|r| r.contains("timer idle"))
+        .expect("the timer widget is rendered in the footer");
+    assert_eq!(
+        timer_row, last,
+        "the timer widget shares the footer's last row (row {timer_row}):\n{text}",
+    );
+
+    // Zero bottom margin: there is NO blank/empty row below the footer (the last row is non-empty).
+    let last_line = rows.get(last).copied().unwrap_or("");
+    assert!(
+        !last_line.trim().is_empty(),
+        "the last row is the footer itself, not a blank trailing row:\n{text}",
+    );
+}
+
 // ---- the auth form is a centred bounded box with the toggle, all fields, and the error band ----
 
 #[test]

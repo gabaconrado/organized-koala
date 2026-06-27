@@ -1,8 +1,9 @@
 //! Buffer-snapshot rendering via `ratatui`'s `TestBackend`: renders each screen into an
 //! in-memory buffer and asserts the observable text — the login/register field labels, the
 //! password mask, the newest-first task ordering, the done/undone markers, and the in-flight
-//! append-spinner indicator (ADR-0006 §8.3 / Board 0008-R1: a trailing spinner + "(Esc to cancel)"
-//! is APPENDED to the stable caption, never replacing it — the flicker fix). The app core is
+//! append-spinner indicator (ADR-0006 §8.3, amended 2026-06-26 / Board 0008-R1: a trailing spinner
+//! glyph is APPENDED to the stable caption, never replacing it — the flicker fix; the textual cancel
+//! hint now lives in the `?` help modal so the footer stays a single flush row). The app core is
 //! driven through the public two-step `App` API (`handle_event` → executor → `apply_response`)
 //! with the fake client; nothing internal is mocked.
 
@@ -181,14 +182,15 @@ fn empty_task_list_still_renders_chrome() {
     assert!(text.contains("Tasks"), "list block title:\n{text}");
 }
 
-// ---- In-flight render (append-spinner indicator + cancel hint, ADR-0006 §8.3) ----
+// ---- In-flight render (append-spinner indicator, ADR-0006 §8.3 amended) ----
 
 #[test]
 fn auth_in_flight_appends_spinner_without_replacing_the_caption() {
     // After a submit, before the response is applied, the auth screen is pending. The flicker fix
-    // (0008-R1): the stable caption is KEPT and a trailing spinner + "(Esc to cancel)" is appended,
-    // rather than the old behaviour where the caption was substituted with a "working…" string. We
-    // hold the dispatch (do NOT drive it) so the app sits in the in-flight state, and render it.
+    // (0008-R1, amended 2026-06-26): the stable caption is KEPT and ONLY a trailing spinner glyph
+    // is appended, rather than the old behaviour where the caption was substituted with a "working…"
+    // string. The "(Esc to cancel)" hint is no longer appended to the footer — it lives in the `?`
+    // help modal now. We hold the dispatch (do NOT drive it) so the app sits in-flight, and render.
     let client = FakeClient::new();
     let mut app = App::new();
     let dispatch = app
@@ -207,10 +209,15 @@ fn auth_in_flight_appends_spinner_without_replacing_the_caption() {
         !text.contains("working…"),
         "the caption is no longer replaced by a working… string:\n{text}",
     );
-    // The cancel affordance is appended alongside the spinner.
+    // ONLY a trailing spinner glyph is appended (ADR-0006 §8.3 amended) — at tick 0 that is "|".
     assert!(
-        text.contains("Esc to cancel"),
-        "cancel affordance appended while pending:\n{text}",
+        text.contains(tui::ui::spinner_frame(0)),
+        "a trailing spinner glyph is appended while pending:\n{text}",
+    );
+    // The textual cancel affordance moved to the `?` help modal — it is NOT in the footer.
+    assert!(
+        !text.contains("Esc to cancel"),
+        "the cancel hint is no longer in the footer (it lives in the ? modal):\n{text}",
     );
 
     // Sanity: the request was a real login the executor can complete (keeps the fake honest).
@@ -242,8 +249,9 @@ fn spinner_glyph_advances_with_the_tick() {
 
 #[test]
 fn task_list_in_flight_appends_spinner_without_replacing_the_caption() {
-    // A close/refresh on the task list puts it in-flight; the command caption is KEPT and a
-    // trailing spinner + cancel affordance is appended (ADR-0006 §8.3 — no flicker).
+    // A close/refresh on the task list puts it in-flight; the command caption is KEPT and ONLY a
+    // trailing spinner glyph is appended (ADR-0006 §8.3 amended — no flicker; the cancel hint lives
+    // in the `?` modal now, not the footer).
     let mut app = logged_in_with(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
     let _dispatch = app
         .handle_event(Event::ToggleDone)
@@ -262,16 +270,23 @@ fn task_list_in_flight_appends_spinner_without_replacing_the_caption() {
         !text.contains("working…"),
         "the caption is no longer replaced by a working… string:\n{text}",
     );
+    // ONLY a trailing spinner glyph is appended (tick 0 → "|").
     assert!(
-        text.contains("Esc to cancel"),
-        "cancel affordance appended while pending:\n{text}",
+        text.contains(tui::ui::spinner_frame(0)),
+        "a trailing spinner glyph is appended while pending:\n{text}",
+    );
+    // The textual cancel affordance is no longer in the footer — it moved to the `?` help modal.
+    assert!(
+        !text.contains("Esc to cancel"),
+        "the cancel hint is no longer in the footer (it lives in the ? modal):\n{text}",
     );
 }
 
 #[test]
 fn offline_retry_in_flight_appends_spinner_without_replacing_the_caption() {
     // On the offline screen, pressing retry ('r') fires a health probe; while it is outstanding
-    // the retry caption is KEPT and a trailing spinner + cancel affordance is appended.
+    // the retry caption is KEPT and ONLY a trailing spinner glyph is appended (the cancel hint
+    // lives in the `?` modal now, not the footer).
     let client = FakeClient::new();
     client.push_login(Err(common::offline_err("connection refused")));
     let mut app = App::new();
@@ -292,8 +307,14 @@ fn offline_retry_in_flight_appends_spinner_without_replacing_the_caption() {
         !text.contains("working…"),
         "the caption is no longer replaced by a working… string:\n{text}",
     );
+    // ONLY a trailing spinner glyph is appended (tick 0 → "|").
     assert!(
-        text.contains("Esc to cancel"),
-        "cancel affordance appended while probing:\n{text}",
+        text.contains(tui::ui::spinner_frame(0)),
+        "a trailing spinner glyph is appended while probing:\n{text}",
+    );
+    // The textual cancel affordance is no longer in the footer — it moved to the `?` help modal.
+    assert!(
+        !text.contains("Esc to cancel"),
+        "the cancel hint is no longer in the footer (it lives in the ? modal):\n{text}",
     );
 }

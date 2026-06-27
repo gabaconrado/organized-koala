@@ -350,6 +350,21 @@ fn question_mark_opens_the_help_modal_listing_the_full_reference() {
 }
 
 #[test]
+fn help_modal_documents_that_esc_cancels_an_in_flight_request() {
+    // ADR-0006 §8.3 amended (operator feedback): the "Esc cancels an in-flight / loading request"
+    // affordance was REMOVED from the footer caption and now lives ONLY in the `?` help modal. This
+    // pins its new home — the Global section documents that `Esc` cancels a loading request.
+    let (client, mut app) = logged_in(vec![]);
+    press(&mut app, &client, KeyCode::Char('?'));
+    assert!(app.help_open(), "? opened the help overlay");
+    let text = render(&app, W, H);
+    assert!(
+        text.contains("Esc") && text.contains("cancel an in-flight"),
+        "the help modal documents Esc cancelling an in-flight / loading request:\n{text}",
+    );
+}
+
+#[test]
 fn help_modal_closes_with_esc() {
     // Esc closes the help modal (the two-tiered Esc: an overlay is open, so Esc → Cancel, which the
     // app core folds into closing the help overlay) — without quitting.
