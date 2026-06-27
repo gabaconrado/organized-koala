@@ -2,7 +2,7 @@
 id: 0015
 title: TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus
 type: feature      # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0014]
@@ -547,3 +547,9 @@ line-coverage unchanged at 73.80%). Report-only — never a gate.
   = one hunk; `FOOTER_CAPTION` value unchanged), and `./ok.sh test` green (TestBackend suite same
   counts as the prior VERIFIED run). Live server API + reqwest-path attestation carries forward
   from the byte-identical `542f19aa` tree (no wire/reqwest delta; stack not re-booted — correct).
+- [x] 2026-06-27 [orchestrator] Step-7 freshen: rebased onto `main@0c9d827` (which added only
+  docs/board — idea 0002 + handoff + dashboard regen; no `crates/` change). `./ok.sh code-hash` at
+  the rebased head is still `b4bc0cdb93086adb620ffbe66bc5d66a524e4ffd` — byte-identical code, so
+  per verdict pinning the `approved` + `VERIFIED` attestations carry forward untouched (no
+  relabelling; commit shas in the verdict lines above are now stale pointers, which is expected).
+  Footer-fix re-entry complete: all 7 feature DoD clauses met. `working` → `awaiting-merge`.
