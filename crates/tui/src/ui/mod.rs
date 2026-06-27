@@ -28,9 +28,10 @@ const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 /// The single trimmed footer caption for every post-auth pane (ADR-0010 §3, criterion 2): the
 /// essentials only — movement, tab switch, quit, and help. The full per-pane hotkey reference now
 /// lives in the `?` help overlay ([`draw_help`]), so the footer no longer enumerates the action
-/// keys. ` | `-separated so wrap points fall on separators; kept short so that — once the in-flight
-/// spinner + ` (Esc to cancel)` affordance is appended — the caption stays within the bottom band
-/// at the 80×24 test viewport without clipping the affordance (ADR-0006 §8.3, learned 0010).
+/// keys. A single non-wrapping line, ` | `-separated; while a request is outstanding the in-flight
+/// spinner glyph (only the glyph — no textual affordance) is appended, so the footer stays a single
+/// flush row (`BOTTOM_BAND_ROWS == 1`). The `Esc`-cancels-an-in-flight-request affordance now lives
+/// in the `?` help modal rather than the caption (ADR-0006 §8.3, amended 2026-06-26).
 const FOOTER_CAPTION: &str = "↑↓: move | Tab/Shift+Tab: switch tab | ?: help | q: quit";
 
 /// Height (rows) of the bottom band on a post-auth screen: the hotkey caption on the left and the
