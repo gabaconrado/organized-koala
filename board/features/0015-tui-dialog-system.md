@@ -564,3 +564,19 @@ line-coverage unchanged at 73.80%). Report-only — never a gate.
   footer fix): `awaiting-merge` → `working`; prior approved+verified verdicts VOID once code
   changes (code-hash will differ); re-runs review + verify. tui-dev splits the line into two
   tabbed Global entries; tester pins the help layout.
+- [x] 2026-06-27 [tui-dev] Fixed the help-modal layout bug: split `draw_help`'s malformed
+  `? / Esc  close help    q  quit` row into two properly-tabbed Global lines — key `q` →
+  `quit`, and key `? / Esc` → `close help` — each following the sibling
+  `{key:<18}{desc}` layout so descriptions align at col 21. Pure presentation; keymap (`?`/`Esc`
+  close-help), wire, contract, domain all unchanged. No existing test referenced the old string
+  (the `q: quit` / `?: help` grep hits are footer-caption asserts on a different surface).
+  `./ok.sh test | lint | fmt --check` green. Commit `8c25b97`; code-hash
+  `c49cb87a15514abab9c84d01f69833eda4b3b98e`.
+- [x] 2026-06-27 [tester] Added a positive regression test
+  `help_modal_global_block_lists_quit_and_close_help_as_separate_aligned_rows` (`dialogs.rs`):
+  opens the `?` modal via the real keymap and asserts (1) `quit` and `close help` are on separate
+  rows (the `close help` row does not also contain `quit`, and vice-versa — guards the crammed row
+  from returning) and (2) the `close help` description starts at the same column as the `quit` and
+  `r refresh` sibling rows (alignment invariant, asserted relative to siblings, not a magic
+  constant). Test-only; no `src/`. `dialogs` suite 22→23, full workspace green; lint + fmt clean.
+  Commit `397d759`; code-hash `00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc`.
