@@ -158,9 +158,17 @@ backlog".
 > `App::overlay_capturing_input()` predicate unifies the scattered text-entry/sub-flow gates (globals
 > suppressed while any overlay captures input; two-tiered `Esc`). A tester-flagged fix-now made `?`
 > close the help overlay end-to-end (distinct `help_open` param in the 5-arg `map_key`) so the
-> advertised `?/Esc: close` affordance works. Tests `tests/dialogs.rs` 21/0 + 380 total pass; reviewer
-> **approved** + verifier **VERIFIED**, both pinned to code-hash
-> `b9884943f36f3ac6c9d56fd2be46e31057a9060a`; coverage 73.80% line (report-only). The `main` snapshot
+> advertised `?/Esc: close` affordance works.
+> **Footer-fix re-entry (2026-06-27):** operator feedback re-opened 0015 to drop two dead bottom-margin
+> rows — the trimmed single-line caption sat too high because `BOTTOM_BAND_ROWS` was still `3` (sized
+> for the old wrapping captions). [ADR-0006](../docs/adr/0006-tui-concurrency-and-responsiveness.md)
+> §8.3 was **amended** (single flush footer row; the textual `(Esc to cancel)` affordance moved to
+> the `?` help modal — the keymap is unchanged, `Esc` still cancels in flight); tui-dev shrank
+> `BOTTOM_BAND_ROWS 3 → 1` and dropped the textual affordance from `caption_with_spinner`; tester
+> realigned five in-flight asserts + added a single-flush-row pin and a help-modal-documents-Esc-cancel
+> pin; one cold-review nit (stale `FOOTER_CAPTION` doc comment) was fixed. The prior verdicts were void
+> once code changed; final **approved** + **VERIFIED** at code-hash
+> `b4bc0cdb93086adb620ffbe66bc5d66a524e4ffd`; coverage 73.80% line (report-only). The `main` snapshot
 > stays `ready` (frozen at claim); the live status is `awaiting-merge` on
 > `feature/0015-tui-dialog-system`. **0016 is unblocked once 0015 merges.**
 >

@@ -5,6 +5,76 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-27 (0015 footer-fix re-entry — single-row flush footer; `feature`)
+
+Operator feedback re-opened 0015 from `awaiting-merge` back to `working` to fold in a
+**footer-margin fix**: the trimmed single-line caption sat too high — two blank rows of bottom
+margin in the terminal (operator wanted zero). Root cause: 0015 trimmed the footer caption to a
+single non-wrapping line but left `BOTTOM_BAND_ROWS = 3` (sized for the OLD wrapping captions per
+ADR-0006 §8.3 / learned 0010), so the top-aligned single-line caption left two dead rows. A 0015
+loose end — the trim created it — so the operator folded it back into 0015 rather than minting a
+new item; per verdict-pinning the prior approved + verified verdicts were **void** once code
+changed and the item re-ran review + verify.
+
+What changed:
+
+- **ADR-0006 §8.3 amended** (on `main`, commit `93a503b`): the footer is now a **single flush
+  row**; the textual `(Esc to cancel)` affordance is **relocated to the `?` help modal** (the
+  keymap is unchanged — `Esc` still cancels an in-flight/loading request; only the on-screen
+  textual hint moved).
+- **tui-dev** shrank `BOTTOM_BAND_ROWS 3 → 1` and dropped the textual `(Esc to cancel)` from
+  `caption_with_spinner` (the in-flight spinner glyph still appends to the stable caption). The
+  pending caption is now 60 cols (was 76) so it does not wrap; on a rare wide-timer state the
+  trailing spinner glyph may clip at the row edge — accepted per the single-row decision. Pure
+  `tui::ui` presentation; #1/#2/#3 untouched. File `crates/tui/src/ui/mod.rs`.
+- **tester** realigned the five in-flight asserts that pinned the old `(Esc to cancel)` footer
+  (`rendering.rs` `auth_/task_list_/offline_retry_in_flight_…`, `tasks.rs`
+  `delete_in_flight_renders_spinner_and_keeps_caption`, `timer.rs`
+  `in_flight_appends_a_spinner_without_replacing_the_caption`) — each now asserts the in-flight
+  render appends the spinner glyph and keeps the base caption with `"Esc to cancel"` NOT in the
+  footer — and added two positive pins: `navigation.rs`
+  `footer_is_a_single_flush_row_with_no_blank_trailing_rows` (caption AND timer on the terminal's
+  last row, last row non-empty — the operator's zero-bottom-margin ask) and `dialogs.rs`
+  `help_modal_documents_that_esc_cancels_an_in_flight_request` (the affordance's new home).
+- **One cold-review nit fixed.** The re-review (`changes-requested` at code-hash `542f19aa…`)
+  caught a stale `FOOTER_CAPTION` doc comment still describing the removed `(Esc to cancel)`
+  affordance and the old multi-row band; tui-dev rewrote it (comment-only, value unchanged),
+  moving the code-hash to `b4bc0cdb93086adb620ffbe66bc5d66a524e4ffd`.
+
+Final state: reviewer **approved** + verifier **VERIFIED**, both pinned to code-hash
+`b4bc0cdb93086adb620ffbe66bc5d66a524e4ffd`. Gates green (`./ok.sh test | lint | fmt --check`).
+The re-verify booted the stack (`./ok.sh up`, migrate exit 0 — no cross-worktree conflict) and
+confirmed the reqwest/API paths are byte-identical to the earlier VERIFIED tree (the reopened diff
+is pure `tui` presentation). Back at the AI-terminal `awaiting-merge` on the branch.
+
+coverage: **73.80%** line (re-captured via `./ok.sh coverage` in the worktree after the re-entry;
+docker + throwaway test Postgres booted cleanly. The footer fix realigned five asserts and added
+two pins but the headline `TOTAL` line-coverage is unchanged at 73.80%). Report-only — never a
+gate.
+
+**Process note — the test layer caught the operator's intent precisely.** The fix is small but
+the failure mode (dead margin rows) is exactly the kind of layout regression that is invisible to
+unit logic and only visible in a rendered buffer; the new `navigation.rs` single-flush-row pin
+asserts the terminal's last row is non-empty and carries both caption and timer, so a future
+band-sizing change cannot silently re-introduce the margin.
+
+**Follow-up / idea filed this cycle:** `board/ideas/0002-serialize-db-backed-integration-tests.md`
+(`status: open`, source 0015, raised-by reviewer). The reviewer found — out of scope of 0015, not
+blocking — that the default parallel `./ok.sh test` is **flaky under throwaway-Postgres
+connection-pool contention**: intermittent `register → HTTP 500 {"code":"internal"}` in the server
+DB-backed suites (auth/notes/profiles) that vanishes when DB tests are serialized
+(`RUST_TEST_THREADS=1`). A `platform-dev` infra concern (serialize DB-backed integration tests,
+bound the test pool, or raise the test Postgres `max_connections`); parked as an idea for human
+triage, not minted. It interacts with the open idea 0001 (per-worktree compose isolation) — both
+touch how `ok.sh` boots the test Postgres.
+
+**No new gotcha, no agent/skill/standards change warranted.** The "trim a caption but leave the
+band sized for the old wrap" loose end is captured in the Log + the ADR-0006 §8.3 amendment; it is
+0015-specific, not a recurring cross-cutting gotcha. The flaky-test observation is a `platform-dev`
+infra idea, not a standards rule.
+
+---
+
 ## Handoff — 2026-06-26 (0015 — TUI dialog system: modals, trimmed footer, purple focus; `feature`)
 
 Phase 2 of the three-part TUI overhaul (0014 → **0015** → 0016). A **`tui`-crate-only** dialog
