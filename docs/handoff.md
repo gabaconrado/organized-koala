@@ -5,6 +5,59 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-28 (0016 TUI detail views + final hotkey scheme — Phase 3 / final; `feature`)
+
+The three-part TUI overhaul (0014 shell → 0015 dialogs → **0016**) is complete. 0016 is a clean,
+well-scoped, `tui`-crate-only, presentation-only cycle that **reused the 0015 framework rather than
+rebuilding it** — no new ADR, no `contract`/server/domain delta (reviewer + verifier both confirmed
+`crates/contract/**`, `crates/server/**`, `Cargo.toml`/`Cargo.lock` byte-identical to `main`). It
+implements [ADR-0010][adr-0010-0014-snap] §3–§5.
+
+What shipped:
+
+- **Per-field task & note detail views** — each entity field is its own bordered pane, opened with
+  `Enter`, panes cycled with `Tab`/`Shift+Tab`. Task detail is a new `crates/tui/src/app/task_detail.rs`
+  (`TaskDetail` sub-state on `tasks.detail`), a transient sub-mode of `Screen::Main` (not a new
+  `Screen` variant). Note detail converted the read-only `NotesMode::Viewing(Note)` into editable
+  `NotesMode::Detail(NoteDetail)`. `e` enters edit on the focused editable pane; `Enter` commits that
+  one field; commits re-derive from the server response (#1).
+- **The final canonical hotkey remap:** `c`(done)→`Space`, `x`(delete)→`d`, `p`(timer)→`t`,
+  duration-edit `d`→`T` (configure). The existing `Event` alphabet was reused — **no new variants**.
+
+Load-bearing decisions (recorded in the item `## Summary` on the branch):
+
+- **A7 — global-suppression contract** for an open-but-not-editing detail view: it captures the
+  per-tab action keys + `Tab` + other globals, **but `?` help stays reachable** until a field edit is
+  in progress (then everything is captured as text). Encoded in `App::can_open_help` / `detail_idle`.
+- **Two-tiered `Esc` via an `Option<String>` edit buffer** — the buffer's presence is the tier
+  discriminant (edit-in-progress ⇒ cancel the edit; no edit ⇒ exit to the list), unwinding one level
+  at a time (R1).
+- **One unified gate, no parallel gate** — the open detail view + edit state folded into the existing
+  `overlay_capturing_input()` / `active_pane_in_sub_flow()` / `is_text_entry` predicates (R2/R3).
+- **Note per-field commit re-sends the snapshot field** (R5) — `UpdateNoteRequest` has no `Option`
+  fields, so committing one field re-sends the other from the snapshot so it is never blanked; the
+  wire stays unchanged. (Tasks need no such workaround — `UpdateTask` is all-`Option`.)
+
+Tests: new `crates/tui/tests/detail.rs` (21) + re-pinned keymap regressions (old `c`/`x`/`p`/
+duration-`d` asserted **gone**); tui suite 189, whole workspace 405/0. Reviewer **approved** +
+verifier **verified**, both pinned to code-hash `59ab31720df13c2a1f1c7a55752eeec48c7e3504`; verifier
+booted `./ok.sh up` and exercised the existing `UpdateTask`/`UpdateNote`/`GetNote` reqwest routes the
+per-field edits ride (per-field PATCH leaving other fields intact, GetNote+UpdateNote round-trip,
+400/401/404/profile-scoping, error contract; OTel spans observed) — no server/contract delta. Now at
+the AI-terminal `awaiting-merge` on its branch.
+
+coverage: **71.73%** line (captured via `./ok.sh coverage` in the worktree; docker + throwaway test
+Postgres booted cleanly). Report-only — never a gate.
+
+**No new gotcha, no skill/agent change.** This cycle exposed nothing durable to capture: the 0015
+framework (unified `overlay_capturing_input` gate, two-tiered `Esc`, `draw_field` purple border, `?`
+help modal) extended cleanly to the new detail sub-mode exactly as ADR-0010 anticipated; the
+file-ownership boundary (tui-dev slices 1–4, tester slice 5) held; the presentation-only boundary
+held. No new crate, so no new dev agent to register. One out-of-scope cosmetic nit (a stale
+`Viewing` doc comment in `notes.rs`) was already filed by the orchestrator as
+`board/ideas/0003-stale-viewing-doccomment-notes.md` on `main` — idea-first per the backlog policy,
+not folded into 0016 and not auto-minted.
+
 ## Handoff — 2026-06-27 (0015 help-modal layout re-entry — split crammed Global row; `feature`)
 
 Operator feedback re-opened 0015 from `awaiting-merge` again — this time a **help-modal layout
@@ -1821,7 +1874,7 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   `organized koala - <user> @ [<profile>]`, footer flushed to the bottom. Reviewer **approved** +
   verifier **verified**, both pinned to code-hash `bf65aa9612bf1633bf75e64f66a3dfddcfb4aa10`; coverage
   72.96% line. ADR-0010 binds 0015/0016. Fast-forward merged into `main`.
-- **The TUI dialog system is at `awaiting-merge` on `feature/0015-tui-dialog-system`**
+- **The TUI dialog system is MERGED on `main`**
   (0015, Phase 2 of the TUI overhaul, a `feature`, live-verified): a **`tui`-crate-only** modal
   framework with **no** `contract`/server/domain change ([ADR-0010][adr-0010-0014-snap] §5 boundary,
   confirmed byte-identical). A deep `draw_dialog` helper (one `Dialog` fed by all six dialog kinds +
@@ -1837,7 +1890,27 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   fix-now made `?` close the help overlay end-to-end (distinct `help_open` param in the 5-arg
   `map_key`) so the advertised `?/Esc: close` affordance works. Tests `tests/dialogs.rs` 21/0 + 380
   total pass; reviewer **approved** + verifier **VERIFIED**, both pinned to code-hash
-  `b9884943f36f3ac6c9d56fd2be46e31057a9060a`; coverage 73.80% line. Awaiting the human's merge; 0016
-  is unblocked once 0015 merges.
+  `b9884943f36f3ac6c9d56fd2be46e31057a9060a`; the help-modal layout re-entry re-attested at
+  `00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc`; coverage 73.81% line. Fast-forward merged into `main`;
+  0016 unblocked.
+- **The TUI detail views + final hotkey scheme are at `awaiting-merge` on
+  `feature/0016-tui-detail-views-and-hotkeys`** (0016, Phase 3 / **final** of the TUI overhaul, a
+  `feature`, live-verified): per-field **task & note detail views** (each field its own bordered pane,
+  opened with `Enter`, panes cycled with `Tab`/`Shift+Tab`, `e`→edit / `Enter`→commit-one-field /
+  two-tiered `Esc`) and the **canonical hotkey remap** (`c`(done)→`Space`, `x`(delete)→`d`,
+  `p`(timer)→`t`, duration-edit `d`→`T`). `tui`-crate-only, presentation-only — **no** new ADR and
+  **no** `contract`/server/domain delta (byte-identical, confirmed both ways), implementing
+  [ADR-0010][adr-0010-0014-snap] §3–§5. Task detail is a new `crates/tui/src/app/task_detail.rs`
+  (`TaskDetail` sub-state, a `Screen::Main` sub-mode); note detail converted `NotesMode::Viewing` →
+  editable `NotesMode::Detail`; the existing `Event` alphabet was reused (no new variants). Commits
+  re-derive from the server response (#1); the note per-field commit re-sends the snapshot's other
+  field (R5, wire unchanged). A7 contract: an open non-editing detail view captures action keys + `Tab`
+  but keeps `?` reachable; two-tiered `Esc` modelled via an `Option<String>` edit buffer; all gating
+  folded into the existing unified `overlay_capturing_input` predicate (no parallel gate). Tests: new
+  `tests/detail.rs` (21) + re-pinned keymap regressions; tui suite 189, workspace 405/0. Reviewer
+  **approved** + verifier **verified**, both pinned to code-hash
+  `59ab31720df13c2a1f1c7a55752eeec48c7e3504`; coverage 71.73% line. Reused the 0015 framework
+  cleanly — no new gotcha/skill/agent change. With 0016, **the three-part TUI overhaul
+  (0014→0015→0016) is complete.** Awaiting the human's merge.
 
 [adr-0010-0014-snap]: ./adr/0010-tui-navigation-and-interaction-model.md

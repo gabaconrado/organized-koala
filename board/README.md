@@ -53,7 +53,7 @@ backlog".
 | [0013](./features/0013-session-token-debug-leak.md) | Redact the JWT in `tui` `Session` — bare `String` reachable via derived `Debug` (rust-standards secret-leak violation) | chore | merged | high | — | — (merged) |
 | [0014](./features/0014-tui-layout-shell.md) | TUI layout shell — top-level tabs, centred title, centred auth form, tight footer | feature | merged | medium | — | — (merged) |
 | [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | merged | medium | 0014 (merged ✓) | — (merged) |
-| [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | inbox | medium | 0015 (merged ✓) | — |
+| [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | ready (claimed; branch `awaiting-merge`) | medium | 0015 (merged ✓) | feature/0016-tui-detail-views-and-hotkeys |
 
 > **0010 — Notes — MERGED.** The final missing
 > domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
@@ -144,6 +144,33 @@ backlog".
 > `bf65aa9612bf1633bf75e64f66a3dfddcfb4aa10` (commit `c8b1217`); coverage 72.96% line (report-only).
 > ADR-0010 binds 0015/0016 — those phases inherit and cite it. Fast-forward merged into `main`
 > (linear history); **0015 is now unblocked.**
+>
+> **0016 — TUI detail views + final hotkey scheme — branch `awaiting-merge` (Phase 3 / final of 3).**
+> The three-part TUI overhaul (0014 → 0015 → **0016**) is complete. A **`tui`-crate-only**,
+> presentation-only cycle implementing [ADR-0010](../docs/adr/0010-tui-navigation-and-interaction-model.md)
+> §3–§5 with **no new ADR** and **no** `contract`/server/domain delta (reviewer + verifier confirmed
+> `crates/contract/**`, `crates/server/**`, `Cargo.toml`/`Cargo.lock` byte-identical to `main`). Two
+> things landed: per-field **task & note detail views** — each field its own bordered pane, opened with
+> `Enter`, panes cycled with `Tab`/`Shift+Tab`, `e`→edit / `Enter`→commit-one-field / two-tiered
+> `Esc` — and the **canonical hotkey remap** (`c`(done)→`Space`, `x`(delete)→`d`, `p`(timer)→`t`,
+> duration-edit `d`→`T`). Task detail is a new `crates/tui/src/app/task_detail.rs` (`TaskDetail`
+> sub-state, a `Screen::Main` sub-mode, not a new `Screen` variant); note detail converted the
+> read-only `NotesMode::Viewing` into editable `NotesMode::Detail`; the existing `Event` alphabet was
+> reused (no new variants). Commits re-derive from the server response (#1); the note per-field commit
+> re-sends the snapshot's untouched field (R5, wire unchanged). A7 contract: an open non-editing detail
+> view captures action keys + `Tab` but keeps `?` reachable; two-tiered `Esc` modelled via an
+> `Option<String>` edit buffer (its presence is the tier discriminant); all gating folded into the
+> existing unified `overlay_capturing_input` predicate (no parallel gate). Tests: new
+> `tests/detail.rs` (21) + re-pinned keymap regressions (old `c`/`x`/`p`/duration-`d` asserted gone);
+> tui suite 189, workspace 405/0. Reviewer **approved** + verifier **verified** (booted `./ok.sh up`,
+> exercised the existing `UpdateTask`/`UpdateNote`/`GetNote` reqwest routes — per-field PATCH leaving
+> other fields intact, GetNote+UpdateNote round-trip, 400/401/404/profile-scoping, error contract, OTel
+> spans; no server/contract delta), both pinned to code-hash
+> `59ab31720df13c2a1f1c7a55752eeec48c7e3504`; coverage 71.73% line (report-only). Reused the 0015
+> framework cleanly — no new gotcha/skill/agent change; no new crate. One out-of-scope cosmetic nit
+> (stale `Viewing` doc comment in `notes.rs`) filed as
+> [`ideas/0003`](./ideas/0003-stale-viewing-doccomment-notes.md) on `main`. At the AI-terminal
+> `awaiting-merge` on its branch; awaiting the human's merge.
 >
 > **0015 — TUI dialog system — MERGED (Phase 2 of 3).** A **`tui`-crate-only**
 > modal framework with **no** `contract`/server/domain change (the
