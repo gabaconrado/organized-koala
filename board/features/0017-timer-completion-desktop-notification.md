@@ -456,6 +456,18 @@ Design is low-risk and bounded; no `grill` pass needed.
   **`REVIEW-STATUS: approved` — code-hash:d3fa1fc5b3ed5ac0770085809aac150e25012849 sha:d082668.**
   Out-of-scope (to be filed as ideas, non-blocking): A2 drops failure logging; A6 fires `.show()`
   synchronously on the poll loop.
+- [x] 2026-06-28 [verifier] Live verify (DoD clause 4) @ code-hash
+  d3fa1fc5b3ed5ac0770085809aac150e25012849. **TestBackend suite (ADR-0003 layer 2 — primary
+  evidence):** `notifications.rs` 13/13 passed, full workspace green. **Live stack** (`./ok.sh up`,
+  docker available, no volume/migration conflict): exercised the affected timer-session path —
+  register→config→start→poll showed the **server-owned running→completed verdict** (ADR-0002)
+  the TUI edge-detects, Completed→Completed re-pull stayed completed (fire-once relies on this),
+  stop→idle→start re-armed; error contract holds (401 unauth, 400 validation); timer is
+  account-global (no profile segment); OTel spans emitted+ingested. **Inferred (by design):** the
+  one-notification-per-edge logic is proven by the daemon-free spy suite, not a live boot. **R2
+  caveat:** visual desktop-notification appearance is the **operator's manual acceptance** (no
+  daemon in this env) — explicitly not the verifier's, not a capability gap. No Board/code edited.
+  **VERIFY: verified.**
 
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
