@@ -580,3 +580,21 @@ line-coverage unchanged at 73.80%). Report-only — never a gate.
   `r refresh` sibling rows (alignment invariant, asserted relative to siblings, not a magic
   constant). Test-only; no `src/`. `dialogs` suite 22→23, full workspace green; lint + fmt clean.
   Commit `397d759`; code-hash `00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc`.
+- [x] 2026-06-27 [verifier] Re-attest at code-hash `00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc`
+  (commit `397d759`; HEAD `8477b35` Board-only) — **VERIFIED**. Independently confirmed (`git diff
+  cf66137..397d759 -- crates/`) the only source deltas since the live wire pass are the `draw_help`
+  help-text edit + the new `dialogs.rs` test — no server/contract/reqwest code. `./ok.sh test` green
+  (`dialogs` 22→23, no flake). Live server API + reqwest-path attestation carries forward from the
+  byte-identical `542f19aa` tree (no wire delta; stack not re-booted — correct).
+- [x] 2026-06-27 [reviewer] Re-review of `8c25b97`+`397d759` — **`REVIEW-STATUS: approved`**, pinned
+  to code-hash `00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc` (commit `397d759`; HEAD `8477b35`
+  Board-only). Measured the rendered Global block: all eight rows' descriptions align at column 21
+  (index 20) — the two new rows match the sibling `{key:<18}{desc}` layout; the crammed-row defect
+  is fully corrected. Presentation-only (only two `Line::from` literals changed); no behaviour/keymap,
+  no wire (#2), no domain (#3), TUI stateless (#1), no `#[allow]`. New test genuinely pins the
+  corrected layout (separate rows + column alignment). Gate green: lint + fmt clean; `./ok.sh test`
+  green run serialized (`RUST_TEST_THREADS=1`) from clean state — auth 16, dialogs 23, 0 failures.
+  No code findings. Process note: re-review hit the idea-0002 parallel-Postgres flake; overlapping
+  background test runs poisoned the shared throwaway test PG (transient auth-suite failures), which
+  the clean serialized re-run cleared — reviewer did NOT reset the shared volume (correctly outside
+  read-only authority); orphaned `pgrep` waiter shells were the churn, not a code defect.
