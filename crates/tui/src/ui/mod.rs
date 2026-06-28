@@ -420,6 +420,7 @@ fn draw_help(frame: &mut Frame) {
         Line::from("Profiles Enter switch · a add · e rename · d delete"),
         Line::from(""),
         Line::from("Detail   Tab panes · e edit · Enter commit · Esc back"),
+        Line::from("         Content: Enter inserts a newline, Ctrl+S commits"),
     ];
     draw_dialog(
         frame,
@@ -931,11 +932,12 @@ fn note_editing_or(detail: &NoteDetail, editing: bool, value: String) -> String 
     }
 }
 
-/// The display label for a note detail pane.
+/// The display label for a note detail pane. The multiline `Content` label carries the terse
+/// commit/newline hint so the `Ctrl+S` affordance is discoverable at the point of use (ADR-0011).
 fn note_pane_label(pane: NotePane) -> &'static str {
     match pane {
         NotePane::Title => "Title",
-        NotePane::Content => "Content",
+        NotePane::Content => "Content (Enter: newline · Ctrl+S: commit)",
         NotePane::Created => "Created",
     }
 }
