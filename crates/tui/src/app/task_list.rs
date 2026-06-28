@@ -7,6 +7,7 @@ use contract::{CreateTaskRequest, Task, TaskStatus, UpdateTaskRequest};
 use super::Session;
 use super::protocol::{ClientRequest, RequestId};
 use super::task_add::{AddTaskState, EditTaskState};
+use super::task_detail::{TaskDetail, TaskPane};
 use crate::app::Event;
 
 /// State of the task-list screen for the active profile.
@@ -20,6 +21,9 @@ pub struct TaskListState {
     pub adding: Option<AddTaskState>,
     /// Active edit-task sub-flow, if open.
     pub editing: Option<EditTaskState>,
+    /// The open per-field detail view, if any (ADR-0010 §4). Transient process-lifetime UI state
+    /// (#1); the snapshot re-derives from the server after every commit.
+    pub detail: Option<TaskDetail>,
     /// Id of the task awaiting a delete confirmation (the two-step delete affordance): set on the
     /// first delete key, cleared on confirm or on any other navigation. `None` when not armed.
     pub confirming_delete: Option<String>,
@@ -38,6 +42,7 @@ impl TaskListState {
             selected,
             adding: None,
             editing: None,
+            detail: None,
             confirming_delete: None,
             message: None,
             pending: None,
@@ -48,6 +53,12 @@ impl TaskListState {
     #[must_use]
     pub fn is_pending(&self) -> bool {
         self.pending.is_some()
+    }
+
+    /// Whether the detail view is open with a field edit in progress (text-entry context).
+    #[must_use]
+    pub fn detail_editing(&self) -> bool {
+        self.detail.as_ref().is_some_and(TaskDetail::is_editing)
     }
 
     fn move_selection(&mut self, forward: bool) {
@@ -85,10 +96,13 @@ impl TaskListState {
         if self.editing.is_some() {
             return self.handle_edit_event(event, session);
         }
-        // A delete confirmation is armed only across consecutive delete keystrokes; any other
-        // action disarms it so a stray keypress can never delete.
-        if !matches!(event, Event::DeleteSelected) {
-            self.confirming_delete = None;
+        if self.detail.is_some() {
+            return self.handle_detail_event(event, session);
+        }
+        // A delete confirmation captures input until confirmed (`Submit`) or cancelled; any other
+        // list action disarms it so a stray keypress can never delete.
+        if self.confirming_delete.is_some() {
+            return self.handle_delete_confirm_event(event, session);
         }
         match event {
             Event::Next => self.move_selection(true),
@@ -99,11 +113,115 @@ impl TaskListState {
             }
             Event::BeginEditTask => self.begin_edit(),
             Event::ToggleDone => return self.toggle_done(session),
-            Event::DeleteSelected => return self.delete_selected(session),
+            // `Enter` on the idle list opens the per-field detail view for the selected task.
+            Event::Submit => self.open_detail(),
+            Event::DeleteSelected => self.arm_delete(),
             Event::Refresh => return self.refresh(session),
             _ => {}
         }
         None
+    }
+
+    /// Open the per-field detail view for the selected task. The list is itself server-derived, so
+    /// the detail opens from the already-loaded in-memory snapshot (Assumption A3); commits
+    /// re-derive it from a fresh list refresh (#1). A no-op with nothing selected.
+    fn open_detail(&mut self) {
+        if let Some(task) = self.selected.and_then(|idx| self.tasks.get(idx)) {
+            self.message = None;
+            self.detail = Some(TaskDetail::new(task.clone()));
+        }
+    }
+
+    /// Arm the delete confirmation for the selected task (the first `d`), opening the confirm dialog
+    /// (ADR-0010 §4, Assumption A5). The second key (`Enter`) confirms via
+    /// [`Self::handle_delete_confirm_event`]. A no-op with nothing selected.
+    fn arm_delete(&mut self) {
+        if let Some(task) = self.selected.and_then(|idx| self.tasks.get(idx)) {
+            self.message = None;
+            self.confirming_delete = Some(task.id.clone());
+        }
+    }
+
+    /// Handle a key while the delete-confirm dialog is armed: `Submit` (Enter) confirms the delete;
+    /// `Cancel` (Esc, routed by the caller) disarms; everything else is inert.
+    fn handle_delete_confirm_event(
+        &mut self,
+        event: Event,
+        session: Option<&Session>,
+    ) -> Option<ClientRequest> {
+        match event {
+            Event::Submit => self.confirm_delete(session),
+            Event::Cancel => {
+                self.confirming_delete = None;
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Handle a key while the per-field detail view is open (ADR-0010 §4). Two-tiered `Esc`: while
+    /// editing a field, `Cancel` reverts the edit; with no edit, `Cancel` exits to the list. `e`
+    /// opens the edit buffer on the focused editable pane; `Next`/`Prev` cycle panes when not
+    /// editing; `Char`/`Backspace` mutate the buffer; `Submit` commits the focused field.
+    fn handle_detail_event(
+        &mut self,
+        event: Event,
+        session: Option<&Session>,
+    ) -> Option<ClientRequest> {
+        let Some(detail) = &mut self.detail else {
+            return None;
+        };
+        if detail.is_editing() {
+            match event {
+                Event::Char(c) => detail.push_char(c),
+                Event::Backspace => detail.backspace(),
+                Event::Cancel => detail.cancel_edit(),
+                Event::Submit => return self.submit_field(session),
+                _ => {}
+            }
+            return None;
+        }
+        match event {
+            Event::Next => detail.cycle(true),
+            Event::Prev => detail.cycle(false),
+            Event::BeginEditTask => detail.begin_edit(),
+            Event::Cancel => self.detail = None,
+            _ => {}
+        }
+        None
+    }
+
+    /// Commit the focused detail field via [`UpdateTaskRequest`] with **only** the edited field set
+    /// (the request's other fields stay `None`, ADR-0010 §4). A no-op if not editing a field. A
+    /// blank title is rejected locally without a round-trip (mirrors the edit dialog).
+    fn submit_field(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
+        let session = session?;
+        let detail = self.detail.as_mut()?;
+        let buffer = detail.edit.as_ref()?.clone();
+        let req = match detail.focused_pane()? {
+            TaskPane::Title => {
+                if buffer.trim().is_empty() {
+                    return None;
+                }
+                UpdateTaskRequest {
+                    title: Some(buffer.trim().to_owned()),
+                    description: None,
+                    status: None,
+                }
+            }
+            TaskPane::Description => UpdateTaskRequest {
+                title: None,
+                description: Some(buffer),
+                status: None,
+            },
+            TaskPane::Status | TaskPane::Created | TaskPane::Closed => return None,
+        };
+        Some(ClientRequest::UpdateTask {
+            token: session.token.clone(),
+            profile_id: session.profile_id.clone(),
+            task_id: detail.task.id.clone(),
+            req,
+        })
     }
 
     fn handle_add_event(
@@ -214,23 +332,16 @@ impl TaskListState {
         })
     }
 
-    /// Delete the selected task behind a two-step confirm: the first press arms the confirmation
-    /// for that task id; the second (same task still selected) issues the delete. Selecting a
-    /// different task re-arms for the new id.
-    fn delete_selected(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
+    /// Issue the delete for the armed task id (the confirm dialog's `Enter`). A no-op if nothing is
+    /// armed or the session is gone.
+    fn confirm_delete(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
         let session = session?;
-        let idx = self.selected?;
-        let task = self.tasks.get(idx)?;
-        if self.confirming_delete.as_deref() == Some(task.id.as_str()) {
-            return Some(ClientRequest::DeleteTask {
-                token: session.token.clone(),
-                profile_id: session.profile_id.clone(),
-                task_id: task.id.clone(),
-            });
-        }
-        self.message = None;
-        self.confirming_delete = Some(task.id.clone());
-        None
+        let task_id = self.confirming_delete.clone()?;
+        Some(ClientRequest::DeleteTask {
+            token: session.token.clone(),
+            profile_id: session.profile_id.clone(),
+            task_id,
+        })
     }
 
     fn refresh(&mut self, session: Option<&Session>) -> Option<ClientRequest> {

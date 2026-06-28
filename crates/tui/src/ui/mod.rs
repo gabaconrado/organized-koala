@@ -18,7 +18,7 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragra
 
 use crate::app::{
     App, AuthField, AuthMode, AuthState, MainState, NotesMode, NotesState, ProfilesMode,
-    ProfilesState, Screen, Tab, TaskListState, Timer,
+    ProfilesState, Screen, Tab, TaskDetail, TaskListState, TaskPane, Timer,
 };
 use contract::{Note, TaskStatus, TimerSession};
 
@@ -275,7 +275,7 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
                 fields: Vec::new(),
                 body: vec![Line::from("Delete this task?")],
                 error: None,
-                hint: "x: confirm delete | Esc: cancel",
+                hint: "Enter: confirm delete | Esc: cancel",
             },
         );
     }
@@ -737,9 +737,105 @@ fn draw_field(
     frame.render_widget(Paragraph::new(shown).block(block), area);
 }
 
-/// Render the Tasks pane (the active profile's task list) into `area`. The title, tab bar, message
-/// line, and footer are owned by [`draw_main`].
+/// A pane of a detail view: a label, its (snapshot or in-edit) value, whether it is focused
+/// (purple border), and whether it is editable (read-only panes show a plain border even when
+/// focused so the user sees `e` is inert).
+struct DetailPane<'a> {
+    label: &'a str,
+    value: String,
+    focused: bool,
+    editable: bool,
+}
+
+/// Draw a vertical stack of detail-view panes in `area`, each a bordered box (3 rows). The focused
+/// editable pane gets the purple focus border (ADR-0010 §4, reusing the dialog/`draw_field` cue); a
+/// focused read-only pane is bordered but not purple, signalling `e` is inert there. The detail
+/// view renders in the main content area, **not** as a floating dialog.
+fn draw_detail_panes(frame: &mut Frame, area: Rect, title: &str, panes: &[DetailPane]) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(title.to_owned());
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let constraints: Vec<Constraint> = panes.iter().map(|_| Constraint::Length(3)).collect();
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(inner);
+    for (i, pane) in panes.iter().enumerate() {
+        let Some(slot) = chunks.get(i) else { continue };
+        let mut field = Block::default()
+            .borders(Borders::ALL)
+            .title(pane.label.to_owned());
+        if pane.focused && pane.editable {
+            field = field.border_style(Style::default().fg(Color::Magenta));
+        }
+        frame.render_widget(Paragraph::new(pane.value.clone()).block(field), *slot);
+    }
+}
+
+/// Render the task detail view: Title/Description editable, Status/Created/Closed read-only, with
+/// the focused editable pane purple-bordered. An in-progress edit shows the live buffer value.
+fn draw_task_detail(frame: &mut Frame, area: Rect, detail: &TaskDetail) {
+    let task = &detail.task;
+    let panes: Vec<DetailPane> = detail
+        .panes
+        .iter()
+        .enumerate()
+        .map(|(i, pane)| {
+            let focused = i == detail.focused;
+            let editing = focused && detail.is_editing();
+            let value = match pane {
+                TaskPane::Title => task_editing_or(detail, editing, task.title.clone()),
+                TaskPane::Description => task_editing_or(detail, editing, task.description.clone()),
+                TaskPane::Status => match task.status {
+                    TaskStatus::Open => "open".to_owned(),
+                    TaskStatus::Done => "done".to_owned(),
+                },
+                TaskPane::Created => task.created_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+                TaskPane::Closed => task
+                    .closed_at
+                    .map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string())
+                    .unwrap_or_default(),
+            };
+            DetailPane {
+                label: task_pane_label(*pane),
+                value,
+                focused,
+                editable: pane.is_editable(),
+            }
+        })
+        .collect();
+    draw_detail_panes(frame, area, "Task", &panes);
+}
+
+/// The live edit buffer when this pane is being edited, else the snapshot `value`.
+fn task_editing_or(detail: &TaskDetail, editing: bool, value: String) -> String {
+    if editing {
+        detail.edit.clone().unwrap_or(value)
+    } else {
+        value
+    }
+}
+
+/// The display label for a task detail pane.
+fn task_pane_label(pane: TaskPane) -> &'static str {
+    match pane {
+        TaskPane::Title => "Title",
+        TaskPane::Description => "Description",
+        TaskPane::Status => "Status",
+        TaskPane::Created => "Created",
+        TaskPane::Closed => "Closed",
+    }
+}
+
+/// Render the Tasks pane (the active profile's task list, or the open detail view) into `area`. The
+/// title, tab bar, message line, and footer are owned by [`draw_main`].
 fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
+    if let Some(detail) = &list.detail {
+        draw_task_detail(frame, area, detail);
+        return;
+    }
     let items: Vec<ListItem> = list
         .tasks
         .iter()

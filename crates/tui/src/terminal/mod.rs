@@ -42,7 +42,8 @@ const TIMER_REFRESH_TICKS: u64 = 750;
 /// Whether the app is currently in a text-entry context, where letters are typed rather than
 /// interpreted as commands. The duration-edit sub-flow (`editing_duration`) is a global text-entry
 /// mode that overlays the active post-auth screen. A confirmation dialog captures input but is
-/// **not** text entry (it accepts no typed characters), so it is excluded here.
+/// **not** text entry (it accepts no typed characters), so it is excluded here. A detail view with
+/// an in-progress field edit (its edit buffer present) is text entry: keystrokes go to the buffer.
 fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
     if editing_duration {
         return true;
@@ -50,11 +51,29 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
     match screen {
         Screen::Auth(_) => true,
         Screen::Main(main) => match main.active_tab {
-            Tab::Tasks => main.tasks.adding.is_some() || main.tasks.editing.is_some(),
+            Tab::Tasks => {
+                main.tasks.adding.is_some()
+                    || main.tasks.editing.is_some()
+                    || main.tasks.detail_editing()
+            }
             Tab::Notes => main.notes.is_text_entry(),
             Tab::Profiles => main.profiles.is_text_entry(),
         },
         Screen::Offline { .. } => false,
+    }
+}
+
+/// Whether a detail view (task or note) is open on the active tab, regardless of whether a field
+/// edit is in progress. While a detail view is open `Tab`/`Shift+Tab` cycle its panes (not the
+/// top-level tabs), `Esc` is two-tiered, and the per-tab list action keys (`a`/`d`/`Space`) are
+/// suppressed; `e`/`Enter`/`?` remain reachable (ADR-0010 §4, Assumption A7).
+fn detail_view_open(screen: &Screen) -> bool {
+    match screen {
+        Screen::Main(main) => match main.active_tab {
+            Tab::Tasks => main.tasks.detail.is_some(),
+            Tab::Notes | Tab::Profiles => false,
+        },
+        _ => false,
     }
 }
 
@@ -125,18 +144,19 @@ pub fn map_key(
     // A captured overlay (add/edit/confirm/help/duration) or an in-flight request makes `Esc`
     // mean cancel, and makes `Tab` switch fields rather than tabs.
     let in_overlay = overlay_capturing || editing_duration;
-    // The task-delete confirmation is a two-step `d`-again affordance (Assumption A5): while it is
-    // armed the dialog captures input (globals suppressed), but a second `d` must still confirm.
-    let task_delete_armed = matches!(
-        screen,
-        Screen::Main(main)
-            if main.active_tab == Tab::Tasks && main.tasks.confirming_delete.is_some()
-    );
+    // A detail view is open (task or note). While open, `Tab`/`Shift+Tab` cycle its panes, `e`
+    // begins a field edit on the focused pane, `Enter` opens/commits, `?` stays reachable, and the
+    // per-tab list action keys (`a`/`d`/`Space`) plus other globals are suppressed (Assumption A7).
+    // `detail_idle` is the non-editing detail state (the edit-in-progress state is text entry).
+    let detail = detail_view_open(screen);
+    let detail_idle = detail && !text_entry;
     let on_tasks = active_tab == Some(Tab::Tasks);
     let on_notes = active_tab == Some(Tab::Notes);
     let on_profiles = active_tab == Some(Tab::Profiles);
     let post_auth = active_tab.is_some();
-    // Global hotkeys are live only on an idle post-auth screen with no overlay capturing input.
+    // Global hotkeys are live only on an idle post-auth screen with no overlay capturing input and
+    // no detail view open. A detail view counts as input-capturing via `overlay_capturing_input`,
+    // so `in_overlay` is already `true` while one is open.
     let globals_live = post_auth && !in_overlay;
 
     match key.code {
@@ -159,16 +179,17 @@ pub fn map_key(
         KeyCode::Backspace => Some(Event::Backspace),
         KeyCode::F(2) if matches!(screen, Screen::Auth(_)) => Some(Event::ToggleAuthMode),
         KeyCode::Char(c) if text_entry => Some(Event::Char(c)),
-        // Per-tab action keys (idle list, no overlay capturing input). The final keymap
+        // In an open detail view (no field edit in progress): `e` begins a field edit on the focused
+        // pane (inert on a read-only pane, handled by the core), and `?` stays reachable. `Enter`
+        // (above) opens/commits, `Tab`/arrows cycle panes, `Esc` is two-tiered (above).
+        KeyCode::Char('e') if detail_idle && on_tasks => Some(Event::BeginEditTask),
+        KeyCode::Char('?') if detail_idle => Some(Event::ToggleHelp),
+        // Per-tab action keys (idle list, no overlay/detail capturing input). The final keymap
         // (ADR-0010 §4): `Space` toggles done (was `c`), `d` deletes (was `x`).
         KeyCode::Char('a') if on_tasks && globals_live => Some(Event::BeginAddTask),
         KeyCode::Char('e') if on_tasks && globals_live => Some(Event::BeginEditTask),
         KeyCode::Char(' ') if on_tasks && globals_live => Some(Event::ToggleDone),
-        // First `d` (idle) arms the confirmation; a second `d` (armed dialog open) confirms the
-        // delete — the only key the task-delete dialog accepts besides `Esc` to cancel (A5).
-        KeyCode::Char('d') if on_tasks && (globals_live || task_delete_armed) => {
-            Some(Event::DeleteSelected)
-        }
+        KeyCode::Char('d') if on_tasks && globals_live => Some(Event::DeleteSelected),
         KeyCode::Char('a') if on_notes && globals_live => Some(Event::BeginAddNote),
         KeyCode::Char('e') if on_notes && globals_live => Some(Event::BeginEditNote),
         KeyCode::Char('d') if on_notes && globals_live => Some(Event::BeginDeleteNote),

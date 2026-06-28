@@ -21,6 +21,7 @@ pub mod notes;
 pub mod profiles;
 pub mod protocol;
 pub mod task_add;
+pub mod task_detail;
 pub mod task_list;
 pub mod timer;
 pub mod token;
@@ -31,6 +32,7 @@ pub use notes::{NoteForm, NotesMode, NotesState};
 pub use profiles::{ProfileForm, ProfilesMode, ProfilesState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
 pub use task_add::{AddTaskState, EditTaskState};
+pub use task_detail::{TaskDetail, TaskPane};
 pub use task_list::TaskListState;
 pub use timer::{DurationEditState, Timer};
 pub use token::SessionToken;
@@ -239,14 +241,17 @@ impl App {
         self.help_open
     }
 
-    /// The single "input-capturing overlay" predicate (ADR-0010 §3): `true` whenever **any**
-    /// dialog/overlay owns input — a task add/edit form, a task delete confirmation, a notes
-    /// create/edit/confirm-delete, a profiles create/rename/confirm-delete, the duration edit,
-    /// **or** the help overlay. While true, the terminal layer suppresses every global hotkey
-    /// (`q`/`r`/`?`/`p`/`d`/tab-switch) and routes `Esc` to [`Event::Cancel`]; text, field-switch,
-    /// and submit still reach the focused dialog. Confirmation dialogs capture no text but still
-    /// count — they suppress globals and are `Esc`-cancelled. `false` on the auth/offline screens
-    /// (the auth form is its own always-text-entry context).
+    /// The single "input-capturing overlay" predicate (ADR-0010 §3/§4): `true` whenever **any**
+    /// dialog/overlay owns input — a task add/edit form, a task delete confirmation, an **open task
+    /// detail view**, a notes create/edit/confirm-delete, a profiles create/rename/confirm-delete,
+    /// the duration edit, **or** the help overlay. While true, the terminal layer suppresses every
+    /// global hotkey (`q`/`r`/`t`/`T`/tab-switch) and routes `Esc` to [`Event::Cancel`]; text,
+    /// field/pane-switch, and submit still reach the focused surface. Confirmation dialogs capture
+    /// no text but still count — they suppress globals and are `Esc`-cancelled. An open detail view
+    /// counts here (so globals/tab-switch are suppressed), but `?` help stays reachable over an
+    /// *idle* detail view (Assumption A7 — see the [`Event::ToggleHelp`] guard in
+    /// [`Self::handle_event`]). `false` on the auth/offline screens (the auth form is its own
+    /// always-text-entry context).
     #[must_use]
     pub fn overlay_capturing_input(&self) -> bool {
         if self.help_open || self.timer.is_editing() {
@@ -258,12 +263,51 @@ impl App {
                     main.tasks.adding.is_some()
                         || main.tasks.editing.is_some()
                         || main.tasks.confirming_delete.is_some()
+                        || main.tasks.detail.is_some()
                 }
                 Tab::Notes => main.notes.in_sub_flow(),
                 Tab::Profiles => main.profiles.in_sub_flow(),
             },
             Screen::Auth(_) | Screen::Offline { .. } => false,
         }
+    }
+
+    /// Whether a per-field detail view (task or note) is open on the active tab.
+    #[must_use]
+    fn detail_view_open(&self) -> bool {
+        match &self.screen {
+            Screen::Main(main) => match main.active_tab {
+                Tab::Tasks => main.tasks.detail.is_some(),
+                Tab::Notes | Tab::Profiles => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Whether a detail view is open with a field edit in progress (a text-entry context).
+    #[must_use]
+    fn detail_field_editing(&self) -> bool {
+        match &self.screen {
+            Screen::Main(main) => match main.active_tab {
+                Tab::Tasks => main.tasks.detail_editing(),
+                Tab::Notes | Tab::Profiles => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Whether `?` may open the help overlay now: from an idle post-auth screen, or over an **idle**
+    /// detail view (no field edit in progress) — but never over a modal dialog/form or a detail
+    /// field edit (Assumption A7).
+    #[must_use]
+    fn can_open_help(&self) -> bool {
+        if !self.screen.is_post_auth() {
+            return false;
+        }
+        if self.detail_view_open() {
+            return !self.detail_field_editing();
+        }
+        !self.overlay_capturing_input()
     }
 
     /// The id of the request currently awaited on the active surface, if any. On the tabbed view
@@ -309,9 +353,9 @@ impl App {
                 self.quit = true;
                 None
             }
-            // Open the help overlay on an idle post-auth screen; inert while a dialog captures
-            // input (handled above) or off a post-auth screen (Assumption A3).
-            Event::ToggleHelp if self.screen.is_post_auth() && !self.overlay_capturing_input() => {
+            // Open the help overlay on an idle post-auth screen or over an idle detail view; inert
+            // while a dialog/form or a detail field edit captures input (Assumption A3/A7).
+            Event::ToggleHelp if self.can_open_help() => {
                 self.help_open = true;
                 None
             }
@@ -373,12 +417,17 @@ impl App {
         request.map(|request| self.dispatch_screen(request))
     }
 
-    /// Whether the active tabbed pane has a text-entry / confirmation sub-flow open (so `Tab` must
-    /// switch fields, not tabs). `false` on the auth/offline screens.
+    /// Whether the active tabbed pane has a text-entry / confirmation sub-flow **or an open detail
+    /// view** (so `Tab` must switch fields/panes, not top-level tabs). `false` on the auth/offline
+    /// screens.
     fn active_pane_in_sub_flow(&self) -> bool {
         match &self.screen {
             Screen::Main(main) => match main.active_tab {
-                Tab::Tasks => main.tasks.adding.is_some() || main.tasks.editing.is_some(),
+                Tab::Tasks => {
+                    main.tasks.adding.is_some()
+                        || main.tasks.editing.is_some()
+                        || main.tasks.detail.is_some()
+                }
                 Tab::Notes => main.notes.in_sub_flow(),
                 Tab::Profiles => main.profiles.in_sub_flow(),
             },
@@ -982,9 +1031,11 @@ impl App {
                 let mut state = TaskListState::new(tasks);
                 match &mut self.screen {
                     // Tabbed view already open: replace only the tasks pane, preserving an
-                    // in-progress add sub-flow and the selected row (transient UI state, #1).
+                    // in-progress add sub-flow, the open detail view, and the selected row
+                    // (transient UI state, #1).
                     Screen::Main(main) => {
                         state.adding = main.tasks.adding.clone();
+                        state.detail = main.tasks.detail.clone();
                         if main.tasks.selected.is_some() && state.selected.is_some() {
                             state.selected = main.tasks.selected;
                         }
@@ -1047,9 +1098,15 @@ impl App {
         result: crate::client::ClientResult<contract::Task>,
     ) -> Option<Dispatch> {
         match result {
-            Ok(_) => {
+            Ok(task) => {
+                // A commit from the per-field detail view re-derives the open detail from the
+                // server's returned task (#1) and stays in the view (clearing the edit buffer); an
+                // edit-dialog or toggle commit clears the dialog. Both then refresh the list.
                 if let Some(list) = self.tasks_pane_mut() {
                     list.editing = None;
+                    if let Some(detail) = &mut list.detail {
+                        detail.refresh_from(task);
+                    }
                 }
                 self.refresh_tasks()
             }

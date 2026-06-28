@@ -332,6 +332,27 @@ reqwest-client confirmation only.
   `./ok.sh fmt` clean; `cargo clippy -p tui --lib --bins` clean; `cargo build -p tui` green. (The
   detail-view `Tab`/`e`/`Esc` routing + `is_text_entry` detail-edit branch land in slices 2–3 with
   the detail state they depend on.)
+- [x] 2026-06-28 [tui-dev] Slice 2 — Task detail view (`crates/tui/src/app/task_detail.rs` new,
+  `task_list.rs`, `app/mod.rs`, `terminal/mod.rs`, `ui/mod.rs`). New `TaskDetail` sub-state
+  (`tasks.detail: Option<TaskDetail>`) — a `Screen::Main` sub-mode, **not** a new `Screen` variant.
+  Panes: Title/Description editable, Status/Created read-only, Closed read-only when done. `Enter`
+  opens the detail from the selected task (list is server-derived, A3); `Tab`/`Shift+Tab`/arrows
+  cycle panes (wrapping); `e` opens the edit buffer on a focused **editable** pane (inert on
+  read-only, A6); `Enter` commits that one field via `UpdateTask` with **only** the edited `Option`
+  set, then `apply_update` re-derives the detail from the returned task and chains a list refresh
+  (#1); `Esc` is **two-tiered** — cancels an in-progress edit (reverting), else exits to the list.
+  The edit buffer is modelled as `Option<String>` on the sub-state (its presence is the tier
+  discriminant, plan R1). Task delete converted from the `x`-again two-step to the 0015 confirm
+  dialog (arm via `d`, confirm via `Enter`, A5). **Routing folded into the existing unified gate**
+  (R2/R3): `overlay_capturing_input()` + `active_pane_in_sub_flow()` now count an open detail view,
+  so globals/tab-switch suppress and `Tab` cycles panes; `is_text_entry` counts a detail field edit;
+  no parallel gate added. **A7 decision (recorded):** an open detail view is input-capturing for the
+  per-tab action keys and other globals (`t`/`T`/`r`/`q`/tab-switch all suppressed) **but `?` help
+  stays reachable while no field edit is in progress** (the plan's recommended option); while a field
+  edit *is* in progress everything including `?` is captured as text. Encoded in `App::can_open_help`
+  and the `detail_idle` arm in `map_key`. No new `Event` variants (reused `Submit`, `Next`, `Prev`,
+  `BeginEditTask`, `Cancel`, `ToggleHelp`). `./ok.sh fmt` clean; `cargo clippy -p tui --lib --bins`
+  clean; `cargo build -p tui` green.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
