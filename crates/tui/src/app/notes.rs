@@ -83,8 +83,9 @@ pub enum NotePane {
 }
 
 impl NotePane {
-    /// The fixed pane order of the note detail view.
-    pub const ALL: [NotePane; 3] = [NotePane::Title, NotePane::Content, NotePane::Created];
+    /// The fixed pane order of the note detail view: the read-only `Created` sits between the
+    /// single-line `Title` and the multiline `Content` that fills the remaining height (ADR-0011).
+    pub const ALL: [NotePane; 3] = [NotePane::Title, NotePane::Created, NotePane::Content];
 
     /// Whether this pane is editable (`e` opens an edit buffer on it). `Created` is inert.
     #[must_use]

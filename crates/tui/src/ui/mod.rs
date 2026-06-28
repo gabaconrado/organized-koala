@@ -740,26 +740,45 @@ fn draw_field(
 }
 
 /// A pane of a detail view: a label, its (snapshot or in-edit) value, whether it is focused
-/// (purple border), and whether it is editable (read-only panes show a plain border even when
-/// focused so the user sees `e` is inert).
+/// (purple border), whether it is editable (read-only panes show a plain border even when focused
+/// so the user sees `e` is inert), and whether it `fill`s the remaining height (a multiline pane
+/// that grows + wraps; default `false`, a fixed 3-row box).
 struct DetailPane<'a> {
     label: &'a str,
     value: String,
     focused: bool,
     editable: bool,
+    /// Whether this pane takes the remaining vertical space (`Constraint::Min`) and renders its
+    /// value with newline + wrap support, rather than a fixed single-line 3-row box. Opt-in per
+    /// pane (the note Content pane; ADR-0011) so the task detail layout is unchanged.
+    fill: bool,
 }
 
-/// Draw a vertical stack of detail-view panes in `area`, each a bordered box (3 rows). The focused
-/// editable pane gets the purple focus border (ADR-0010 §4, reusing the dialog/`draw_field` cue); a
-/// focused read-only pane is bordered but not purple, signalling `e` is inert there. The detail
-/// view renders in the main content area, **not** as a floating dialog.
+/// Floor for a fill pane's height so a short value still shows a usable box matching the others'
+/// 3-row boxes, then grows to fill the remaining space (Assumption A4).
+const FILL_PANE_MIN_ROWS: u16 = 3;
+
+/// Draw a vertical stack of detail-view panes in `area`. Fixed panes are 3-row bordered boxes; a
+/// `fill` pane takes the remaining height (`Constraint::Min`) and renders with newline + wrap. The
+/// focused editable pane gets the purple focus border (ADR-0010 §4, reusing the dialog/`draw_field`
+/// cue); a focused read-only pane is bordered but not purple, signalling `e` is inert there. The
+/// detail view renders in the main content area, **not** as a floating dialog.
 fn draw_detail_panes(frame: &mut Frame, area: Rect, title: &str, panes: &[DetailPane]) {
     let block = Block::default()
         .borders(Borders::ALL)
         .title(title.to_owned());
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let constraints: Vec<Constraint> = panes.iter().map(|_| Constraint::Length(3)).collect();
+    let constraints: Vec<Constraint> = panes
+        .iter()
+        .map(|pane| {
+            if pane.fill {
+                Constraint::Min(FILL_PANE_MIN_ROWS)
+            } else {
+                Constraint::Length(3)
+            }
+        })
+        .collect();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(constraints)
@@ -772,7 +791,12 @@ fn draw_detail_panes(frame: &mut Frame, area: Rect, title: &str, panes: &[Detail
         if pane.focused && pane.editable {
             field = field.border_style(Style::default().fg(Color::Magenta));
         }
-        frame.render_widget(Paragraph::new(pane.value.clone()).block(field), *slot);
+        let mut paragraph = Paragraph::new(pane.value.clone()).block(field);
+        if pane.fill {
+            // Multiline: honour embedded '\n' and wrap long lines so Content displays fully.
+            paragraph = paragraph.wrap(Wrap { trim: false });
+        }
+        frame.render_widget(paragraph, *slot);
     }
 }
 
@@ -805,6 +829,7 @@ fn draw_task_detail(frame: &mut Frame, area: Rect, detail: &TaskDetail) {
                 value,
                 focused,
                 editable: pane.is_editable(),
+                fill: false,
             }
         })
         .collect();
@@ -888,6 +913,9 @@ fn draw_note_detail(frame: &mut Frame, area: Rect, detail: &NoteDetail) {
                 value,
                 focused,
                 editable: pane.is_editable(),
+                // The multiline Content pane fills the remaining height and wraps (ADR-0011);
+                // Title/Created stay fixed 3-row boxes.
+                fill: matches!(pane, NotePane::Content),
             }
         })
         .collect();
