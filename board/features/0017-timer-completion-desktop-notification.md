@@ -2,12 +2,12 @@
 id: 0017
 title: Desktop notification when the focus timer ends (cross-OS, Ubuntu-first)
 type: feature      # feature | chore
-status: ready          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # builds on 0008 (timer, merged); ADR-0002 already on `main`. No in-flight item gates this.
-branch: null
-worktree: null
+branch: feature/0017-timer-completion-desktop-notification
+worktree: .claude/worktrees/0017-timer-completion-desktop-notification
 created: 2026-06-28
 updated: 2026-06-28
 ---
@@ -389,6 +389,13 @@ need for either, it is the scope-guard escalation back to `architect`, not a qui
   installed to satisfy the item. ✓
 
 Design is low-risk and bounded; no `grill` pass needed.
+
+## Log / comments
+
+- [x] 2026-06-28 [orchestrator] Claimed `ready`→`working`; cut worktree
+  `.claude/worktrees/0017-timer-completion-desktop-notification` + branch
+  `feature/0017-timer-completion-desktop-notification` from `main@a016e6d` (the commit carrying
+  the plan; no ADR — Decision 2 is no-ADR). Branch copy of this item is now authoritative.
 
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
