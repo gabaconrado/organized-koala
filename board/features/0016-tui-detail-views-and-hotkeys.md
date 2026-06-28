@@ -2,7 +2,7 @@
 id: 0016
 title: TUI detail views + final hotkey scheme — per-field task/note panes, full keymap
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0015]
@@ -587,6 +587,14 @@ docker + throwaway test Postgres booted cleanly). Report-only — never a gate.
   contract `{code,message}`, OTel spans (`get_note`/`patch_task`/`update_note`/…). (3) `git diff
   --stat` from the prior verified snapshot touches **only** the 3 TUI files — no `contract`/server/
   `Cargo.*` delta; wire byte-identical. Stack torn down, volume not reset, no capability gap.
+
+- [x] 2026-06-28 [orchestrator] Step-7 freshen (post-feedback): rebased onto `main` (docs/`.claude`/
+  `board`-only advance through `b48ecdb` — handoff + the new `coding-standards` focus-traversal rule +
+  dashboard). No conflict. **`./ok.sh code-hash` unchanged at
+  `18d6445a05b7834320186551a6ee72e1972c3a08`** = the re-review/re-verify attested hash, so the
+  `reviewer` approved + `verifier` verified attestations **carry forward untouched** (no re-review).
+  Gates re-run green on the rebased tree (`test`/`lint`/`fmt --check`). Status → `awaiting-merge`;
+  the `[human]` focus-skip feedback is resolved at head and re-reviewed.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
