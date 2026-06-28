@@ -321,6 +321,17 @@ reqwest-client confirmation only.
   `.claude/worktrees/0016-tui-detail-views-and-hotkeys` cut from `main@7cae76a` (carries the
   plan citing ADR-0010; no new ADR required — confirmed presentation-only). Session: drive
   cycle for 0016. `tui-dev` builds slices 1–4, `tester` slice 5.
+- [x] 2026-06-28 [tui-dev] Slice 1 — Event alphabet + keymap remap (`crates/tui/src/terminal/mod.rs`).
+  Rewrote `map_key` to the canonical scheme: `c`(done)→`Space`, `x`(delete)→`d` (all three tabs),
+  `p`(timer)→`t`, old duration-edit `d`→`T` (configure). Per-entity keys (`a`/`e`/`d`/Space) stay
+  context-scoped to the active tab; globals (`t`/`T`/`r`/`q`/`?`/arrows/Tab/Shift+Tab) live only on
+  an idle post-auth screen. **No new `Event` variants** — the remap reuses the existing alphabet
+  (`Space`→`ToggleDone`, `d`→`DeleteSelected`/`BeginDeleteNote`/`BeginDeleteProfile`,
+  `t`→`ToggleTimer`, `T`→`BeginEditDuration`), per the plan's reuse preference. Updated all
+  `map_key`/`is_text_entry` doc comments that described the old `c`/`x`/`p`/`d` bindings.
+  `./ok.sh fmt` clean; `cargo clippy -p tui --lib --bins` clean; `cargo build -p tui` green. (The
+  detail-view `Tab`/`e`/`Esc` routing + `is_text_entry` detail-edit branch land in slices 2–3 with
+  the detail state they depend on.)
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md

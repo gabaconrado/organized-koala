@@ -67,7 +67,7 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
 ///
 /// **Unified overlay-suppression rule (ADR-0010 §3).** While any dialog/overlay captures input —
 /// an add/edit form, a delete-confirm dialog, the duration edit, or the `?` help overlay —
-/// (`overlay_capturing` is `true`) the global hotkeys (`q`/`r`/`?`/`p`/`d` and tab-switch) are
+/// (`overlay_capturing` is `true`) the global hotkeys (`q`/`r`/`t`/`T` and tab-switch) are
 /// **suppressed**: they never fire their global action while a dialog is open. Only `Esc` (→
 /// [`Event::Cancel`]), `Enter` (→ [`Event::Submit`]), `Tab`/`BackTab` (→ field switch), arrows,
 /// `Backspace`, and — in a text-entry overlay — typed characters reach the focused dialog. This is
@@ -85,16 +85,16 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
 /// - `F2` (auth screen) → [`Event::ToggleAuthMode`].
 /// - In a text-entry context, a printable key → [`Event::Char`].
 /// - On the Tasks tab (idle, no overlay): `a` → [`Event::BeginAddTask`], `e` →
-///   [`Event::BeginEditTask`], `c` → [`Event::ToggleDone`], `x` → [`Event::DeleteSelected`].
+///   [`Event::BeginEditTask`], `Space` → [`Event::ToggleDone`], `d` → [`Event::DeleteSelected`].
 /// - On the Notes tab (idle, no overlay): `a` → [`Event::BeginAddNote`], `e` →
-///   [`Event::BeginEditNote`], `x` → [`Event::BeginDeleteNote`], `Enter` opens the selected note.
+///   [`Event::BeginEditNote`], `d` → [`Event::BeginDeleteNote`], `Enter` opens the selected note.
 /// - On the Profiles tab (idle, no overlay): `Enter` picks the selected profile (mapped to
 ///   [`Event::Submit`], folded by the app core into a client-side re-scope), `a` →
-///   [`Event::BeginAddProfile`], `e` → [`Event::BeginRenameProfile`], `x` →
+///   [`Event::BeginAddProfile`], `e` → [`Event::BeginRenameProfile`], `d` →
 ///   [`Event::BeginDeleteProfile`].
-/// - On any post-auth screen (idle, no overlay): `p` → [`Event::ToggleTimer`], `d` →
-///   [`Event::BeginEditDuration`] (the global timer controls, ADR-0006 §8.2), `r` →
-///   [`Event::Refresh`], `q` → [`Event::Quit`].
+/// - On any post-auth screen (idle, no overlay): `t` → [`Event::ToggleTimer`] (start/stop), `T` →
+///   [`Event::BeginEditDuration`] (configure duration; the global timer controls, ADR-0006 §8.2),
+///   `r` → [`Event::Refresh`], `q` → [`Event::Quit`].
 /// - `?` → [`Event::ToggleHelp`] **toggles** the help overlay: it opens help from an idle
 ///   post-auth screen and closes help while the help overlay (`help_open`) is the active overlay
 ///   (the core folds `ToggleHelp` into a close). `?` stays suppressed while a *non-help* dialog
@@ -102,9 +102,8 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
 /// - On the offline screen: `r` → [`Event::Refresh`].
 ///
 /// While a request is outstanding, `Esc` maps to [`Event::Cancel`] (abandon the request) rather
-/// than `Quit`, so cancel stays live; `Ctrl+C` always quits. Note `t`/`n`/`p`/`s` are **not** tab
-/// hotkeys — tab switching is `Tab`/`BackTab` only (`t` is left unbound for the 0016 timer; 0015
-/// does **not** remap).
+/// than `Quit`, so cancel stays live; `Ctrl+C` always quits. Note `t`/`n`/`s` are **not** tab
+/// hotkeys — tab switching is `Tab`/`BackTab` only; `t`/`T` are the timer keys (ADR-0010 §4).
 #[must_use]
 pub fn map_key(
     screen: &Screen,
@@ -126,8 +125,8 @@ pub fn map_key(
     // A captured overlay (add/edit/confirm/help/duration) or an in-flight request makes `Esc`
     // mean cancel, and makes `Tab` switch fields rather than tabs.
     let in_overlay = overlay_capturing || editing_duration;
-    // The task-delete confirmation is a two-step `x`-again affordance (Assumption A5): while it is
-    // armed the dialog captures input (globals suppressed), but a second `x` must still confirm.
+    // The task-delete confirmation is a two-step `d`-again affordance (Assumption A5): while it is
+    // armed the dialog captures input (globals suppressed), but a second `d` must still confirm.
     let task_delete_armed = matches!(
         screen,
         Screen::Main(main)
@@ -160,29 +159,30 @@ pub fn map_key(
         KeyCode::Backspace => Some(Event::Backspace),
         KeyCode::F(2) if matches!(screen, Screen::Auth(_)) => Some(Event::ToggleAuthMode),
         KeyCode::Char(c) if text_entry => Some(Event::Char(c)),
-        // Per-tab action keys (idle list, no overlay capturing input).
+        // Per-tab action keys (idle list, no overlay capturing input). The final keymap
+        // (ADR-0010 §4): `Space` toggles done (was `c`), `d` deletes (was `x`).
         KeyCode::Char('a') if on_tasks && globals_live => Some(Event::BeginAddTask),
         KeyCode::Char('e') if on_tasks && globals_live => Some(Event::BeginEditTask),
-        KeyCode::Char('c') if on_tasks && globals_live => Some(Event::ToggleDone),
-        // First `x` (idle) arms the confirmation; a second `x` (armed dialog open) confirms the
+        KeyCode::Char(' ') if on_tasks && globals_live => Some(Event::ToggleDone),
+        // First `d` (idle) arms the confirmation; a second `d` (armed dialog open) confirms the
         // delete — the only key the task-delete dialog accepts besides `Esc` to cancel (A5).
-        KeyCode::Char('x') if on_tasks && (globals_live || task_delete_armed) => {
+        KeyCode::Char('d') if on_tasks && (globals_live || task_delete_armed) => {
             Some(Event::DeleteSelected)
         }
         KeyCode::Char('a') if on_notes && globals_live => Some(Event::BeginAddNote),
         KeyCode::Char('e') if on_notes && globals_live => Some(Event::BeginEditNote),
-        KeyCode::Char('x') if on_notes && globals_live => Some(Event::BeginDeleteNote),
+        KeyCode::Char('d') if on_notes && globals_live => Some(Event::BeginDeleteNote),
         KeyCode::Char('a') if on_profiles && globals_live => Some(Event::BeginAddProfile),
         KeyCode::Char('e') if on_profiles && globals_live => Some(Event::BeginRenameProfile),
-        KeyCode::Char('x') if on_profiles && globals_live => Some(Event::BeginDeleteProfile),
+        KeyCode::Char('d') if on_profiles && globals_live => Some(Event::BeginDeleteProfile),
         // Global hotkeys, live only on an idle post-auth screen (suppressed while an overlay
         // captures input — the unified rule, ADR-0010 §3).
         // `?` *toggles* the help overlay: it opens help from an idle post-auth screen and closes
         // help while the help overlay is the active overlay (the core folds `ToggleHelp` into a
         // close). It stays suppressed while a *non-help* dialog owns input (Assumption A3).
         KeyCode::Char('?') if globals_live || help_open => Some(Event::ToggleHelp),
-        KeyCode::Char('p') if globals_live => Some(Event::ToggleTimer),
-        KeyCode::Char('d') if globals_live => Some(Event::BeginEditDuration),
+        KeyCode::Char('t') if globals_live => Some(Event::ToggleTimer),
+        KeyCode::Char('T') if globals_live => Some(Event::BeginEditDuration),
         KeyCode::Char('r') if globals_live => Some(Event::Refresh),
         KeyCode::Char('r') if matches!(screen, Screen::Offline { .. }) => Some(Event::Refresh),
         KeyCode::Char('q') if globals_live => Some(Event::Quit),
