@@ -323,11 +323,11 @@ fn open_selected_note_fetches_and_views_from_server() {
     submit(&mut app, &client, Event::Submit); // Enter opens the selected note
 
     let state = notes_pane(&app);
-    let NotesMode::Viewing(viewed) = &state.mode else {
+    let NotesMode::Detail(viewed) = &state.mode else {
         panic!("viewing the opened note");
     };
     assert_eq!(
-        viewed.content, "fresh body",
+        viewed.note.content, "fresh body",
         "view derives from the GetNote response"
     );
 

@@ -345,7 +345,7 @@ fn question_mark_opens_the_help_modal_listing_the_full_reference() {
     assert!(text.contains("Profiles"), "profiles section:\n{text}");
     assert!(
         text.contains("start / stop the focus timer"),
-        "the global `p` timer toggle is documented:\n{text}",
+        "the global `t` timer toggle is documented:\n{text}",
     );
 }
 

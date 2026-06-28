@@ -3,13 +3,21 @@
 //! is pure, so these tests lock every binding `tui-dev` chose and the context-sensitivity that lets
 //! a printable key be a command on the task list but typed text in a form (slice-3 acceptance 1).
 //!
-//! The timer is no longer a screen (ADR-0006 §8): its controls (`p` toggle, `d` edit) are global on
-//! every post-auth screen, and the duration-edit sub-flow is a global text-entry mode signalled by
-//! the `editing_duration` bool — not a `Screen` variant. 0015 adds the unified `overlay_capturing`
+//! The timer is no longer a screen (ADR-0006 §8): its controls are global on every post-auth
+//! screen, and the duration-edit sub-flow is a global text-entry mode signalled by the
+//! `editing_duration` bool — not a `Screen` variant. 0015 adds the unified `overlay_capturing`
 //! predicate (ADR-0010 §3): while any dialog/overlay owns input — an add/edit form, a delete-confirm
-//! dialog, the duration edit, or the `?` help overlay — every global hotkey (`q`/`r`/`?`/`p`/`d` and
+//! dialog, the duration edit, or the `?` help overlay — every global hotkey (`q`/`r`/`?`/`t`/`T` and
 //! tab-switch) is suppressed and `Esc` cancels. These tests pin that signature, the global-timer
 //! bindings, and guard the absence of the old dedicated-timer navigation.
+//!
+//! **0016 final hotkey scheme (ADR-0010 §4, item table).** The canonical remap pinned here:
+//! `Space` toggles task done/undone (was `c`); `d` deletes on every tab (was `x`); `t` starts/stops
+//! the timer (was `p`); `T` opens the timer-config/duration dialog (was the old duration-edit `d`).
+//! Per-entity action keys (`a`/`e`/`d`/`Enter`/`Space`) stay context-scoped to the active tab; the
+//! task delete is armed via `d` and confirmed via `Enter` (the 0015 confirm dialog, Assumption A5 —
+//! the old `x`-again two-step is retired). The detail-view bindings live in `navigation.rs`/
+//! `flows.rs`.
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
@@ -210,25 +218,30 @@ fn tab_switches_field_not_tabs_inside_a_post_auth_sub_flow() {
 
 #[test]
 fn letter_keys_never_switch_tabs() {
-    // Deliberately NO t/n/p/s tab-letter hotkeys (ADR-0010 §1; `t` is kept free for the 0016
-    // timer). On the idle Tasks tab these letters are either a pane command (none of t/n/p/s map to
-    // a tab switch) or unbound — crucially none yields NextTab/PrevTab.
+    // Deliberately NO n/s/p tab-letter hotkeys (ADR-0010 §1). On the idle Tasks tab these letters
+    // are either a pane/global command or unbound — crucially none yields NextTab/PrevTab.
     let screen = task_list_screen();
-    for c in ['t', 'n', 's'] {
+    for c in ['n', 's', 'p', 't', 'T'] {
         let mapped = map(&screen, key(KeyCode::Char(c)));
         assert!(
             !matches!(mapped, Some(Event::NextTab) | Some(Event::PrevTab)),
             "{c:?} must NOT switch tabs (got {mapped:?})",
         );
     }
-    // `t`/`n`/`s` are unbound on the Tasks tab; `p` is the timer toggle (not a tab switch).
-    assert_eq!(map(&screen, key(KeyCode::Char('t'))), None, "t unbound");
+    // `n`/`s`/`p` are unbound on the Tasks tab (the old timer toggle `p` is retired); `t` is the
+    // timer toggle and `T` the timer-config dialog (neither a tab switch).
     assert_eq!(map(&screen, key(KeyCode::Char('n'))), None, "n unbound");
     assert_eq!(map(&screen, key(KeyCode::Char('s'))), None, "s unbound");
+    assert_eq!(map(&screen, key(KeyCode::Char('p'))), None, "p unbound now");
     assert_eq!(
-        map(&screen, key(KeyCode::Char('p'))),
+        map(&screen, key(KeyCode::Char('t'))),
         Some(Event::ToggleTimer),
-        "p is the timer toggle, not a tab switch",
+        "t is the timer toggle, not a tab switch",
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('T'))),
+        Some(Event::BeginEditDuration),
+        "T is the timer-config dialog, not a tab switch",
     );
 }
 
@@ -264,9 +277,9 @@ fn f2_toggles_auth_mode_only_on_auth_screen() {
 
 #[test]
 fn printable_keys_are_typed_literally_in_auth_form() {
-    // The auth form is a text-entry context: letters that are commands on the task list
-    // ('a', 'c', 'r', 'q', 'p', 'd') must be typed as Char here, not interpreted.
-    for c in ['a', 'c', 'r', 'q', 'p', 'd', 'x', 'Z', '@', '7'] {
+    // The auth form is a text-entry context: letters that are commands post-auth
+    // ('a', 'r', 'q', 't', 'T', 'd') must be typed as Char here, not interpreted.
+    for c in ['a', 'c', 'r', 'q', 't', 'T', 'd', 'x', 'Z', '@', '7'] {
         assert_eq!(
             map(&auth_screen(), key(KeyCode::Char(c))),
             Some(Event::Char(c)),
@@ -275,7 +288,7 @@ fn printable_keys_are_typed_literally_in_auth_form() {
     }
 }
 
-// ---- Task list (not entering text) ----
+// ---- Task list (not entering text) — 0016 final scheme ----
 
 #[test]
 fn task_list_command_keys() {
@@ -284,21 +297,41 @@ fn task_list_command_keys() {
         map(&screen, key(KeyCode::Char('a'))),
         Some(Event::BeginAddTask),
     );
-    // `e` begins the edit sub-flow; `c` toggles done/reopen; `x` arms/confirms delete (slice 4).
+    // `e` begins the edit sub-flow; `Space` toggles done/reopen (was `c`); `d` arms delete (was
+    // `x`); `Enter` opens the per-field detail view (ADR-0010 §4).
     assert_eq!(
         map(&screen, key(KeyCode::Char('e'))),
         Some(Event::BeginEditTask),
     );
     assert_eq!(
-        map(&screen, key(KeyCode::Char('c'))),
+        map(&screen, key(KeyCode::Char(' '))),
         Some(Event::ToggleDone),
+        "Space toggles done (the new binding)",
     );
     assert_eq!(
-        map(&screen, key(KeyCode::Char('x'))),
+        map(&screen, key(KeyCode::Char('d'))),
         Some(Event::DeleteSelected),
+        "d deletes (the new binding)",
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Enter)),
+        Some(Event::Submit),
+        "Enter opens the task detail view (folded by the core)",
     );
     assert_eq!(map(&screen, key(KeyCode::Char('r'))), Some(Event::Refresh),);
     assert_eq!(map(&screen, key(KeyCode::Char('q'))), Some(Event::Quit));
+    // The old `c` (toggle-done) and `x` (delete) keys no longer fire their actions — `c`/`x` are
+    // simply unbound on the Tasks tab now.
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('c'))),
+        None,
+        "c no longer toggles done",
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('x'))),
+        None,
+        "x no longer deletes",
+    );
     // The old `n` (open notes) / `s` (open profiles) cross-screen keys are removed (ADR-0010 §1):
     // they are now unbound on the Tasks tab.
     assert_eq!(map(&screen, key(KeyCode::Char('n'))), None, "n unbound now");
@@ -309,8 +342,8 @@ fn task_list_command_keys() {
 
 #[test]
 fn notes_tab_command_keys() {
-    // On the idle Notes tab: `a` create, `e` edit, `x` delete, Enter opens the selected note; the
-    // global timer/refresh/quit keys are live and `Tab` cycles tabs (covered above).
+    // On the idle Notes tab: `a` create, `e` edit, `d` delete (was `x`), Enter opens the selected
+    // note; the global timer/refresh/quit keys are live and `Tab` cycles tabs (covered above).
     let screen = notes_screen();
     assert_eq!(
         map(&screen, key(KeyCode::Char('a'))),
@@ -321,29 +354,36 @@ fn notes_tab_command_keys() {
         Some(Event::BeginEditNote),
     );
     assert_eq!(
-        map(&screen, key(KeyCode::Char('x'))),
+        map(&screen, key(KeyCode::Char('d'))),
         Some(Event::BeginDeleteNote),
+        "d deletes on the notes tab (the new binding)",
     );
     assert_eq!(map(&screen, key(KeyCode::Enter)), Some(Event::Submit));
     assert_eq!(map(&screen, key(KeyCode::Char('r'))), Some(Event::Refresh));
     assert_eq!(map(&screen, key(KeyCode::Char('q'))), Some(Event::Quit));
-    // `c` (toggle-done) is a Tasks-only command — unbound on the Notes tab.
+    // `Space` (toggle-done) is a Tasks-only command — unbound on the Notes tab.
     assert_eq!(
-        map(&screen, key(KeyCode::Char('c'))),
+        map(&screen, key(KeyCode::Char(' '))),
         None,
-        "c unbound on notes"
+        "Space unbound on notes"
     );
-    // `t`/`n`/`s` never switch tabs.
-    assert_eq!(map(&screen, key(KeyCode::Char('t'))), None);
+    // The old `x` delete is retired; unbound on the notes tab.
+    assert_eq!(map(&screen, key(KeyCode::Char('x'))), None, "x unbound now");
+    // `n`/`s` never switch tabs; `t` is the global timer toggle, not a tab switch.
+    assert_eq!(map(&screen, key(KeyCode::Char('n'))), None);
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('t'))),
+        Some(Event::ToggleTimer),
+    );
 }
 
 #[test]
 fn edit_task_flow_types_command_letters_literally() {
     // Once the edit sub-flow is open the task list is a text-entry context, so the command
-    // letters — including the new e/c/x mutation keys and the global timer keys p/d — are typed
-    // literally rather than triggering edit/toggle/delete or the timer toggle/edit.
+    // letters — including the e/d mutation keys, Space, and the global timer keys t/T — are typed
+    // literally rather than triggering edit/toggle/delete or the timer toggle/config.
     let screen = task_list_screen_editing();
-    for c in ['a', 'c', 'e', 'x', 'r', 'q', 'p', 'd'] {
+    for c in ['a', 'c', 'e', 'd', 'x', 'r', 'q', 't', 'T', ' '] {
         assert_eq!(
             map(&screen, key(KeyCode::Char(c))),
             Some(Event::Char(c)),
@@ -363,10 +403,10 @@ fn edit_task_flow_types_command_letters_literally() {
 #[test]
 fn add_task_flow_types_command_letters_literally() {
     // Once the add-task sub-flow is open the task list is a text-entry context, so the command
-    // letters — including the global timer keys 'p'/'d' — are typed literally rather than
-    // triggering add/close/refresh/quit or the timer toggle/edit (Assumption B4).
+    // letters — including the global timer keys 't'/'T' and the new Space/d keys — are typed
+    // literally rather than triggering add/close/refresh/quit or the timer toggle/config.
     let screen = task_list_screen_adding();
-    for c in ['a', 'c', 'r', 'q', 'p', 'd', 'b'] {
+    for c in ['a', 'c', 'd', 'r', 'q', 't', 'T', 'b', ' '] {
         assert_eq!(
             map(&screen, key(KeyCode::Char(c))),
             Some(Event::Char(c)),
@@ -385,68 +425,87 @@ fn offline_retry_key() {
     // the global timer keys are inactive there too).
     assert_eq!(map(&screen, key(KeyCode::Char('a'))), None);
     assert_eq!(map(&screen, key(KeyCode::Char('q'))), None);
-    assert_eq!(map(&screen, key(KeyCode::Char('p'))), None);
-    assert_eq!(map(&screen, key(KeyCode::Char('d'))), None);
+    assert_eq!(map(&screen, key(KeyCode::Char('t'))), None);
+    assert_eq!(map(&screen, key(KeyCode::Char('T'))), None);
 }
 
-// ---- Global timer controls (ADR-0006 §8.2) ----
+// ---- Global timer controls (ADR-0006 §8.2; 0016 remap `t`/`T`) ----
 
 #[test]
-fn p_toggles_the_timer_on_a_post_auth_screen() {
-    // `p` is the global start/stop toggle, live on every post-auth screen (the task list).
+fn t_toggles_the_timer_on_a_post_auth_screen() {
+    // `t` is the global start/stop toggle, live on every post-auth screen (was `p`).
     assert_eq!(
-        map(&task_list_screen(), key(KeyCode::Char('p'))),
+        map(&task_list_screen(), key(KeyCode::Char('t'))),
         Some(Event::ToggleTimer),
     );
 }
 
 #[test]
-fn d_begins_the_duration_edit_on_a_post_auth_screen() {
+fn shift_t_begins_the_timer_config_on_a_post_auth_screen() {
+    // `T` opens the timer-config/duration dialog (was the old duration-edit `d`).
     assert_eq!(
-        map(&task_list_screen(), key(KeyCode::Char('d'))),
+        map(&task_list_screen(), key(KeyCode::Char('T'))),
         Some(Event::BeginEditDuration),
+    );
+}
+
+#[test]
+fn old_timer_keys_no_longer_fire() {
+    // The pre-0016 timer keys are retired: `p` (old toggle) and `d` (old duration-edit) must NOT
+    // produce a timer event on an idle post-auth screen — `p` is unbound, and `d` is now the delete
+    // action, never the duration edit.
+    let screen = task_list_screen();
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('p'))),
+        None,
+        "p no longer toggles the timer",
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('d'))),
+        Some(Event::DeleteSelected),
+        "d is now the delete action, never the duration edit",
     );
 }
 
 #[test]
 fn global_timer_keys_are_inactive_off_post_auth_screens() {
     // The timer widget is only shown post-auth (auth excluded — no session yet, Assumption B3), so
-    // its global keys are not bound on the auth or offline screens. There, 'p'/'d' are literal text
+    // its global keys are not bound on the auth or offline screens. There, 't'/'T' are literal text
     // (auth, a text context) or ignored (offline, a command context with no timer binding).
     assert_eq!(
-        map(&auth_screen(), key(KeyCode::Char('p'))),
-        Some(Event::Char('p')),
+        map(&auth_screen(), key(KeyCode::Char('t'))),
+        Some(Event::Char('t')),
     );
     assert_eq!(
-        map(&auth_screen(), key(KeyCode::Char('d'))),
-        Some(Event::Char('d')),
+        map(&auth_screen(), key(KeyCode::Char('T'))),
+        Some(Event::Char('T')),
     );
-    assert_eq!(map(&offline_screen(), key(KeyCode::Char('p'))), None);
-    assert_eq!(map(&offline_screen(), key(KeyCode::Char('d'))), None);
+    assert_eq!(map(&offline_screen(), key(KeyCode::Char('t'))), None);
+    assert_eq!(map(&offline_screen(), key(KeyCode::Char('T'))), None);
 }
 
 #[test]
-fn p_is_suppressed_while_a_text_entry_sub_flow_owns_keystrokes() {
-    // Assumption B4: a literal `p` typed into a field is not hijacked by the global toggle. While
-    // the add-task sub-flow owns keystrokes, OR while the duration-edit overlay is active, `p` is a
+fn t_is_suppressed_while_a_text_entry_sub_flow_owns_keystrokes() {
+    // Assumption B4: a literal `t` typed into a field is not hijacked by the global toggle. While
+    // the add-task sub-flow owns keystrokes, OR while the duration-edit overlay is active, `t` is a
     // Char, not ToggleTimer.
     assert_eq!(
-        map(&task_list_screen_adding(), key(KeyCode::Char('p'))),
-        Some(Event::Char('p')),
+        map(&task_list_screen_adding(), key(KeyCode::Char('t'))),
+        Some(Event::Char('t')),
     );
     assert_eq!(
-        map_editing(&task_list_screen(), key(KeyCode::Char('p'))),
-        Some(Event::Char('p')),
+        map_editing(&task_list_screen(), key(KeyCode::Char('t'))),
+        Some(Event::Char('t')),
     );
 }
 
 #[test]
 fn duration_edit_is_a_global_text_entry_context() {
     // While editing the duration (signalled by `editing_duration = true`) the active post-auth
-    // screen is a text-entry context: digit keys (and the command letters p/d/r/a/c) are typed
+    // screen is a text-entry context: digit keys (and the command letters t/T/r/a/d) are typed
     // literally, not interpreted as commands.
     let screen = task_list_screen();
-    for c in ['2', '5', 'p', 'd', 'r', 'a', 'c'] {
+    for c in ['2', '5', 't', 'T', 'r', 'a', 'd'] {
         assert_eq!(
             map_editing(&screen, key(KeyCode::Char(c))),
             Some(Event::Char(c)),
@@ -469,13 +528,18 @@ fn duration_edit_is_a_global_text_entry_context() {
 
 #[test]
 fn t_does_not_open_a_dedicated_timer_page() {
-    // The dedicated timer screen and its `t`-to-open navigation are gone: `t` is not a command on
-    // any screen anymore (it is literal text in the auth form, ignored elsewhere).
+    // The dedicated timer screen is gone. Post-0016 `t` is the global start/stop toggle (NOT a
+    // screen-opening navigation): on the task list it is `ToggleTimer`, never a page-open; literal
+    // text in the auth form; ignored on the offline screen.
     assert_eq!(
         map(&auth_screen(), key(KeyCode::Char('t'))),
         Some(Event::Char('t')),
     );
-    assert_eq!(map(&task_list_screen(), key(KeyCode::Char('t'))), None);
+    assert_eq!(
+        map(&task_list_screen(), key(KeyCode::Char('t'))),
+        Some(Event::ToggleTimer),
+        "t toggles the timer in place, it does not open a timer page",
+    );
     assert_eq!(map(&offline_screen(), key(KeyCode::Char('t'))), None);
 }
 
@@ -488,13 +552,13 @@ fn r_is_not_a_command_on_the_auth_screen() {
     );
 }
 
-// ---- Profiles tab (ADR-0009 §5 — a/e/x/r/Enter on the idle list, reached via Tab now) ----
+// ---- Profiles tab (ADR-0009 §5 — a/e/d/r/Enter on the idle list, reached via Tab now) ----
 
 #[test]
 fn profiles_tab_list_command_keys() {
-    // On the idle Profiles tab: `a` create, `e` rename, `x` delete, `r` refresh, `q` quit, Enter
-    // picks the active profile (Submit), Up/Down navigate. The old idle-`Esc`-back is removed
-    // (ADR-0010 §1): the idle list is not a sub-flow, so Esc QUITS (tab-switch is how you leave).
+    // On the idle Profiles tab: `a` create, `e` rename, `d` delete (was `x`), `r` refresh, `q`
+    // quit, Enter picks the active profile (Submit), Up/Down navigate. The old idle-`Esc`-back is
+    // removed (ADR-0010 §1): the idle list is not a sub-flow, so Esc QUITS (tab-switch leaves).
     let screen = profiles_screen();
     assert_eq!(
         map(&screen, key(KeyCode::Char('a'))),
@@ -505,8 +569,14 @@ fn profiles_tab_list_command_keys() {
         Some(Event::BeginRenameProfile),
     );
     assert_eq!(
-        map(&screen, key(KeyCode::Char('x'))),
+        map(&screen, key(KeyCode::Char('d'))),
         Some(Event::BeginDeleteProfile),
+        "d deletes on the profiles tab (the new binding)",
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('x'))),
+        None,
+        "x no longer deletes on profiles",
     );
     assert_eq!(map(&screen, key(KeyCode::Char('r'))), Some(Event::Refresh));
     assert_eq!(map(&screen, key(KeyCode::Char('q'))), Some(Event::Quit));
@@ -525,7 +595,7 @@ fn profile_create_sub_flow_types_command_letters_literally() {
     // letters — including the global timer keys p/d — are typed literally. Enter submits, Esc
     // cancels the sub-flow (not quit/back), Backspace edits.
     let screen = profiles_screen_creating();
-    for c in ['a', 'e', 'x', 'r', 'q', 'p', 'd'] {
+    for c in ['a', 'e', 'x', 'r', 'q', 't', 'T', 'd'] {
         assert_eq!(
             map(&screen, key(KeyCode::Char(c))),
             Some(Event::Char(c)),
@@ -544,7 +614,7 @@ fn profile_create_sub_flow_types_command_letters_literally() {
 fn profile_rename_sub_flow_types_command_letters_literally() {
     // The rename sub-flow is likewise a text-entry context; Esc cancels it rather than navigating.
     let screen = profiles_screen_renaming();
-    for c in ['a', 'e', 'x', 'r', 'q', 'p', 'd'] {
+    for c in ['a', 'e', 'x', 'r', 'q', 't', 'T', 'd'] {
         assert_eq!(
             map(&screen, key(KeyCode::Char(c))),
             Some(Event::Char(c)),
@@ -565,15 +635,16 @@ fn profile_switcher_esc_cancels_while_pending() {
 
 #[test]
 fn global_timer_keys_live_on_the_idle_switcher() {
-    // The switcher is a post-auth screen, so the global timer toggle/edit keys are live on the idle
-    // list (they are suppressed only inside a text-entry sub-flow, covered above).
+    // The switcher is a post-auth screen, so the global timer toggle/config keys are live on the
+    // idle list (they are suppressed only inside a text-entry sub-flow, covered above). `d` on the
+    // profiles tab is the delete action (not the duration edit — that moved to `T`).
     let screen = profiles_screen();
     assert_eq!(
-        map(&screen, key(KeyCode::Char('p'))),
+        map(&screen, key(KeyCode::Char('t'))),
         Some(Event::ToggleTimer),
     );
     assert_eq!(
-        map(&screen, key(KeyCode::Char('d'))),
+        map(&screen, key(KeyCode::Char('T'))),
         Some(Event::BeginEditDuration),
     );
 }
@@ -596,7 +667,7 @@ fn global_hotkeys_are_suppressed_while_a_dialog_captures_input() {
         profiles_screen_renaming(),
     ];
     for screen in &text_entry_dialogs {
-        for c in ['q', 'r', 'p', 'd', '?'] {
+        for c in ['q', 'r', 't', 'T', 'd', '?'] {
             // In a text-entry overlay these land as literal Char, never the global action.
             assert_eq!(
                 map(screen, key(KeyCode::Char(c))),
@@ -613,13 +684,14 @@ fn global_hotkeys_are_suppressed_while_a_dialog_captures_input() {
     }
 
     // The non-text-entry confirmation dialogs capture input too: a global letter is NOT its global
-    // action — it is unbound (so the global never fires), except the task-delete `x`-again confirm.
+    // action — it is unbound (so the global never fires).
     let confirm_dialogs = [
         notes_screen_confirming_delete(),
         profiles_screen_confirming_delete(),
+        task_list_screen_confirming_delete(),
     ];
     for screen in &confirm_dialogs {
-        for c in ['q', 'r', 'p', 'd', '?'] {
+        for c in ['q', 'r', 't', 'T', 'd', '?'] {
             assert_eq!(
                 map(screen, key(KeyCode::Char(c))),
                 None,
@@ -636,23 +708,25 @@ fn global_hotkeys_are_suppressed_while_a_dialog_captures_input() {
 }
 
 #[test]
-fn task_delete_confirmation_accepts_only_x_to_confirm_and_esc_to_cancel() {
-    // The task-delete dialog is the two-step `x`-again affordance (Assumption A5): while armed it
-    // captures input (globals suppressed), but a second `x` must still CONFIRM (DeleteSelected),
-    // and `Esc` cancels. The other globals are suppressed.
+fn task_delete_confirmation_accepts_enter_to_confirm_and_esc_to_cancel() {
+    // 0016 retires the old `x`-again two-step (Assumption A5): the task delete is now the 0015
+    // confirm dialog, armed via `d` and CONFIRMED via `Enter` (Submit), with `Esc` to cancel. While
+    // armed the dialog captures input, so every global letter — including a second `d` — is
+    // suppressed (no global action fires).
     let screen = task_list_screen_confirming_delete();
     assert_eq!(
-        map(&screen, key(KeyCode::Char('x'))),
-        Some(Event::DeleteSelected),
-        "a second `x` confirms the armed delete",
+        map(&screen, key(KeyCode::Enter)),
+        Some(Event::Submit),
+        "Enter confirms the armed delete (the 0015 confirm dialog)",
     );
     assert_eq!(
         map(&screen, key(KeyCode::Esc)),
         Some(Event::Cancel),
         "Esc cancels the armed delete (not Quit)",
     );
-    // Other globals are suppressed while the confirmation is armed.
-    for c in ['q', 'r', 'p', 'd', '?', 'a', 'e', 'c'] {
+    // Every global/action letter is suppressed while the confirmation is armed — including a second
+    // `d` (it does not re-fire the delete) and the retired `x`.
+    for c in ['q', 'r', 't', 'T', 'd', 'x', '?', 'a', 'e', 'c', ' '] {
         assert_eq!(
             map(&screen, key(KeyCode::Char(c))),
             None,

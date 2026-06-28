@@ -12,8 +12,9 @@
 //!   round-trip — the highest-value TUI test per the plan's Risks);
 //! - edit issues `UpdateTask { title, description }` and the row reflects the new title/desc;
 //! - an empty-title edit is rejected inline (local validation, no request issued);
-//! - delete is a two-step confirm: the first `x` shows the affordance and issues no request, the
-//!   second `x` issues `DeleteTask` and the row is removed after the refresh.
+//! - delete is the 0015 confirm dialog (0016 Assumption A5, retiring the old `x`-again two-step):
+//!   `d` (`DeleteSelected`) arms the dialog and issues no request, `Enter` (`Submit`) issues
+//!   `DeleteTask` and the row is removed after the refresh, `Esc` (`Cancel`) disarms.
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
@@ -127,7 +128,8 @@ fn toggle_done_issues_status_done_patch_and_row_renders_done() {
 #[test]
 fn reopen_a_done_task_issues_status_open_patch_and_done_render_clears() {
     // The toggle round-trip — the highest-value TUI test (plan Risks): a done task toggled with
-    // `c` reopens, issuing `status: open`, and the done marker clears once the refresh lands.
+    // `Space` (0016 remap, was `c`) reopens, issuing `status: open`, and the done marker clears
+    // once the refresh lands.
     let (client, mut app) = logged_in(vec![done_task(
         "t1",
         "Write tests",
@@ -272,22 +274,22 @@ fn empty_title_edit_is_rejected_inline_with_no_request_issued() {
     assert!(text.contains("empty"), "inline error rendered:\n{text}");
 }
 
-// ---- delete (two-step confirm) ----
+// ---- delete (0015 confirm dialog; 0016 Assumption A5) ----
 
 #[test]
-fn first_delete_arms_confirm_and_issues_no_request() {
+fn delete_key_arms_confirm_and_issues_no_request() {
     let (client, mut app) = logged_in(vec![open_task("t1", "doomed", "2026-06-18T10:00:00Z")]);
     let calls_before = client.calls().len();
 
-    // The first `x` arms the confirmation only — no request, no Dispatch, the row still present.
+    // `d` (`DeleteSelected`) arms the confirmation only — no request, no Dispatch, the row present.
     assert!(
         app.handle_event(Event::DeleteSelected).is_none(),
-        "the first delete key arms the confirm, dispatching nothing",
+        "the delete key arms the confirm, dispatching nothing",
     );
     assert_eq!(
         client.calls().len(),
         calls_before,
-        "no delete request on the first key: {:?}",
+        "no delete request on the arming key: {:?}",
         client.calls(),
     );
 
@@ -299,27 +301,27 @@ fn first_delete_arms_confirm_and_issues_no_request() {
     );
     assert_eq!(list.tasks.len(), 1, "the row is still present while armed");
 
-    // 0015: the armed two-step affordance now renders as a centred confirmation dialog (the second
-    // `x` still confirms, `Esc` cancels — behaviour preserved, only the render site moved).
+    // 0016 (Assumption A5): the armed delete renders as the 0015 centred confirmation dialog,
+    // confirmed via `Enter` and cancelled via `Esc` (the old `x`-again two-step is retired).
     let text = render(&app, W, H);
     assert!(
         text.contains("Delete task") && text.contains("Delete this task?"),
         "the confirmation dialog is shown:\n{text}",
     );
     assert!(
-        text.contains("x: confirm delete") && text.contains("Esc: cancel"),
-        "the dialog hint keeps the second-`x`-confirms / Esc-cancels affordance:\n{text}",
+        text.contains("Enter: confirm delete") && text.contains("Esc: cancel"),
+        "the dialog hint reflects the Enter-confirms / Esc-cancels affordance:\n{text}",
     );
 }
 
 #[test]
-fn second_delete_issues_delete_request_and_row_is_removed_after_refresh() {
+fn enter_confirms_delete_request_and_row_is_removed_after_refresh() {
     let (client, mut app) = logged_in(vec![
         open_task("t1", "doomed", "2026-06-18T12:00:00Z"),
         open_task("t2", "survivor", "2026-06-18T11:00:00Z"),
     ]);
 
-    // Arm the confirm (first `x`).
+    // Arm the confirm (`d`).
     assert!(app.handle_event(Event::DeleteSelected).is_none());
 
     // Script the delete (204, no body) and the chained refresh (the row gone server-side).
@@ -330,8 +332,8 @@ fn second_delete_issues_delete_request_and_row_is_removed_after_refresh() {
         "2026-06-18T11:00:00Z",
     )]));
 
-    // The second `x` confirms and issues the delete.
-    submit(&mut app, &client, Event::DeleteSelected);
+    // `Enter` (`Submit`) confirms and issues the delete.
+    submit(&mut app, &client, Event::Submit);
 
     // The delete targeted the selected task under the active profile, followed by a refresh.
     let calls = client.calls();
@@ -358,22 +360,23 @@ fn second_delete_issues_delete_request_and_row_is_removed_after_refresh() {
 }
 
 #[test]
-fn a_non_delete_key_disarms_the_delete_confirm() {
+fn esc_cancels_the_delete_confirm_with_no_request() {
     let (client, mut app) = logged_in(vec![open_task("t1", "doomed", "2026-06-18T10:00:00Z")]);
 
-    // Arm, then press a different key (navigation) — the confirm disarms, no delete issues.
+    // Arm, then `Esc` (`Cancel`) — the confirm disarms and no delete issues (the dialog captures
+    // input: only `Enter` confirms and `Esc` cancels, mirroring the notes/profiles confirm dialog).
     assert!(app.handle_event(Event::DeleteSelected).is_none());
-    let _ = app.handle_event(Event::Next);
+    let _ = app.handle_event(Event::Cancel);
 
     assert!(
         tasks_pane(&app).confirming_delete.is_none(),
-        "a stray key disarms the confirm",
+        "Esc disarms the confirm",
     );
 
-    // A subsequent single `x` only re-arms (it does not delete) — proving the disarm took effect.
+    // A subsequent `d` only re-arms (it does not delete) — proving the disarm took effect.
     assert!(
         app.handle_event(Event::DeleteSelected).is_none(),
-        "after disarm, the next delete key re-arms rather than deleting",
+        "after cancel, the next delete key re-arms rather than deleting",
     );
     assert!(
         !client
@@ -394,11 +397,12 @@ fn delete_in_flight_renders_spinner_and_keeps_caption() {
         app
     };
 
-    // Arm then confirm, holding the dispatch (never driving it) so the app sits in-flight.
+    // Arm (`d`) then confirm (`Enter`), holding the dispatch (never driving it) so the app sits
+    // in-flight.
     assert!(app.handle_event(Event::DeleteSelected).is_none());
     let _dispatch = app
-        .handle_event(Event::DeleteSelected)
-        .expect("the second delete key dispatches a delete request");
+        .handle_event(Event::Submit)
+        .expect("Enter on the armed confirm dispatches a delete request");
     assert!(app.is_pending(), "task list in-flight during the delete");
 
     let text = render(&app, W, H);

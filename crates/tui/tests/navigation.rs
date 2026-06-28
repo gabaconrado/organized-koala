@@ -4,7 +4,8 @@
 //!
 //! - the `Tasks | Notes | Profiles` tab bar renders with **Tasks selected by default**;
 //! - `Tab` / `Shift+Tab` cycle Tasks→Notes→Profiles→Tasks and back, and the selected pane updates;
-//! - **no** `t`/`n`/`p`/`s` key switches a tab; arrows move the in-list selection;
+//! - **no** `n`/`s`/`p` key switches a tab (nor `t`/`T`, the 0016 timer keys); arrows move the
+//!   in-list selection;
 //! - per-tab selection **survives** a switch away and back;
 //! - the auth form renders as a centred bounded box with the Login⇄Register toggle, all fields, and
 //!   the inline error band;
@@ -201,17 +202,19 @@ fn tab_bar_highlights_the_active_tab_distinctly_from_the_others() {
     );
 }
 
-// ---- no t/n/p/s switches a tab; arrows move the list selection ----
+// ---- no n/s/p switches a tab; arrows move the list selection ----
 
 #[test]
 fn letter_keys_do_not_switch_tabs_end_to_end() {
-    // On the idle Tasks tab, mapping t/n/p/s through the real keymap never produces a tab-switch
+    // On the idle Tasks tab, mapping n/s/p through the real keymap never produces a tab-switch
     // event, so feeding the mapped event keeps the active tab on Tasks (ADR-0010 §1: tab switching
-    // is Tab/Shift+Tab only; `t` is unbound, reserved for the 0016 timer).
+    // is Tab/Shift+Tab only). `n`/`s` are unbound; `p` (the retired pre-0016 timer toggle) is
+    // unbound too. The 0016 timer keys `t`/`T` are deliberately excluded here — they are bound and
+    // would dispatch a timer request (asserted not to switch tabs in the keybindings suite).
     let (client, mut app) =
         logged_in_as("ada", vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
 
-    for c in ['t', 'n', 's'] {
+    for c in ['n', 's', 'p'] {
         if let Some(event) = map_key(
             app.screen(),
             app.overlay_capturing_input(),

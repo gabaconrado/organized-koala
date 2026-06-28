@@ -381,6 +381,29 @@ reqwest-client confirmation only.
   builds, but `crates/tui/tests/**` fails to compile against the new `TaskListState.detail` field and
   the `NotesMode::Viewing`→`Detail` rename — those test files are `tester`-owned (slice 5) and are
   intentionally left untouched per the file-ownership boundary; the suite goes green in slice 5.
+- [x] 2026-06-28 [tester] Slice 5 — `TestBackend` coverage (ADR-0003 layer 2;
+  `crates/tui/tests/**` only, no non-test source touched). **Compile fixes:** added the new
+  `TaskListState.detail` field to the two `common/mod.rs` task-pane builders, and updated the one
+  `notes.rs` reference from `NotesMode::Viewing(v)`/`v.content` → `NotesMode::Detail(v)`/`v.note.content`.
+  **Keymap remap re-pinned (`keybindings.rs`, `navigation.rs`, `tasks.rs`):** `Space` toggles done
+  **and `c` no longer fires**; `d` deletes on all three tabs **and `x` no longer fires**; `t`
+  start/stops the timer and `T` opens the timer-config dialog **and old `p`/duration-`d` no longer
+  fire**; `a`/`e`/`Enter` context-scoped per tab; the task delete is the 0015 confirm dialog (armed
+  via `d`, confirmed via `Enter`, `Esc` cancels — the old `x`-again two-step is retired, A5); the
+  global-suppression assertions now cover `t`/`T`/`d` in every dialog kind. **New `detail.rs` (21
+  tests)** grouped by acceptance: detail-view lifecycle (`Enter` opens task & note detail, deriving
+  the note from a fresh `GetNote` #1; done-task Closed pane); tab overloading R3 (`Tab`/`Shift+Tab`
+  cycle panes, wrap, and do **not** switch top-level tabs); edit lifecycle (`e` enters edit on the
+  focused pane; `Enter` commits one field — **task payload carries only the edited `Option`**, **note
+  payload preserves the untouched field from the snapshot, R5**; commit re-derives the detail + chains
+  a list refresh; `e` on a read-only pane inert, A6); two-tiered `Esc` R1 (cancel edit reverting; exit
+  to list with no edit; unwinds one level at a time); global-suppression R2/A7 (open detail captures
+  `a`/`d`/`Space`/`t`/`T`/`r`/`q`/tab-switch; `?` reachable while no field edit, captured-as-text once
+  editing); purple focus border (buffer-snapshot via `row_fg_count`, mirroring 0015 — focused editable
+  pane magenta, follows focus, focused read-only pane not magenta); help-body Detail bindings. The
+  commit round-trips run through the harness's synchronous worker-analogue executor (`submit`/`drive`),
+  the only mock the sanctioned `Client` trait. `./ok.sh fmt --check` clean; `./ok.sh lint` clean;
+  `./ok.sh test` green (tui suite **189** tests: 168 carried + 21 new; whole workspace green).
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
