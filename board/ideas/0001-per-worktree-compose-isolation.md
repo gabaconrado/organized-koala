@@ -32,11 +32,36 @@ parked here rather than minted, since it changes no product behaviour and wants 
 
 ## Possible approach
 
-Have `ok.sh` set `COMPOSE_PROJECT_NAME` from the current worktree (e.g. a sanitized basename of the
-worktree path or the `feature/NNNN-<slug>` branch) for `up`/`down`/`run-server` and the test/coverage
-boots, so each worktree gets its own project + volume. Confirm teardown (`down`/`down -v`) targets the
-same derived name. A `platform-dev` concern; net-new isolation wiring on existing shared infra, so it
-lands on `main`. Non-binding — the architect/platform-dev settle the exact derivation if accepted.
+Two complementary fixes for the same root cause — *state surviving a run*. They are sequenced: the
+hermetic-teardown discipline fixes the **serial** case we actually run today; per-worktree isolation
+is its **parallel** generalization. A `platform-dev` concern; net-new isolation wiring on existing
+shared infra, so it lands on `main`. Non-binding — the architect/platform-dev settle the exact shape
+if accepted.
+
+**(1) Near-term: make the verifier hermetic (`up` → verify → `down -v`, always).** The
+migration-history conflict only exists because state survives a run. If every verifier tears down its
+own volume on exit, there is never a leftover migration history for the next run to inherit — in serial
+execution (our reality today: dev/verify sessions are never run in parallel) this eliminates the failure
+mode entirely. Note the authorization consequence: today `down -v` needs operator sign-off only because
+it destroys *another branch's* data; a verifier tearing down state **it just created itself** is cleaning
+up its own mess and needs no authorization — so this *removes* a human-in-the-loop block rather than
+adding one. Two design requirements for robustness:
+
+- **Teardown must run on failure too** — a `trap`/`finally` so `down -v` fires on *any* exit (success,
+  failure, signal). Otherwise the failing runs most likely to strand state are the ones that skip it.
+- **A hard crash (reboot, OOM-kill) still strands the volume** — the trap can't fire then, so this
+  reduces the conflict to a rare residual with the operator-authorized reset as fallback. It does
+  **not** make the failure structurally impossible — only (2) does.
+
+The cost is a fresh migrate-from-scratch per verifier run; for a correctness gate that trade is right
+and should not be optimized away.
+
+**(2) Parallel generalization: per-worktree `COMPOSE_PROJECT_NAME`.** Have `ok.sh` set
+`COMPOSE_PROJECT_NAME` from the current worktree (e.g. a sanitized basename of the worktree path or
+the `feature/NNNN-<slug>` branch) for `up`/`down`/`run-server` and the test/coverage boots, so each
+worktree gets its own project + volume. Confirm teardown (`down`/`down -v`) targets the same name. This
+is the only fix that makes the failure mode *structurally* impossible under concurrent worktrees, and
+closes the hard-crash residual left by (1).
 
 ## Disposition
 
