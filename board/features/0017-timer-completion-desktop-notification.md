@@ -399,6 +399,16 @@ Design is low-risk and bounded; no `grill` pass needed.
   compiled with **no apt package** — `zbus`/`zbus_macros`/`zbus_names` built, **no `dbus` C-binding
   crate** in `Cargo.lock`, and the only `pkg-config` lockfile entry pre-dates this change (2 entries
   before and after). No `libdbus-1-dev`/system `.so` needed on Ubuntu.
+- [x] 2026-06-28 [tui-dev] Slice 2 done: pure edge-detection + fire-once guard + one-shot signal.
+  Added `Timer::notified_for_session` + `Timer::notify_pending` (both default `false` in
+  `Timer::new()`; `reset()` clears via `*self = Self::new()`). `apply_timer_session` now calls
+  `detect_completion_edge(&new)` **before** overwriting `self.timer.session`, applying the
+  arm/fire/re-arm rules (Decision 4) and the initial-load rule (A4): a `Completed` while the guard
+  is un-fired arms the guard and sets `notify_pending`, **except** when this is the first fold
+  (`applied_at.is_none()`) where it only arms (no emit); a new `Running`/`Idle` re-arms. Added the
+  public `TimerNotification` type (fixed copy: title `"Focus timer"`, body
+  `"Your focus session has ended."`) and `App::take_pending_notification(&mut self) ->
+  Option<TimerNotification>` (consume-once). `./ok.sh build` clean.
 - [x] 2026-06-28 [orchestrator] Claimed `ready`→`working`; cut worktree
   `.claude/worktrees/0017-timer-completion-desktop-notification` + branch
   `feature/0017-timer-completion-desktop-notification` from `main@a016e6d` (the commit carrying

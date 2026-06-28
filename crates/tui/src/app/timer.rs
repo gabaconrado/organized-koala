@@ -74,6 +74,15 @@ pub struct Timer {
     /// Whether the initial config→session load has been issued for the current session. Reset on
     /// logout so a fresh login re-loads.
     pub loaded: bool,
+    /// Fire-once guard: whether the completion notification has already fired for the current
+    /// session. Set when a Running→Completed edge fires (or when an initial `Completed` is folded,
+    /// arming without firing), cleared when a new `Running`/`Idle` session is folded and by
+    /// [`reset`](Self::reset). Transient process-lifetime UI state (hard-constraint #1).
+    pub notified_for_session: bool,
+    /// One-shot signal that the edge should fire a completion notification, drained by
+    /// [`App::take_pending_notification`](super::App::take_pending_notification). Transient
+    /// process-lifetime UI state (hard-constraint #1).
+    pub notify_pending: bool,
 }
 
 impl Default for Timer {
@@ -97,6 +106,8 @@ impl Timer {
             message: None,
             pending: None,
             loaded: false,
+            notified_for_session: false,
+            notify_pending: false,
         }
     }
 

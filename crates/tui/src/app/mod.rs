@@ -113,6 +113,23 @@ pub struct Dispatch {
     pub request: ClientRequest,
 }
 
+/// Fixed title for the focus-session completion notification (Assumption A5).
+const TIMER_COMPLETE_TITLE: &str = "Focus timer";
+/// Fixed body for the focus-session completion notification (Assumption A5).
+const TIMER_COMPLETE_BODY: &str = "Your focus session has ended.";
+
+/// The fixed copy for the single desktop notification fired when a focus session completes
+/// (Assumption A5: plain title + body, no sound, no actions). Produced once per completion by
+/// [`App::take_pending_notification`] and handed to the injected
+/// [`Notifier`](crate::client::Notifier) at the edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimerNotification {
+    /// The notification title.
+    pub title: &'static str,
+    /// The notification body.
+    pub body: &'static str,
+}
+
 /// The session held in memory for the process lifetime: the JWT, the account identifier the user
 /// authenticated with, and the active profile id. Never persisted (hard-constraint #1).
 #[derive(Debug, Clone)]
@@ -1342,6 +1359,11 @@ impl App {
     /// Fold a timer-session response (get / start / stop) into the global timer, capturing the
     /// monotonic instant the session was applied so the rendered countdown advances between coarse
     /// refreshes (ADR-0002 §3). No remaining-seconds integer is stored (#1).
+    ///
+    /// Detects the **Running→Completed edge** before overwriting the session, so a single
+    /// completion notification can be fired once per session (Decision 4). The decision is recorded
+    /// as a pure one-shot signal on the timer (`notify_pending`); the effect itself happens at the
+    /// edge via the injected [`Notifier`](crate::client::Notifier) (Decision 3).
     fn apply_timer_session(
         &mut self,
         result: crate::client::ClientResult<contract::TimerSession>,
@@ -1349,12 +1371,60 @@ impl App {
         self.timer.pending = None;
         match result {
             Ok(session) => {
+                self.detect_completion_edge(&session);
                 self.timer.session = session;
                 self.timer.applied_at = Some(std::time::Instant::now());
             }
             Err(err) => self.handle_timer_error(err),
         }
         None
+    }
+
+    /// Apply the fire-once arm/fire/re-arm rules for the completion notification, comparing the
+    /// just-applied state (`self.timer`) against the incoming `new` session, **before** the new
+    /// session is stored (Decision 4):
+    ///
+    /// - A new `Completed` while the guard is un-fired is the completion edge: set `notify_pending`
+    ///   and arm the guard so subsequent `Completed` re-pulls do nothing — **except** when this is
+    ///   the first session fold after a load/reset, where we only **arm** the guard (no emit), so a
+    ///   stale completion is never replayed at launch (Assumption A4).
+    /// - A new `Running` (a fresh start) or `Idle` (stop/reset) re-arms the guard for the next
+    ///   completion.
+    fn detect_completion_edge(&mut self, new: &contract::TimerSession) {
+        use contract::TimerSession;
+        match new {
+            TimerSession::Completed { .. } => {
+                if !self.timer.notified_for_session {
+                    // Arm the guard either way; only emit when this is a real Running→Completed
+                    // edge, not the initial fold of an already-completed session (A4).
+                    let is_initial_load = self.timer.applied_at.is_none();
+                    self.timer.notified_for_session = true;
+                    if !is_initial_load {
+                        self.timer.notify_pending = true;
+                    }
+                }
+            }
+            // A fresh Running (new start) or Idle (stop/reset) re-arms for the next completion.
+            TimerSession::Running { .. } | TimerSession::Idle => {
+                self.timer.notified_for_session = false;
+            }
+        }
+    }
+
+    /// Consume the one-shot completion-notification signal: returns the fixed notification copy
+    /// exactly once after a Running→Completed edge, then clears the signal. The edge thread (the
+    /// poll loop) calls this after folding a response and fires the injected
+    /// [`Notifier`](crate::client::Notifier) if it returns `Some` (Decision 3).
+    pub fn take_pending_notification(&mut self) -> Option<TimerNotification> {
+        if self.timer.notify_pending {
+            self.timer.notify_pending = false;
+            Some(TimerNotification {
+                title: TIMER_COMPLETE_TITLE,
+                body: TIMER_COMPLETE_BODY,
+            })
+        } else {
+            None
+        }
     }
 
     /// Error routing for a timer-session call (ADR-0006 §6): offline → blocking screen,
