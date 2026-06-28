@@ -51,16 +51,25 @@ pub struct TaskDetail {
 }
 
 impl TaskDetail {
-    /// Open the detail view for `task` with the first pane focused and no edit in progress.
+    /// Open the detail view for `task` with the first editable pane focused and no edit in
+    /// progress.
     #[must_use]
     pub fn new(task: Task) -> Self {
         let panes = Self::panes_for(&task);
+        let focused = Self::first_editable(&panes);
         Self {
             task,
             panes,
-            focused: 0,
+            focused,
             edit: None,
         }
+    }
+
+    /// The index of the first editable pane in `panes`, or `0` if none is editable (kept total;
+    /// the entities here always carry ≥2 editable panes, so the fallback is unreachable in
+    /// practice but guards against an empty editable set).
+    fn first_editable(panes: &[TaskPane]) -> usize {
+        panes.iter().position(|p| p.is_editable()).unwrap_or(0)
     }
 
     /// The panes present for a task snapshot: the two editable fields, status, created, and — only
@@ -79,7 +88,9 @@ impl TaskDetail {
     }
 
     /// Re-derive the snapshot from a refreshed server task, preserving the focused pane where it
-    /// still exists (the pane set can change if status flipped) and dropping any edit buffer.
+    /// still exists (the pane set can change if status flipped) and dropping any edit buffer. When
+    /// the previously-focused pane no longer exists, focus falls back to the first editable pane,
+    /// never to a read-only pane at index 0.
     pub fn refresh_from(&mut self, task: Task) {
         let prev = self.focused_pane();
         self.panes = Self::panes_for(&task);
@@ -87,7 +98,7 @@ impl TaskDetail {
         self.edit = None;
         self.focused = prev
             .and_then(|p| self.panes.iter().position(|q| *q == p))
-            .unwrap_or(0);
+            .unwrap_or_else(|| Self::first_editable(&self.panes));
     }
 
     /// The currently-focused pane, if the pane vector is non-empty.
@@ -96,18 +107,39 @@ impl TaskDetail {
         self.panes.get(self.focused).copied()
     }
 
-    /// Cycle the focused pane forward (`true`) or backward, wrapping. A no-op while editing (the
-    /// caller suppresses pane cycling during a field edit).
+    /// Force focus onto `pane` if it is present, returning whether it was found. A testing seam
+    /// (ADR-0003 layer 2) so a test can construct a read-only-focused state directly — `cycle` no
+    /// longer lands focus on a read-only pane, so the inert-`e` (A6) guard cannot be reached by key
+    /// events alone. Production focus moves only through [`Self::new`]/[`Self::cycle`].
+    pub fn focus_pane(&mut self, pane: TaskPane) -> bool {
+        match self.panes.iter().position(|p| *p == pane) {
+            Some(i) => {
+                self.focused = i;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Cycle the focused pane forward (`true`) or backward to the next/previous **editable** pane,
+    /// wrapping among editable panes only — read-only panes (Status/Created/Closed) are skipped and
+    /// never landed on. A no-op while editing (the caller suppresses pane cycling during a field
+    /// edit) and a no-op if no pane is editable (kept total against an empty editable set).
     pub fn cycle(&mut self, forward: bool) {
         let len = self.panes.len();
         if len == 0 {
             return;
         }
-        self.focused = if forward {
-            (self.focused + 1) % len
-        } else {
-            (self.focused + len - 1) % len
-        };
+        let step = if forward { 1 } else { len - 1 };
+        let mut next = self.focused;
+        for _ in 0..len {
+            next = (next + step) % len;
+            if self.panes.get(next).is_some_and(|p| p.is_editable()) {
+                self.focused = next;
+                return;
+            }
+        }
+        // No editable pane found: leave focus unchanged (no-op).
     }
 
     /// Begin an in-place edit of the focused pane, seeding the buffer from its current value. A

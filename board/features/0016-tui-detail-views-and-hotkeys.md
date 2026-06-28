@@ -510,6 +510,25 @@ Postgres booted cleanly). Report-only — never a gate.
   Routing the triage through `architect` to confirm the smallest re-entry point + that ADR-0010 §4
   needs no amendment (focus-skip is a behaviour refinement within the existing presentation-only
   scope, not a new interaction-model decision).
+- [x] 2026-06-28 [tui-dev] Focus-cycling fix — read-only panes excluded from `Tab`/`Shift+Tab`
+  cycling while still rendered (`crates/tui/src/app/task_detail.rs`,
+  `crates/tui/src/app/notes.rs`; render path in `crates/tui/src/ui/mod.rs` untouched). Both
+  `cycle(forward)` methods now scan to the next/previous **editable** pane, wrapping among editable
+  panes only and skipping read-only ones (Status/Created/Closed for tasks, Created for notes); each
+  keeps the totality guard (no-op on an empty pane vector and a no-op if no pane is editable, so the
+  scan can never panic or index out of bounds). Initial focus is now the first editable pane:
+  `TaskDetail::new`/`refresh_from` fall back via a new private `first_editable(&panes)` (not bare
+  index 0), and `NoteDetail::new`/`focused_pane` fall back via `NotePane::first_editable()`. Left
+  unchanged per the architect spec: the `panes`/`ALL` contents + order, `is_editable`, the
+  read-only no-op guard in both `begin_edit` (A6 defense-in-depth), the two-tiered `Esc`, the A7
+  global-suppression contract, and per-field commit semantics. **Test seam added** (ADR-0003 layer
+  2): the A6 inert-`e` tests reached a read-only pane by pressing `Next`, which after this fix no
+  longer lands there, so I added intention-revealing setters so `tester` can construct a
+  read-only-*focused* state directly without index arithmetic — `TaskDetail::focus_pane(&mut self,
+  pane: TaskPane) -> bool` (returns whether the pane was present) and `NoteDetail::focus_pane(&mut
+  self, pane: NotePane)`. No existing named seam existed (only the brittle `pub focused` index).
+  `./ok.sh fmt --check | lint | build` all green; `./ok.sh test` is expected red until `tester`
+  updates the two cycle-sequence tests that assert the old (read-only-stop) behaviour — their slice.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md

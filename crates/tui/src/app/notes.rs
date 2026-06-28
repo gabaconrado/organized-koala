@@ -91,6 +91,16 @@ impl NotePane {
     pub fn is_editable(self) -> bool {
         matches!(self, NotePane::Title | NotePane::Content)
     }
+
+    /// The index in [`NotePane::ALL`] of the first editable pane, or `0` if none is editable (kept
+    /// total; a note always carries the editable Title/Content, so the fallback is unreachable in
+    /// practice but guards against an empty editable set).
+    fn first_editable() -> usize {
+        NotePane::ALL
+            .iter()
+            .position(|p| p.is_editable())
+            .unwrap_or(0)
+    }
 }
 
 /// The open note detail view: the note snapshot (re-derived from the server on every commit, #1),
@@ -108,12 +118,13 @@ pub struct NoteDetail {
 }
 
 impl NoteDetail {
-    /// Open the detail view for `note` with the first pane focused and no edit in progress.
+    /// Open the detail view for `note` with the first editable pane (`Title`) focused and no edit
+    /// in progress.
     #[must_use]
     pub fn new(note: Note) -> Self {
         Self {
             note,
-            focused: 0,
+            focused: NotePane::first_editable(),
             edit: None,
         }
     }
@@ -125,7 +136,8 @@ impl NoteDetail {
         self.edit = None;
     }
 
-    /// The currently-focused pane.
+    /// The currently-focused pane. Falls back to the first editable pane (`Title`) if the index is
+    /// somehow out of range, never to a read-only pane.
     #[must_use]
     pub fn focused_pane(&self) -> NotePane {
         NotePane::ALL
@@ -134,14 +146,34 @@ impl NoteDetail {
             .unwrap_or(NotePane::Title)
     }
 
-    /// Cycle the focused pane forward (`true`) or backward, wrapping.
+    /// Force focus onto `pane`. A testing seam (ADR-0003 layer 2) so a test can construct a
+    /// read-only-focused state directly — `cycle` no longer lands focus on the read-only `Created`
+    /// pane, so the inert-`e` (A6) guard cannot be reached by key events alone. Production focus
+    /// moves only through [`Self::new`]/[`Self::cycle`].
+    pub fn focus_pane(&mut self, pane: NotePane) {
+        if let Some(i) = NotePane::ALL.iter().position(|p| *p == pane) {
+            self.focused = i;
+        }
+    }
+
+    /// Cycle the focused pane forward (`true`) or backward to the next/previous **editable** pane,
+    /// wrapping among editable panes only — the read-only `Created` pane is skipped and never landed
+    /// on. A no-op if no pane is editable (kept total against an empty editable set).
     pub fn cycle(&mut self, forward: bool) {
         let len = NotePane::ALL.len();
-        self.focused = if forward {
-            (self.focused + 1) % len
-        } else {
-            (self.focused + len - 1) % len
-        };
+        if len == 0 {
+            return;
+        }
+        let step = if forward { 1 } else { len - 1 };
+        let mut next = self.focused;
+        for _ in 0..len {
+            next = (next + step) % len;
+            if NotePane::ALL.get(next).is_some_and(|p| p.is_editable()) {
+                self.focused = next;
+                return;
+            }
+        }
+        // No editable pane found: leave focus unchanged (no-op).
     }
 
     /// Begin an in-place edit of the focused pane, seeding the buffer from its current value. A
