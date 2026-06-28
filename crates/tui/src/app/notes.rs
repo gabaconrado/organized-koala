@@ -416,7 +416,9 @@ impl NotesState {
     /// Handle a key while the per-field detail view is open (ADR-0010 §4). Two-tiered `Esc`:
     /// while editing a field, `Cancel` reverts the edit; with no edit, `Cancel` exits to the list.
     /// `e` opens the edit buffer on the focused editable pane; `Next`/`Prev` cycle panes when not
-    /// editing; `Char`/`Backspace` mutate the buffer; `Submit` commits the focused field.
+    /// editing; `Char`/`Backspace` mutate the buffer. `Submit` and `Commit` both commit the focused
+    /// field (Title on Enter, multiline Content on Ctrl+S); `Newline` inserts a line break into the
+    /// edit buffer (the multiline Content pane's Enter) — ADR-0011 §2.
     fn handle_detail_event(
         &mut self,
         event: Event,
@@ -429,8 +431,11 @@ impl NotesState {
             match event {
                 Event::Char(c) => detail.push_char(c),
                 Event::Backspace => detail.backspace(),
+                Event::Newline => detail.push_char('\n'),
                 Event::Cancel => detail.cancel_edit(),
-                Event::Submit => return self.submit_field(session),
+                // Both commit the focused field: the single-line Title commits on `Submit`
+                // (Enter), the multiline Content on `Commit` (Ctrl+S) — ADR-0011 §2.
+                Event::Submit | Event::Commit => return self.submit_field(session),
                 _ => {}
             }
             return None;
