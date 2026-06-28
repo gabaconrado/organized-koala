@@ -2,7 +2,7 @@
 id: 0018
 title: Notes detail view — multiline Content text area (fills the pane), Created moved above
 type: feature      # feature | chore
-status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # builds on 0016 (detail views + final keymap, merged); no in-flight item gates this.
