@@ -24,7 +24,7 @@ mod common;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::Color;
-use tui::app::{App, Event, NotePane, NotesMode, Screen, Tab, TaskPane};
+use tui::app::{App, Event, NoteDetail, NotePane, NotesMode, Screen, Tab, TaskDetail, TaskPane};
 use tui::terminal::map_key;
 
 use common::{
@@ -210,7 +210,7 @@ fn enter_opens_the_note_detail_view_deriving_from_a_getnote_response() {
 fn tab_cycles_panes_inside_the_task_detail_and_does_not_switch_tabs() {
     let (_client, mut app) =
         logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
-    let _ = app.handle_event(Event::Submit); // open detail (4 panes, Title focused)
+    let _ = app.handle_event(Event::Submit); // open detail (Title focused; read-only panes inert)
 
     // The real keymap maps `Tab` to `Next` (NOT `NextTab`) while the detail view captures input,
     // and `Submit` is never folded into a tab switch — pin both forks of R3 through `map_key`.
@@ -225,13 +225,9 @@ fn tab_cycles_panes_inside_the_task_detail_and_does_not_switch_tabs() {
         "Shift+Tab cycles panes backward (Prev) while the detail is open",
     );
 
-    // Cycling forward visits Title -> Description -> Status -> Created -> (wraps) Title.
-    for expected in [
-        TaskPane::Description,
-        TaskPane::Status,
-        TaskPane::Created,
-        TaskPane::Title,
-    ] {
+    // Cycling forward skips the read-only Status/Created panes: Title -> Description -> (wraps)
+    // Title. Read-only panes stay rendered in place but are never a focus stop.
+    for expected in [TaskPane::Description, TaskPane::Title] {
         let _ = app.handle_event(Event::Next);
         assert_eq!(
             tasks_pane(&app).detail.as_ref().unwrap().focused_pane(),
@@ -244,12 +240,14 @@ fn tab_cycles_panes_inside_the_task_detail_and_does_not_switch_tabs() {
         );
     }
 
-    // Shift+Tab cycles backward, wrapping Title -> Created.
+    // Shift+Tab cycles backward to the previous EDITABLE pane: from Title it wraps to Description
+    // (the last editable pane), NOT the read-only Created pane.
     let _ = app.handle_event(Event::Prev);
     assert_eq!(
         tasks_pane(&app).detail.as_ref().unwrap().focused_pane(),
-        Some(TaskPane::Created),
-        "Shift+Tab wraps backward from Title to the last pane (Created)",
+        Some(TaskPane::Description),
+        "Shift+Tab wraps backward from Title to the last editable pane (Description), \
+         skipping read-only panes",
     );
 }
 
@@ -273,7 +271,9 @@ fn tab_cycles_panes_inside_the_note_detail() {
         NotesMode::Detail(d) => d.focused_pane(),
         _ => panic!("detail open"),
     };
-    for expected in [NotePane::Content, NotePane::Created, NotePane::Title] {
+    // Cycling forward skips the read-only Created pane: Title -> Content -> (wraps) Title. Created
+    // stays rendered in place but is never a focus stop.
+    for expected in [NotePane::Content, NotePane::Title] {
         let _ = app.handle_event(Event::Next);
         assert_eq!(focused(&app), expected, "Tab advanced to {expected:?}");
         assert!(
@@ -281,6 +281,116 @@ fn tab_cycles_panes_inside_the_note_detail() {
             "still on the Notes tab while cycling panes"
         );
     }
+}
+
+#[test]
+fn read_only_task_panes_are_never_focus_stops() {
+    // A done task carries the longest read-only run: Status, Created, AND Closed. Cycling forward
+    // and backward many times must never land focus on any of them.
+    let (_client, mut app) = logged_in_tasks(vec![common::done_task(
+        "t1",
+        "shipped",
+        "2026-06-18T10:00:00Z",
+        "2026-06-18T14:00:00Z",
+    )]);
+    let _ = app.handle_event(Event::Submit); // open detail (Title focused)
+    assert!(
+        tasks_pane(&app)
+            .detail
+            .as_ref()
+            .unwrap()
+            .panes
+            .contains(&TaskPane::Closed),
+        "precondition: the done task's detail exposes the read-only Closed pane",
+    );
+
+    let focused = |app: &App| tasks_pane(app).detail.as_ref().unwrap().focused_pane();
+    // Cycle forward well past the editable count, then backward the same: focus is always an
+    // editable pane, never Status/Created/Closed.
+    for step in 0..12 {
+        let event = if step % 4 < 2 {
+            Event::Next
+        } else {
+            Event::Prev
+        };
+        let _ = app.handle_event(event);
+        let pane = focused(&app).expect("a pane is focused");
+        assert!(
+            matches!(pane, TaskPane::Title | TaskPane::Description),
+            "focus stays on an editable pane after cycling, got {pane:?}",
+        );
+        assert!(
+            pane.is_editable(),
+            "the focused pane is editable (never read-only), got {pane:?}",
+        );
+    }
+}
+
+#[test]
+fn read_only_note_pane_is_never_a_focus_stop() {
+    let (client, mut app) =
+        logged_in_notes(vec![note("n1", "Title", "body", "2026-06-18T10:00:00Z")]);
+    open_note_detail(
+        &mut app,
+        &client,
+        note("n1", "Title", "body", "2026-06-18T10:00:00Z"),
+    );
+
+    let focused = |app: &App| match &notes_pane(app).mode {
+        NotesMode::Detail(d) => d.focused_pane(),
+        _ => panic!("detail open"),
+    };
+    for step in 0..12 {
+        let event = if step % 4 < 2 {
+            Event::Next
+        } else {
+            Event::Prev
+        };
+        let _ = app.handle_event(event);
+        let pane = focused(&app);
+        assert!(
+            matches!(pane, NotePane::Title | NotePane::Content),
+            "note focus stays on an editable pane after cycling, got {pane:?}",
+        );
+        assert!(
+            pane.is_editable(),
+            "the focused note pane is editable (never the read-only Created), got {pane:?}",
+        );
+    }
+}
+
+#[test]
+fn task_detail_opens_focused_on_the_first_editable_pane() {
+    let (_client, mut app) =
+        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let _ = app.handle_event(Event::Submit); // open detail
+
+    let pane = tasks_pane(&app)
+        .detail
+        .as_ref()
+        .unwrap()
+        .focused_pane()
+        .expect("a pane is focused on open");
+    assert_eq!(pane, TaskPane::Title, "initial focus is Title");
+    assert!(pane.is_editable(), "initial focus is an editable pane");
+}
+
+#[test]
+fn note_detail_opens_focused_on_the_first_editable_pane() {
+    let (client, mut app) =
+        logged_in_notes(vec![note("n1", "Title", "body", "2026-06-18T10:00:00Z")]);
+    open_note_detail(
+        &mut app,
+        &client,
+        note("n1", "Title", "body", "2026-06-18T10:00:00Z"),
+    );
+
+    let pane = match &notes_pane(&app).mode {
+        NotesMode::Detail(d) => d.focused_pane(),
+        _ => panic!("detail open"),
+    };
+    assert_eq!(pane, NotePane::Title, "initial focus is Title");
+    assert!(pane.is_editable(), "initial focus is an editable pane");
 }
 
 // ============================================================================
@@ -504,44 +614,59 @@ fn note_commit_of_content_preserves_the_title_from_the_snapshot() {
 // e on a read-only pane is inert (A6)
 // ============================================================================
 
+// Cycling never lands focus on a read-only pane any more, so the A6 guard is reached by forcing
+// focus there directly via the documented `focus_pane` test seam (ADR-0003 layer 2), then driving
+// the same `begin_edit` path `BeginEditTask`/`BeginEditNote` routes through. The detail types are
+// constructed directly from a snapshot — the guard is `begin_edit`'s own, exercised over the public
+// API without the now-removed read-only cycling path.
 #[test]
 fn e_on_a_read_only_task_pane_is_inert() {
-    let (_client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
-    let _ = app.handle_event(Event::Submit); // open detail
-    let _ = app.handle_event(Event::Next); // Title -> Description
-    let _ = app.handle_event(Event::Next); // -> Status (read-only)
-    assert_eq!(
-        tasks_pane(&app).detail.as_ref().unwrap().focused_pane(),
-        Some(TaskPane::Status),
+    let task = common::done_task(
+        "t1",
+        "shipped",
+        "2026-06-18T10:00:00Z",
+        "2026-06-18T14:00:00Z",
     );
+    // Every read-only pane present on a done task: Status, Created, Closed.
+    for pane in [TaskPane::Status, TaskPane::Created, TaskPane::Closed] {
+        let mut detail = TaskDetail::new(task.clone());
+        assert!(
+            detail.focus_pane(pane),
+            "the {pane:?} pane is present on a done task's detail",
+        );
+        assert_eq!(
+            detail.focused_pane(),
+            Some(pane),
+            "focus_pane forced focus onto {pane:?}",
+        );
+        assert!(!pane.is_editable(), "{pane:?} is a read-only pane");
 
-    // `e` on the read-only Status pane opens no edit buffer (A6).
-    let _ = app.handle_event(Event::BeginEditTask);
-    assert!(
-        !tasks_pane(&app).detail.as_ref().unwrap().is_editing(),
-        "e is inert on a read-only pane (no edit buffer opens)",
-    );
+        detail.begin_edit(); // the path `BeginEditTask` routes through
+        assert!(
+            !detail.is_editing(),
+            "e is inert on the read-only {pane:?} pane (no edit buffer opens)",
+        );
+    }
 }
 
 #[test]
 fn e_on_the_read_only_created_note_pane_is_inert() {
-    let (client, mut app) =
-        logged_in_notes(vec![note("n1", "Title", "body", "2026-06-18T10:00:00Z")]);
-    open_note_detail(
-        &mut app,
-        &client,
-        note("n1", "Title", "body", "2026-06-18T10:00:00Z"),
+    let mut detail = NoteDetail::new(note("n1", "Title", "body", "2026-06-18T10:00:00Z"));
+    detail.focus_pane(NotePane::Created); // the read-only pane, forced via the test seam
+    assert_eq!(
+        detail.focused_pane(),
+        NotePane::Created,
+        "focus_pane forced focus onto the read-only Created pane",
     );
-    let _ = app.handle_event(Event::Next); // Title -> Content
-    let _ = app.handle_event(Event::Next); // -> Created (read-only)
-
-    let editing_before = matches!(&notes_pane(&app).mode, NotesMode::Detail(d) if d.is_editing());
-    let _ = app.handle_event(Event::BeginEditNote);
-    let editing_after = matches!(&notes_pane(&app).mode, NotesMode::Detail(d) if d.is_editing());
     assert!(
-        !editing_before && !editing_after,
-        "e is inert on the read-only Created pane"
+        !NotePane::Created.is_editable(),
+        "Created is a read-only note pane",
+    );
+
+    detail.begin_edit(); // the path `BeginEditNote` routes through
+    assert!(
+        !detail.is_editing(),
+        "e is inert on the read-only Created pane (no edit buffer opens)",
     );
 }
 
@@ -779,23 +904,31 @@ fn purple_border_follows_pane_focus_to_the_description() {
 }
 
 #[test]
-fn a_focused_read_only_pane_is_not_purple() {
-    // A6 render cue: a focused READ-ONLY pane is bordered but NOT purple (signalling `e` is inert).
+fn read_only_panes_carry_no_purple_border() {
+    // A6 render cue: read-only panes are bordered but NEVER purple (signalling `e` is inert there).
+    // Cycling can no longer focus a read-only pane, so the purple cue stays on an editable pane;
+    // the read-only Status/Created panes carry zero magenta cells regardless of which editable pane
+    // holds focus.
     let (_client, mut app) =
         logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
-    let _ = app.handle_event(Event::Submit); // open detail
-    let _ = app.handle_event(Event::Next); // Description
-    let _ = app.handle_event(Event::Next); // Status (read-only, focused)
+    let _ = app.handle_event(Event::Submit); // open detail (Title focused)
+    let _ = app.handle_event(Event::Next); // -> Description (still an editable pane)
     assert_eq!(
         tasks_pane(&app).detail.as_ref().unwrap().focused_pane(),
-        Some(TaskPane::Status),
+        Some(TaskPane::Description),
+        "cycling lands on the editable Description pane, never a read-only one",
     );
 
     let buffer = render_buffer(&app, W, H);
     let status = row_fg_count(&buffer, "Status", Color::Magenta);
+    let created = row_fg_count(&buffer, "Created", Color::Magenta);
     assert_eq!(
         status, 0,
-        "a focused read-only pane carries no purple border ({status} magenta cells)",
+        "the read-only Status pane carries no purple border ({status} magenta cells)",
+    );
+    assert_eq!(
+        created, 0,
+        "the read-only Created pane carries no purple border ({created} magenta cells)",
     );
 }
 

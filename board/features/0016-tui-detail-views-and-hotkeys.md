@@ -529,6 +529,29 @@ Postgres booted cleanly). Report-only — never a gate.
   self, pane: NotePane)`. No existing named seam existed (only the brittle `pub focused` index).
   `./ok.sh fmt --check | lint | build` all green; `./ok.sh test` is expected red until `tester`
   updates the two cycle-sequence tests that assert the old (read-only-stop) behaviour — their slice.
+- [x] 2026-06-28 [tester] Focus-cycling `TestBackend` suite updated + extended for the read-only
+  focus-skip fix (`crates/tui/tests/detail.rs`; no non-test source touched). Updated:
+  `tab_cycles_panes_inside_the_task_detail_and_does_not_switch_tabs` (forward walk now
+  `Title → Description → (wrap) Title`; `Shift+Tab` from `Title` → `Description`, not `Created`;
+  `map_live` Tab→Next/BackTab→Prev and the still-on-Tasks-tab assertions kept) and
+  `tab_cycles_panes_inside_the_note_detail` (now `Title → Content → (wrap) Title`; `Created` never
+  focused). Added: `read_only_task_panes_are_never_focus_stops` (done task — Status/Created/Closed
+  present — cycled fwd+back 12 steps, focus always `{Title, Description}` and `is_editable()`);
+  `read_only_note_pane_is_never_a_focus_stop` (same for note Created); plus
+  `task_detail_opens_focused_on_the_first_editable_pane` and
+  `note_detail_opens_focused_on_the_first_editable_pane` (initial focus is `Title` and editable).
+  Rewrote the A6 inert-`e` tests (`e_on_a_read_only_task_pane_is_inert`,
+  `e_on_the_read_only_created_note_pane_is_inert`) to use the new `focus_pane(...)` seams on a
+  directly-constructed `TaskDetail`/`NoteDetail` (the only public mutable path to a detail), forcing
+  focus onto each read-only pane then asserting `begin_edit()` — the path `BeginEditTask`/
+  `BeginEditNote` route through — opens no buffer; the task case loops over all three read-only panes
+  on a done task. Also reworked the now-impossible-state purple-cue test (renamed
+  `a_focused_read_only_pane_is_not_purple` → `read_only_panes_carry_no_purple_border`): cycling can
+  no longer focus a read-only pane, so it now asserts Status/Created carry zero magenta cells while
+  an editable pane holds focus. All other 0016 coverage (two-tiered `Esc` R1, A7 global-suppression,
+  purple focus border on editable panes, per-field commit payloads R5, help body) intact.
+  `./ok.sh fmt --check | lint | test` all green — `tests/detail.rs` now 25 tests; whole tui
+  `TestBackend` suite green.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
