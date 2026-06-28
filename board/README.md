@@ -52,8 +52,8 @@ backlog".
 | [0012](./features/0012-profiles-crud-and-switcher.md) | Profiles create/update/delete + TUI switcher (delete cascades; last-profile guard) | feature | merged | medium | — | — (merged) |
 | [0013](./features/0013-session-token-debug-leak.md) | Redact the JWT in `tui` `Session` — bare `String` reachable via derived `Debug` (rust-standards secret-leak violation) | chore | merged | high | — | — (merged) |
 | [0014](./features/0014-tui-layout-shell.md) | TUI layout shell — top-level tabs, centred title, centred auth form, tight footer | feature | merged | medium | — | — (merged) |
-| [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | ready (branch: awaiting-merge) | medium | 0014 (merged ✓) | feature/0015-tui-dialog-system |
-| [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | inbox | medium | 0015 | — |
+| [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | merged | medium | 0014 (merged ✓) | — (merged) |
+| [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | inbox | medium | 0015 (merged ✓) | — |
 
 > **0010 — Notes — MERGED.** The final missing
 > domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
@@ -145,7 +145,7 @@ backlog".
 > ADR-0010 binds 0015/0016 — those phases inherit and cite it. Fast-forward merged into `main`
 > (linear history); **0015 is now unblocked.**
 >
-> **0015 — TUI dialog system — AWAITING-MERGE on the branch (Phase 2 of 3).** A **`tui`-crate-only**
+> **0015 — TUI dialog system — MERGED (Phase 2 of 3).** A **`tui`-crate-only**
 > modal framework with **no** `contract`/server/domain change (the
 > [ADR-0010](../docs/adr/0010-tui-navigation-and-interaction-model.md) §5 presentation-only boundary,
 > confirmed byte-identical by reviewer + verifier). A deep `draw_dialog` helper (one `Dialog` fed by
@@ -176,8 +176,9 @@ backlog".
 > (`help_modal_global_block_lists_quit_and_close_help_as_separate_aligned_rows`, `dialogs` 22 → 23).
 > Pure presentation; #1/#2/#3 untouched. The prior verdicts were void once code changed; final
 > **approved** + **VERIFIED** at code-hash `00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc`; coverage 73.81%
-> line (report-only). The `main` snapshot stays `ready` (frozen at claim); the live status is
-> `awaiting-merge` on `feature/0015-tui-dialog-system`. **0016 is unblocked once 0015 merges.**
+> line (report-only). Fast-forward merged into `main` (`8138f8c..ede004d`, linear history, no merge
+> commit) at that attested hash; worktree + branch cleaned up. **0016 (TUI detail views + final
+> hotkey scheme) is now unblocked.**
 >
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**

@@ -2,14 +2,14 @@
 id: 0015
 title: TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus
 type: feature      # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0014]
 branch: feature/0015-tui-dialog-system
 worktree: .claude/worktrees/0015-tui-dialog-system
 created: 2026-06-26
-updated: 2026-06-26
+updated: 2026-06-28
 ---
 
 ## Feature request
@@ -604,3 +604,8 @@ cleanly. The help-text split into two tabbed Global rows plus one regression tes
   byte-identical code, so per verdict pinning the `approved` + `VERIFIED` attestations carry forward
   untouched (commit shas in the verdict lines above are now stale pointers, expected). Help-modal
   layout re-entry complete: all 7 feature DoD clauses met. `working` → `awaiting-merge`.
+- [x] 2026-06-28 [operator] Authorized closing the feature. Fast-forward merged
+  `feature/0015-tui-dialog-system` into `main` (`8138f8c..ede004d`, linear history, no merge
+  commit) at code-hash `00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc` — the attested approved+VERIFIED
+  tree. `awaiting-merge` → `merged`. Worktree + branch cleaned up. 0016 (TUI detail views + final
+  hotkey scheme) is now unblocked.
