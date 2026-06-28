@@ -513,12 +513,13 @@ docker + throwaway test Postgres booted cleanly). Report-only — never a gate.
   `59ab31720df13c2a1f1c7a55752eeec48c7e3504`** = the attested verdict hash, so the `reviewer`
   approved + `verifier` verified attestations **carry forward untouched** (no re-review). Gates
   re-run green on the rebased tree (`test`/`lint`/`fmt --check`). Status → `awaiting-merge`.
-- [ ] 2026-06-28 [human] In both detail views, **read-only panes are still Tab-focus stops**: in
+- [x] 2026-06-28 [human] In both detail views, **read-only panes are still Tab-focus stops**: in
   the task detail, with Description focused, pressing `Tab` lands on a non-editable pane
   (Status/Created/Closed) that does nothing — you have to press `Tab` again to reach an editable
   field. Same in the note detail with the read-only Created pane. Read-only fields should still be
   **displayed**, but **excluded from `Tab`/`Shift+Tab` focus cycling** — focus should move only
-  between editable panes.
+  between editable panes. **Resolved** on-branch (focus-skip fix, `detail.rs` +read-only-skip
+  coverage), re-reviewed + re-verified @ code-hash `18d6445a`.
 - [x] 2026-06-28 [orchestrator] Re-entry: human feedback above reopens 0016 from `awaiting-merge`.
   Behaviour tweak (focus-cycling skips read-only panes) — re-entry point `working`; the
   `reviewer` approved + `verifier` verified verdicts @ `59ab3172` are **void** once code changes.
@@ -587,10 +588,9 @@ docker + throwaway test Postgres booted cleanly). Report-only — never a gate.
   contract `{code,message}`, OTel spans (`get_note`/`patch_task`/`update_note`/…). (3) `git diff
   --stat` from the prior verified snapshot touches **only** the 3 TUI files — no `contract`/server/
   `Cargo.*` delta; wire byte-identical. Stack torn down, volume not reset, no capability gap.
-
 - [x] 2026-06-28 [orchestrator] Step-7 freshen (post-feedback): rebased onto `main` (docs/`.claude`/
-  `board`-only advance through `b48ecdb` — handoff + the new `coding-standards` focus-traversal rule +
-  dashboard). No conflict. **`./ok.sh code-hash` unchanged at
+  `board`-only advance through `b48ecdb` — handoff + new `coding-standards` rule + dashboard). No
+  conflict. **`./ok.sh code-hash` unchanged at
   `18d6445a05b7834320186551a6ee72e1972c3a08`** = the re-review/re-verify attested hash, so the
   `reviewer` approved + `verifier` verified attestations **carry forward untouched** (no re-review).
   Gates re-run green on the rebased tree (`test`/`lint`/`fmt --check`). Status → `awaiting-merge`;
