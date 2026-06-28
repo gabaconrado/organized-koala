@@ -5,6 +5,67 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-28 (0018 notes detail multiline Content text area — TUI-only; `feature`)
+
+A clean, well-scoped, **`tui`-crate-only** feature with **no** `contract`/server/migration change.
+The Notes detail view's **Content** field becomes a **multiline text area that fills the rest of
+the pane** (panes reorder to `Title → Created → Content`), implementing [ADR-0011][adr-0011-0018]
+— which **amends [ADR-0010][adr-0010-0014-snap] §4** for the multiline pane only. `Note.content`
+is already a `String`, so the wire surface is untouched (reviewer + verifier confirmed
+`crates/contract` + `crates/server` byte-identical to `main`).
+
+What shipped (`crates/tui/` only):
+
+- **Context-dependent commit keymap (the load-bearing decision, ADR-0011).** Two new `Event`
+  variants — `Event::Commit` ("commit focused field") and `Event::Newline` ("insert a line
+  break"). `map_key` maps `Ctrl+S` → `Commit` while a text-entry context is active, and `Enter`
+  → `Newline` **only** when the active text-entry context is the multiline Content edit (predicate
+  `editing_note_content` / `NotesState::editing_content_pane`); `Enter` stays `Submit` everywhere
+  else (Title, auth, dialogs, create/edit forms, list-open). The detail handler treats `Submit`
+  and `Commit` identically so Title still commits on `Enter` and Content commits on `Ctrl+S`;
+  `Newline` pushes `'\n'` into the edit buffer. `Ctrl+S` is inert outside text entry; `Ctrl+C`
+  still wins as the unconditional Quit; **no terminal enhancement flags** are pushed (the
+  Shift+Enter rejection — that pattern is terminal-dependent and would silently fail on Apple
+  Terminal / VTE / xterm / bare tmux). This is the first modifier binding besides `Ctrl+C`.
+- **Content fills the pane.** Opt-in `DetailPane.fill` flag drives a per-pane layout constraint:
+  Title/Created stay `Constraint::Length(3)`, Content takes `Constraint::Min(3)` and renders with
+  `Wrap { trim: false }` so multi-line content displays without truncating the fixed fields. The
+  task detail path defaults to `Length(3)` and is unchanged.
+- **Pane reorder** `NotePane::ALL` → `[Title, Created, Content]`; focus cycling still skips
+  read-only `Created` and lands only on Title/Content. Discoverability copy for `Ctrl+S` in the
+  `?` help overlay + the Content pane caption.
+
+Tests live in `tester`'s `TestBackend` suite per [ADR-0003][adr-0003-0018] (interactive TUI
+behaviour is owned by that suite, not the live verifier): `tests/detail.rs` 31 passed,
+`tests/keybindings.rs` 38 passed — pane order, Content fill/multiline render, `Enter`→newline,
+`Ctrl+S` commit via the `UpdateNote` path, `Esc` cancel/revert, and the regression fork (Title
+still commits on `Enter`; `Ctrl+S` inert with no text entry). Clause 4 has no server-API/reqwest
+delta to boot for (the `crates/contract`/`crates/server` diff against `main` is empty); the
+verifier confirmed the suite exists and is green. Reviewer **REVIEW-STATUS: approved** + verifier
+**VERDICT: verified**, both pinned to code-hash `1f9db5c40754afb83857a67b71313fd9d2db7ba8`.
+
+coverage: **72.47%** line (`./ok.sh coverage` in the worktree; docker + throwaway test Postgres
+booted cleanly). Report-only — never a gate.
+
+**No new CLAUDE.md gotcha or standards/agent change this cycle.** The cycle ran clean: docker
+available, no cross-worktree migration-history conflict (0018 adds no migration), the file-
+ownership boundary held (tui-dev slices 1–4, tester slice 5), and the testability seam (new
+`Event` variants → pure `map_key` → pure core) extended exactly as ADR-0011 anticipated. The
+context-dependent-keymap pattern (the `editing_note_content` predicate gating `Enter`; `Ctrl+S`
+as a modifier binding) and the "ADR-0011 amends ADR-0010 §4 for the multiline pane only"
+relationship are **fully captured in ADR-0011** — their correct durable home — not a recurring
+cross-cutting gotcha, so none manufactured. No new crate, so no new dev agent to register.
+
+**One out-of-scope follow-up filed as an idea on `main`** (pre-documented as non-blocking plan
+assumption A5, and independently flagged by the reviewer):
+[`ideas/0006`](../board/ideas/0006-note-content-scroll-cursor-affordance.md) — a Content
+scroll/cursor affordance for content exceeding the visible pane height (the current change
+fills + wraps but has no scroll or cursor). Idea-first per the backlog policy — not minted, not
+smuggled into the Summary.
+
+[adr-0011-0018]: ./adr/0011-multiline-content-editing-keymap.md
+[adr-0003-0018]: ./adr/0003-verification-layering.md
+
 ## Handoff — 2026-06-28 (0017 timer-completion desktop notification — TUI-only; `feature`)
 
 A clean, well-scoped, **`tui`-crate-only** feature with **no** `contract`/server/migration change
@@ -2040,5 +2101,23 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   R2 — no daemon in the verifier env; not a capability gap). Two out-of-scope follow-ups filed as
   ideas on `main` (`ideas/0004` surface delivery failures, `ideas/0005` move `.show()` off the
   poll loop). No CLAUDE.md gotcha or standards/agent change this cycle. Awaiting the human's merge.
+- **The Notes detail Content field is a multiline text area, at `review`/in-flight on
+  `feature/0018-notes-detail-multiline-content`** (0018, a `feature`; verified + approved, awaiting
+  the step-7 freshen → `awaiting-merge`): the Content field now **fills the rest of the pane** and
+  edits as multi-line text (panes reorder to `Title → Created → Content`). **`tui`-crate-only**,
+  **no** `contract`/server/migration change (`Note.content` is already a `String`; the
+  `crates/contract`/`crates/server` diff against `main` is empty), implementing
+  [ADR-0011][adr-0011-snap] which **amends [ADR-0010][adr-0010-0014-snap] §4** for the multiline
+  pane only. Two new `Event` variants (`Commit`/`Newline`) drive a **context-dependent commit
+  keymap**: `Ctrl+S` commits while a text-entry context is active, `Enter` inserts a newline
+  **only** in the multiline Content edit (predicate `editing_note_content`) and stays `Submit`
+  everywhere else; `Ctrl+C` still wins; **no terminal enhancement flags** (Shift+Enter rejected as
+  terminal-dependent). Content fills via opt-in `DetailPane.fill` → `Constraint::Min(3)` +
+  `Wrap { trim: false }` (task detail unchanged). Tests in `tester`'s `TestBackend` suite per
+  ADR-0003 (`tests/detail.rs` 31, `tests/keybindings.rs` 38). Reviewer **approved** + verifier
+  **verified**, both pinned to code-hash `1f9db5c40754afb83857a67b71313fd9d2db7ba8`; coverage 72.47%
+  line. One out-of-scope follow-up filed as `ideas/0006` (Content scroll/cursor affordance). No
+  CLAUDE.md gotcha or standards/agent change this cycle.
 
 [adr-0010-0014-snap]: ./adr/0010-tui-navigation-and-interaction-model.md
+[adr-0011-snap]: ./adr/0011-multiline-content-editing-keymap.md

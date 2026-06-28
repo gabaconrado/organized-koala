@@ -55,6 +55,7 @@ backlog".
 | [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | merged | medium | 0014 (merged ✓) | — (merged) |
 | [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | merged | medium | 0015 (merged ✓) | — (merged) |
 | [0017](./features/0017-timer-completion-desktop-notification.md) | Desktop notification when the focus timer ends (cross-OS, Ubuntu-first) | feature | merged | medium | 0008 (merged ✓) | — (merged) |
+| [0018](./features/0018-notes-detail-multiline-content.md) | Notes detail view — multiline Content text area (fills the pane), Created moved above | feature | review | medium | 0016 (merged ✓) | feature/0018-notes-detail-multiline-content |
 
 > **0010 — Notes — MERGED.** The final missing
 > domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
@@ -178,6 +179,29 @@ backlog".
 > (stale `Viewing` doc comment in `notes.rs`) filed as
 > [`ideas/0003`](./ideas/0003-stale-viewing-doccomment-notes.md) on `main`. At the AI-terminal
 > `awaiting-merge` on its branch; awaiting the human's merge.
+>
+> **0018 — Notes detail multiline Content text area — `review`/in-flight on its branch
+> (verified + approved; awaiting the step-7 freshen → `awaiting-merge`).** The Notes detail view's
+> **Content** field becomes a **multiline text area that fills the rest of the pane** (panes
+> reorder to `Title → Created → Content`). **`tui`-crate-only**, **no** `contract`/server/migration
+> change (`Note.content` is already a `String`; the `crates/contract`/`crates/server` diff against
+> `main` is empty), implementing [ADR-0011](../docs/adr/0011-multiline-content-editing-keymap.md)
+> which **amends [ADR-0010](../docs/adr/0010-tui-navigation-and-interaction-model.md) §4** for the
+> multiline pane only. Two new `Event` variants (`Commit`/`Newline`) drive a **context-dependent
+> commit keymap**: `Ctrl+S` commits while a text-entry context is active, `Enter` inserts a newline
+> **only** in the multiline Content edit (predicate `editing_note_content`) and stays `Submit`
+> everywhere else; `Ctrl+C` still wins as Quit; **no terminal enhancement flags** (Shift+Enter
+> rejected as terminal-dependent). Content fills via an opt-in `DetailPane.fill` flag →
+> `Constraint::Min(3)` + `Wrap { trim: false }` (the task detail path defaults to `Length(3)`,
+> unchanged); focus cycling still skips read-only `Created`. Tests live in `tester`'s `TestBackend`
+> suite per [ADR-0003](../docs/adr/0003-verification-layering.md) (`tests/detail.rs` 31,
+> `tests/keybindings.rs` 38 — pane order, fill, `Enter`→newline, `Ctrl+S` commit via the
+> `UpdateNote` path, `Esc` revert, and the Title-still-commits-on-`Enter` regression fork). Reviewer
+> **approved** + verifier **verified**, both pinned to code-hash
+> `1f9db5c40754afb83857a67b71313fd9d2db7ba8`; coverage 72.47% line (report-only). One out-of-scope
+> follow-up filed as [`ideas/0006`](./ideas/0006-note-content-scroll-cursor-affordance.md) (a
+> Content scroll/cursor affordance for content exceeding the pane height). No CLAUDE.md gotcha or
+> standards/agent change this cycle.
 >
 > **0017 — Timer-completion desktop notification — MERGED.** When the
 > TUI observes a focus session transition into `Completed`, it fires **exactly one** desktop
