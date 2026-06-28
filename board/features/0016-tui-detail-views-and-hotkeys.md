@@ -2,7 +2,7 @@
 id: 0016
 title: TUI detail views + final hotkey scheme — per-field task/note panes, full keymap
 type: feature      # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0015]
@@ -595,6 +595,10 @@ docker + throwaway test Postgres booted cleanly). Report-only — never a gate.
   `reviewer` approved + `verifier` verified attestations **carry forward untouched** (no re-review).
   Gates re-run green on the rebased tree (`test`/`lint`/`fmt --check`). Status → `awaiting-merge`;
   the `[human]` focus-skip feedback is resolved at head and re-reviewed.
+- [x] 2026-06-28 [orchestrator] **Merged** — operator authorised the merge this cycle; fast-forward
+  merged `feature/0016-tui-detail-views-and-hotkeys` into `main` (`b48ecdb..107525d`, linear, no
+  remote write) at the verified code-hash `18d6445a`. Status → `merged`; worktree removed. Phase 3
+  of the 0014→0015→0016 TUI overhaul is complete.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md

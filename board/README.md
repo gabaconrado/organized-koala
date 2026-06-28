@@ -53,7 +53,7 @@ backlog".
 | [0013](./features/0013-session-token-debug-leak.md) | Redact the JWT in `tui` `Session` — bare `String` reachable via derived `Debug` (rust-standards secret-leak violation) | chore | merged | high | — | — (merged) |
 | [0014](./features/0014-tui-layout-shell.md) | TUI layout shell — top-level tabs, centred title, centred auth form, tight footer | feature | merged | medium | — | — (merged) |
 | [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | merged | medium | 0014 (merged ✓) | — (merged) |
-| [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | ready (claimed; branch `awaiting-merge`) | medium | 0015 (merged ✓) | feature/0016-tui-detail-views-and-hotkeys |
+| [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | merged | medium | 0015 (merged ✓) | — (merged) |
 
 > **0010 — Notes — MERGED.** The final missing
 > domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
@@ -145,7 +145,7 @@ backlog".
 > ADR-0010 binds 0015/0016 — those phases inherit and cite it. Fast-forward merged into `main`
 > (linear history); **0015 is now unblocked.**
 >
-> **0016 — TUI detail views + final hotkey scheme — branch `awaiting-merge` (Phase 3 / final of 3).**
+> **0016 — TUI detail views + final hotkey scheme — MERGED (Phase 3 / final of 3).**
 > The three-part TUI overhaul (0014 → 0015 → **0016**) is complete. A **`tui`-crate-only**,
 > presentation-only cycle implementing [ADR-0010](../docs/adr/0010-tui-navigation-and-interaction-model.md)
 > §3–§5 with **no new ADR** and **no** `contract`/server/domain delta (reviewer + verifier confirmed
