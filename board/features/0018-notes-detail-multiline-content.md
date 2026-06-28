@@ -229,6 +229,13 @@ Description multiline change.
   detail unchanged), coverage claims verified against present passing tests. No blocking findings.
   **REVIEW-STATUS: approved** — code-tree hash `1f9db5c40754afb83857a67b71313fd9d2db7ba8`
   (head commit `d2b46e1`).
+- 2026-06-28 [verifier] TUI-only feature: `git diff --stat main..HEAD -- crates/contract
+  crates/server` empty (no server-API/reqwest delta to boot for, per ADR-0003). `./ok.sh
+  build|fmt --check|lint|test` all green (test booted throwaway Postgres). TestBackend DoD
+  evidence (clause 4): `tests/detail.rs` 31 passed, `tests/keybindings.rs` 38 passed — the
+  multiline-Content behaviour (Enter→newline, Ctrl+S commit via update-note path, Esc revert,
+  pane order, read-only Created skipped) verified by the green suite, not a live TTY (correct
+  per ADR-0003). **VERDICT: verified** — code-tree hash `1f9db5c40754afb83857a67b71313fd9d2db7ba8`.
 - [x] 2026-06-28 [human] Filed from a direct operator request. Two design forks resolved up
   front (see Feature request): (1) newline binding = `Enter`-newline / `Ctrl+S`-commit in the
   Content pane (Shift+Enter rejected as terminal-dependent); (2) routed through the formal
