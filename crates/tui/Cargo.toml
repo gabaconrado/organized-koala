@@ -40,6 +40,12 @@ reqwest = { version = "0.12", default-features = false, features = [
 # `contract` DTOs supply the impls and `reqwest`'s `json` feature does the (de)serialization.
 serde = "1"
 
+# Desktop notifications fired when a focus session completes. Default features only: this keeps
+# the pure-Rust `zbus` D-Bus backend on Linux and deliberately leaves the optional C `dbus`/`d`
+# (libdbus) feature OFF — so the build needs no `libdbus-1-dev`/`pkg-config`/system `.so`, and a
+# future bump cannot silently flip to the C backend. Do NOT enable the `d`/`dbus` feature.
+notify-rust = "4"
+
 # Errors: anyhow at the binary top, thiserror for the typed client-boundary error.
 anyhow = "1"
 thiserror = "2"

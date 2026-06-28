@@ -392,6 +392,13 @@ Design is low-risk and bounded; no `grill` pass needed.
 
 ## Log / comments
 
+- [x] 2026-06-28 [tui-dev] Slice 1 done: added the `Notifier` seam + production `DesktopNotifier`
+  (`crates/tui/src/client/notify.rs`, exported from `client/mod.rs`); `notify-rust = "4"` declared
+  with **default features only** (C `dbus`/`d` feature left OFF, rationale commented on the dep
+  line). `./ok.sh build` clean. **A1 confirmed:** the default `zbus` (pure-Rust D-Bus) backend
+  compiled with **no apt package** — `zbus`/`zbus_macros`/`zbus_names` built, **no `dbus` C-binding
+  crate** in `Cargo.lock`, and the only `pkg-config` lockfile entry pre-dates this change (2 entries
+  before and after). No `libdbus-1-dev`/system `.so` needed on Ubuntu.
 - [x] 2026-06-28 [orchestrator] Claimed `ready`→`working`; cut worktree
   `.claude/worktrees/0017-timer-completion-desktop-notification` + branch
   `feature/0017-timer-completion-desktop-notification` from `main@a016e6d` (the commit carrying

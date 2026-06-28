@@ -6,7 +6,10 @@
 //! [`contract`] DTOs, and every failure is a typed [`ClientError`] that preserves the
 //! server's machine-matchable [`ErrorCode`](contract::ErrorCode).
 
+pub mod notify;
 pub mod worker;
+
+pub use notify::{DesktopNotifier, Notifier};
 
 use contract::{
     CreateNoteRequest, CreateProfileRequest, CreateTaskRequest, ErrorBody, ErrorCode, LoginRequest,
