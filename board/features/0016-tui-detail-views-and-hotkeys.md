@@ -2,7 +2,7 @@
 id: 0016
 title: TUI detail views + final hotkey scheme — per-field task/note panes, full keymap
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0015]
@@ -491,6 +491,13 @@ delta**. One out-of-scope cosmetic nit (stale `Viewing` doc comment, `notes.rs`)
 
 coverage: 71.73% line (captured via `./ok.sh coverage` in the worktree; docker + throwaway test
 Postgres booted cleanly). Report-only — never a gate.
+
+- [x] 2026-06-28 [orchestrator] Step-7 freshen: rebased onto `main` (docs/`board`-only advance
+  through `01e3686`); the one expected Board-file conflict (frozen-pointer vs authoritative copy)
+  resolved in favour of the branch. **`./ok.sh code-hash` unchanged at
+  `59ab31720df13c2a1f1c7a55752eeec48c7e3504`** = the attested verdict hash, so the `reviewer`
+  approved + `verifier` verified attestations **carry forward untouched** (no re-review). Gates
+  re-run green on the rebased tree (`test`/`lint`/`fmt --check`). Status → `awaiting-merge`.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
