@@ -444,6 +444,18 @@ Design is low-risk and bounded; no `grill` pass needed.
   `.claude/worktrees/0017-timer-completion-desktop-notification` + branch
   `feature/0017-timer-completion-desktop-notification` from `main@a016e6d` (the commit carrying
   the plan; no ADR — Decision 2 is no-ADR). Branch copy of this item is now authoritative.
+- [x] 2026-06-28 [reviewer] Cold review (full feature gate). `./ok.sh build|test|lint|fmt --check`
+  all green; `notifications.rs` 13/13 passed. Verified: #1 (only transient `Timer` booleans, no
+  persisted state), #2 (no `contract`/server diff — TUI-only), #3 (no domain structure), ADR-0006
+  (notifier fires purely reactively after the response drain — no new poll/traffic), fire-once
+  semantics + A4 initial-load-only-arms + logout re-arm all correct in code, Decision-3 seam clean
+  (only the sanctioned `Notifier` mock; no internal collaborator mocked), A2 silent-non-fatal
+  (`let _ = show()`, no stdout/stderr), `notify-rust` default zbus backend / C feature off (A1
+  confirmed — no `dbus` C crate in lockfile), docs matrix present. No unjustified `#[allow]`.
+  No fix-now findings.
+  **`REVIEW-STATUS: approved` — code-hash:d3fa1fc5b3ed5ac0770085809aac150e25012849 sha:d082668.**
+  Out-of-scope (to be filed as ideas, non-blocking): A2 drops failure logging; A6 fires `.show()`
+  synchronously on the poll loop.
 
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
