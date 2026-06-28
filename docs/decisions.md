@@ -14,6 +14,7 @@ One row per ADR. Newest at the bottom.
 | [0008][adr-0008] | Task mutation — generalize `close` into PATCH, add DELETE | Accepted | 2026-06-24 |
 | [0009][adr-0009] | Profile mutations — create/rename/delete-cascade, last-profile guard, name uniqueness | Accepted | 2026-06-24 |
 | [0010][adr-0010] | TUI navigation and interaction model (tabs, dialogs, detail views) | Accepted | 2026-06-26 |
+| [0011][adr-0011] | Multiline Content editing in the note detail view — context-dependent commit keymap | Accepted | 2026-06-28 |
 
 [adr-0001]: ./adr/0001-foundational-architecture.md
 [adr-0002]: ./adr/0002-pomodoro-timer-authority.md
@@ -25,3 +26,4 @@ One row per ADR. Newest at the bottom.
 [adr-0008]: ./adr/0008-task-mutation-generalization.md
 [adr-0009]: ./adr/0009-profile-mutations.md
 [adr-0010]: ./adr/0010-tui-navigation-and-interaction-model.md
+[adr-0011]: ./adr/0011-multiline-content-editing-keymap.md
