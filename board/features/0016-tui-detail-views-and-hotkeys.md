@@ -2,7 +2,7 @@
 id: 0016
 title: TUI detail views + final hotkey scheme — per-field task/note panes, full keymap
 type: feature      # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0015]
@@ -317,11 +317,10 @@ reqwest-client confirmation only.
 
 ## Log / comments
 
-> **Frozen pointer (main copy).** Claimed 2026-06-28 into worktree
-> `.claude/worktrees/0016-tui-detail-views-and-hotkeys` (branch
-> `feature/0016-tui-detail-views-and-hotkeys`, cut from `main@7cae76a`). From the claim the
-> **branch copy is authoritative**; this `main` copy stays frozen at the claim snapshot until
-> the human's merge brings the finished item back atomically with the code.
+- [x] 2026-06-28 [orchestrator] Claimed `ready` → `working`. Worktree
+  `.claude/worktrees/0016-tui-detail-views-and-hotkeys` cut from `main@7cae76a` (carries the
+  plan citing ADR-0010; no new ADR required — confirmed presentation-only). Session: drive
+  cycle for 0016. `tui-dev` builds slices 1–4, `tester` slice 5.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
