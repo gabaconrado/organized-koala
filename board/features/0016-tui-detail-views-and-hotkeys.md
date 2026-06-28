@@ -404,6 +404,17 @@ reqwest-client confirmation only.
   commit round-trips run through the harness's synchronous worker-analogue executor (`submit`/`drive`),
   the only mock the sanctioned `Client` trait. `./ok.sh fmt --check` clean; `./ok.sh lint` clean;
   `./ok.sh test` green (tui suite **189** tests: 168 carried + 21 new; whole workspace green).
+- [x] 2026-06-28 [reviewer] **REVIEW-STATUS: approved** — pinned to code-tree hash
+  `59ab31720df13c2a1f1c7a55752eeec48c7e3504` (commit `4d59429`, human pointer). Cold review gate:
+  `./ok.sh test | lint | fmt --check` all green; presentation-only boundary **held**
+  (`crates/contract/**`, `crates/server/**`, `Cargo.toml`/`Cargo.lock` byte-identical to `main`;
+  no new `ClientRequest`/route). Hard constraint #1 (transient edit buffer; commits re-derive from
+  the server response) and the subtle points R1 two-tiered `Esc` / R2 unified gate / R3 `Tab`
+  overload / R5 note-field preservation / R6 stateless re-derive + A7 contract all verified and
+  backed by passing tests; keymap-remap regressions pinned (old `c`/`x`/`p`/duration-`d` gone).
+  One out-of-scope cosmetic nit (stale `Viewing` doc comment at `notes.rs:341`) filed as a
+  `board/ideas/` follow-up on `main` — not folded into 0016. Still requires the live `verifier`
+  pass (DoD clause 4) before `awaiting-merge`.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
