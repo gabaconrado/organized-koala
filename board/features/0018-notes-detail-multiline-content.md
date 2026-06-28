@@ -207,6 +207,12 @@ Description multiline change.
 
 ## Log / comments
 
+> **Frozen pointer (main copy).** Claimed 2026-06-28 onto
+> `feature/0018-notes-detail-multiline-content` (worktree
+> `.claude/worktrees/0018-notes-detail-multiline-content`), cut from `main@7a96ee1`. The
+> **branch copy is authoritative** while in flight; this `main` copy stays frozen at the claim
+> snapshot until the human's merge brings the finished item back atomically with the code.
+
 - [x] 2026-06-28 [human] Filed from a direct operator request. Two design forks resolved up
   front (see Feature request): (1) newline binding = `Enter`-newline / `Ctrl+S`-commit in the
   Content pane (Shift+Enter rejected as terminal-dependent); (2) routed through the formal
