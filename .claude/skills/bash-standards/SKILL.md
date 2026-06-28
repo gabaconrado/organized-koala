@@ -58,6 +58,26 @@ readonly NAME="${1:-default}"
 echo "hello ${NAME}"
 ```
 
+## Waiting on a background process
+
+- **Never poll with `pgrep -f "PATTERN"` when PATTERN appears in the polling command's own
+  command line** (learned 0015). A loop like `until ! pgrep -f "cargo test"; do sleep N; done`
+  self-matches: `pgrep -f` searches the *full* command line, so it finds the waiter shell itself,
+  the condition never flips, and the loop spins until timeout (~10 min each — this hung a reviewer
+  for ~38 min across several waiters, and tempted a denied `pkill`/`docker compose down -v`).
+- **Prefer waiting on the actual job.** Capture the PID and `wait` on it
+  (`cmd & pid=$!; wait "${pid}"`), or use the harness's background-task completion notification,
+  rather than a hand-rolled `until pgrep` loop. If you must pattern-match completion, match a
+  **sentinel the target writes on exit** (e.g. `grep -q 'EXIT=' "${out_file}"`) — never a
+  process-name substring your own loop shares.
+- **Run a single coverage/test pass to completion in the foreground.** Do not launch overlapping
+  `./ok.sh test` / `./ok.sh coverage` runs against the shared throwaway test Postgres — they poison
+  its state and cause transient auth-suite failures (the idea-0002 flake). One run at a time.
+- **Never reset a stuck shared-test-Postgres volume on your own.** `docker compose down -v` (or
+  resetting `deploy_postgres-data`) destroys other worktrees' local data and requires the
+  operator's explicit approval (CLAUDE.md #6 / the 0011 gotcha). A stuck or contended test PG is an
+  environment issue to escalate, not to force-clear.
+
 ## Gotchas
 
 - **`secret-scan.sh` matches credential VALUES, not bare identifiers** (learned 0002).

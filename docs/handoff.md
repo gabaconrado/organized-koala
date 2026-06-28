@@ -5,6 +5,55 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-27 (0015 help-modal layout re-entry — split crammed Global row; `feature`)
+
+Operator feedback re-opened 0015 from `awaiting-merge` again — this time a **help-modal layout
+bug**: in the `?` help dialog the `q  quit` entry was jammed onto the same row as the
+`? / Esc  close help` entry, and `close help` was not tab-aligned to the description column. Root
+cause: `draw_help` (`crates/tui/src/ui/mod.rs`) crammed two key entries onto one `Line`, breaking
+the `{key:<18}{desc}` layout every other Global row follows (desc aligned at col 21). A pure-
+presentation defect in 0015's own help modal — no behaviour / wire (#2) / domain (#3) change, no
+ADR needed (ADR-0010 / ADR-0006 §8.3 already govern the help modal). Folded back into 0015 (same
+precedent as the footer fix); per verdict-pinning the prior approved + verified verdicts were
+**void** once code changed and the item re-ran review + verify.
+
+What changed:
+
+- **tui-dev** split the malformed row into two properly-tabbed Global lines — key `q` → `quit`,
+  and key `? / Esc` → `close help` — each following the sibling `{key:<18}{desc}` layout so the
+  descriptions align at col 21. Two `Line::from` literals changed; keymap/wire/contract/domain all
+  unchanged. Commit `8c25b97`.
+- **tester** added a positive regression test
+  `help_modal_global_block_lists_quit_and_close_help_as_separate_aligned_rows` (`dialogs.rs`):
+  opens the `?` modal via the real keymap and asserts (1) `quit` and `close help` are on separate
+  rows (guards the crammed row from returning) and (2) the `close help` description starts at the
+  same column as the sibling `quit` / `r refresh` rows (alignment asserted relative to siblings,
+  not a magic constant). `dialogs` suite 22 → 23. Commit `397d759`.
+
+Final state: reviewer **approved** + verifier **VERIFIED**, both pinned to code-hash
+`00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc`. Verifier confirmed (`git diff cf66137..397d759 --
+crates/`) the only source deltas since the live wire pass are the `draw_help` help-text edit + the
+new test — no server/contract/reqwest code — so the live API attestation carries forward from the
+byte-identical `542f19aa` tree. Gates green (`./ok.sh test | lint | fmt --check`). Back at the
+AI-terminal `awaiting-merge` on the branch.
+
+coverage: **73.81%** line (re-captured via `./ok.sh coverage` in the worktree after this re-entry;
+docker + throwaway test Postgres booted cleanly — the help-text split + one regression test left
+the headline `TOTAL` essentially unchanged, 73.80% → 73.81%). Report-only — never a gate.
+
+**Process churn this cycle — self-matching `pgrep` wait-loops (durable bash-standards rule added).**
+The reviewer and earlier agents repeatedly hung on background wait-loops of the form
+`until ! pgrep -f "cargo test"; do sleep N; done` (later `pgrep -f "RUST_TEST_THREADS"`): the
+loop's own shell command line contains the search pattern, so `pgrep -f PATTERN` always matched the
+waiter itself, the condition never flipped, and each loop spun until timeout (~10 min; ~38 min lost
+across waiters on this re-entry). It also tempted a denied `pkill` / `docker compose down -v`. A new
+**"Waiting on a background process"** section in `bash-standards` now forbids self-matching `pgrep`
+polling, prefers `cmd & pid=$!; wait "${pid}"` or the harness's completion notification (or a
+sentinel the target writes on exit), and reiterates: run one coverage/test pass at a time (no
+overlapping `./ok.sh test` against the shared throwaway PG — the idea-0002 flake), and never reset
+the shared test-Postgres volume without operator approval (CLAUDE.md #6 / 0011 gotcha). Committed on
+`main` (home #1).
+
 ## Handoff — 2026-06-27 (0015 footer-fix re-entry — single-row flush footer; `feature`)
 
 Operator feedback re-opened 0015 from `awaiting-merge` back to `working` to fold in a

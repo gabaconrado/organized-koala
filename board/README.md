@@ -166,11 +166,18 @@ backlog".
 > the `?` help modal — the keymap is unchanged, `Esc` still cancels in flight); tui-dev shrank
 > `BOTTOM_BAND_ROWS 3 → 1` and dropped the textual affordance from `caption_with_spinner`; tester
 > realigned five in-flight asserts + added a single-flush-row pin and a help-modal-documents-Esc-cancel
-> pin; one cold-review nit (stale `FOOTER_CAPTION` doc comment) was fixed. The prior verdicts were void
-> once code changed; final **approved** + **VERIFIED** at code-hash
-> `b4bc0cdb93086adb620ffbe66bc5d66a524e4ffd`; coverage 73.80% line (report-only). The `main` snapshot
-> stays `ready` (frozen at claim); the live status is `awaiting-merge` on
-> `feature/0015-tui-dialog-system`. **0016 is unblocked once 0015 merges.**
+> pin; one cold-review nit (stale `FOOTER_CAPTION` doc comment) was fixed.
+> **Help-modal layout re-entry (2026-06-27):** operator feedback re-opened 0015 again — the `?` help
+> dialog crammed `q  quit` onto the `? / Esc  close help` row, and `close help` was not tab-aligned
+> to the description column. tui-dev split the malformed `Line` into two properly-tabbed Global rows
+> (key
+> `q` → `quit`; key `? / Esc` → `close help`) following the sibling `{key:<18}{desc}` layout (desc at
+> col 21); tester added a regression pin
+> (`help_modal_global_block_lists_quit_and_close_help_as_separate_aligned_rows`, `dialogs` 22 → 23).
+> Pure presentation; #1/#2/#3 untouched. The prior verdicts were void once code changed; final
+> **approved** + **VERIFIED** at code-hash `00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc`; coverage 73.81%
+> line (report-only). The `main` snapshot stays `ready` (frozen at claim); the live status is
+> `awaiting-merge` on `feature/0015-tui-dialog-system`. **0016 is unblocked once 0015 merges.**
 >
 > **Foundational slice 0001 — CLOSED.** All three children are **merged** on `main`:
 > `0002` (contract) → `0003` (server) → `0004` (TUI). The umbrella `0001` is therefore **merged**
