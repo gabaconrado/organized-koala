@@ -414,6 +414,15 @@ Design is low-risk and bounded; no `grill` pass needed.
   their chained follow-ups) it calls `app.take_pending_notification()` and, if `Some`, fires
   `notifier.notify_timer_complete(..)`. Purely reactive — no new request, no new poll (ADR-0006
   unchanged). `main.rs` constructs `DesktopNotifier::new()` and passes it in. `./ok.sh build` clean.
+- [x] 2026-06-28 [tui-dev] Slice 4 done (crate-local): added a "Desktop notifications" subsection
+  to `crates/tui/README.md` — the per-platform build/runtime matrix (Decision 1), the **no
+  build-time apt package** statement recorded as the **observed** truth from the clean worktree
+  build (A1/R1 confirmed), and the runtime daemon expectation + silent-non-fatal degradation.
+  `rumdl check` clean. **Root `README.md` left for `eng-manager`:** the root README is a repo-wide
+  shared doc (home #1 — must land on `main`, never ride a feature branch), and the plan assigns its
+  confirmation to `eng-manager` at the learn step. The note to add under "Setting up a development
+  environment": *a notification daemon is needed on Linux for timer notifications to appear; none
+  is needed to build or run.* All four slices complete — `./ok.sh build | lint | fmt --check` green.
 - [x] 2026-06-28 [orchestrator] Claimed `ready`→`working`; cut worktree
   `.claude/worktrees/0017-timer-completion-desktop-notification` + branch
   `feature/0017-timer-completion-desktop-notification` from `main@a016e6d` (the commit carrying
