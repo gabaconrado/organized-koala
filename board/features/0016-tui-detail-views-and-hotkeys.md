@@ -353,6 +353,20 @@ reqwest-client confirmation only.
   and the `detail_idle` arm in `map_key`. No new `Event` variants (reused `Submit`, `Next`, `Prev`,
   `BeginEditTask`, `Cancel`, `ToggleHelp`). `./ok.sh fmt` clean; `cargo clippy -p tui --lib --bins`
   clean; `cargo build -p tui` green.
+- [x] 2026-06-28 [tui-dev] Slice 3 — Note detail view (`crates/tui/src/app/notes.rs`, `app/mod.rs`,
+  `terminal/mod.rs`). Converted the read-only `NotesMode::Viewing(Note)` into an editable per-field
+  `NotesMode::Detail(NoteDetail)`: Title/Content editable, Created read-only. `Enter` still issues
+  `GetNote` first (view derives from the server response, #1); `apply_get_note` now folds into
+  `Detail`. `e` opens the edit buffer on the focused editable pane; per-field commit →
+  `UpdateNote` re-sending the **unchanged** field from the snapshot (the request has no `Option`
+  fields, plan R5); `apply_update_note` re-derives the open detail from the returned note and chains
+  a list refresh (#1). Two-tiered `Esc` and the `Option<String>` edit-buffer tier discriminant
+  mirror the task detail. `in_sub_flow` excludes `Detail` (so `?` stays reachable, A7); a separate
+  `detail_open`/`detail_editing` pair drives the unified gate (`overlay_capturing_input`,
+  `active_pane_in_sub_flow`, `is_text_entry`) and `App::detail_view_open`/`detail_field_editing`.
+  `apply_notes` preserves an open `Detail` across the list refresh. No new `Event` variants (reused
+  `BeginEditNote`/`Submit`/`Next`/`Prev`/`Cancel`). `./ok.sh fmt` clean; `cargo clippy -p tui
+  --lib --bins` clean; `cargo build -p tui` green.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md

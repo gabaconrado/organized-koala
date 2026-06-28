@@ -70,13 +70,124 @@ impl NoteForm {
     }
 }
 
+/// The panes of the note detail view, in display + cycle order. `Title`/`Content` are editable;
+/// `Created` is read-only (ADR-0010 §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotePane {
+    /// The note title (editable).
+    Title,
+    /// The note content (editable).
+    Content,
+    /// The creation timestamp (read-only).
+    Created,
+}
+
+impl NotePane {
+    /// The fixed pane order of the note detail view.
+    pub const ALL: [NotePane; 3] = [NotePane::Title, NotePane::Content, NotePane::Created];
+
+    /// Whether this pane is editable (`e` opens an edit buffer on it). `Created` is inert.
+    #[must_use]
+    pub fn is_editable(self) -> bool {
+        matches!(self, NotePane::Title | NotePane::Content)
+    }
+}
+
+/// The open note detail view: the note snapshot (re-derived from the server on every commit, #1),
+/// the focused pane index, and the optional in-progress edit buffer (its presence is the two-tier
+/// `Esc` discriminant). Per-field commit re-sends the unedited field from the snapshot since
+/// [`UpdateNoteRequest`] has no optional fields (ADR-0010 §4, plan R5).
+#[derive(Debug, Clone)]
+pub struct NoteDetail {
+    /// The note being viewed, derived from the server.
+    pub note: Note,
+    /// Index into [`NotePane::ALL`] of the focused pane.
+    pub focused: usize,
+    /// The in-progress edit buffer for the focused (editable) pane; `None` when not editing.
+    pub edit: Option<String>,
+}
+
+impl NoteDetail {
+    /// Open the detail view for `note` with the first pane focused and no edit in progress.
+    #[must_use]
+    pub fn new(note: Note) -> Self {
+        Self {
+            note,
+            focused: 0,
+            edit: None,
+        }
+    }
+
+    /// Re-derive the snapshot from a refreshed server note, preserving the focused pane and
+    /// dropping any edit buffer (#1).
+    pub fn refresh_from(&mut self, note: Note) {
+        self.note = note;
+        self.edit = None;
+    }
+
+    /// The currently-focused pane.
+    #[must_use]
+    pub fn focused_pane(&self) -> NotePane {
+        NotePane::ALL
+            .get(self.focused)
+            .copied()
+            .unwrap_or(NotePane::Title)
+    }
+
+    /// Cycle the focused pane forward (`true`) or backward, wrapping.
+    pub fn cycle(&mut self, forward: bool) {
+        let len = NotePane::ALL.len();
+        self.focused = if forward {
+            (self.focused + 1) % len
+        } else {
+            (self.focused + len - 1) % len
+        };
+    }
+
+    /// Begin an in-place edit of the focused pane, seeding the buffer from its current value. A
+    /// no-op on the read-only `Created` pane (`e` is inert there).
+    pub fn begin_edit(&mut self) {
+        match self.focused_pane() {
+            NotePane::Title => self.edit = Some(self.note.title.clone()),
+            NotePane::Content => self.edit = Some(self.note.content.clone()),
+            NotePane::Created => {}
+        }
+    }
+
+    /// Type a character into the edit buffer (no-op when not editing).
+    pub fn push_char(&mut self, c: char) {
+        if let Some(buf) = &mut self.edit {
+            buf.push(c);
+        }
+    }
+
+    /// Delete the last character of the edit buffer (no-op when not editing).
+    pub fn backspace(&mut self) {
+        if let Some(buf) = &mut self.edit {
+            let _ = buf.pop();
+        }
+    }
+
+    /// Cancel the in-progress edit, dropping the buffer (the pane reverts to the snapshot value).
+    pub fn cancel_edit(&mut self) {
+        self.edit = None;
+    }
+
+    /// Whether a field edit is in progress (the two-tier `Esc` discriminant).
+    #[must_use]
+    pub fn is_editing(&self) -> bool {
+        self.edit.is_some()
+    }
+}
+
 /// Which sub-flow (if any) overlays the notes list.
 #[derive(Debug, Clone)]
 pub enum NotesMode {
     /// The bare list: navigate, open, begin create / edit / delete.
     List,
-    /// Reading a single note (title + content + created_at). No editing.
-    Viewing(Note),
+    /// The per-field detail view of a single note (ADR-0010 §4): Title/Content editable, Created
+    /// read-only. Derived from a fresh `GetNote` response (#1).
+    Detail(NoteDetail),
     /// The create sub-flow: a fresh [`NoteForm`].
     Creating(NoteForm),
     /// The edit sub-flow: the id being edited plus the form prefilled from it.
@@ -131,20 +242,39 @@ impl NotesState {
         self.pending.is_some()
     }
 
-    /// Whether a text-entry sub-flow (create / edit) currently owns keystrokes.
+    /// Whether a text-entry sub-flow (create / edit, or a detail-view field edit) currently owns
+    /// keystrokes.
     #[must_use]
     pub fn is_text_entry(&self) -> bool {
-        matches!(
-            self.mode,
-            NotesMode::Creating(_) | NotesMode::Editing { .. }
-        )
+        match &self.mode {
+            NotesMode::Creating(_) | NotesMode::Editing { .. } => true,
+            NotesMode::Detail(detail) => detail.is_editing(),
+            NotesMode::List | NotesMode::ConfirmingDelete { .. } => false,
+        }
     }
 
-    /// Whether a sub-flow is open (any non-`List` mode). While true, `Esc` cancels the sub-flow
-    /// and `Tab` switches the focused field rather than cycling the top-level tabs.
+    /// Whether the per-field detail view is open (regardless of an in-progress field edit).
+    #[must_use]
+    pub fn detail_open(&self) -> bool {
+        matches!(self.mode, NotesMode::Detail(_))
+    }
+
+    /// Whether the detail view is open with a field edit in progress.
+    #[must_use]
+    pub fn detail_editing(&self) -> bool {
+        matches!(&self.mode, NotesMode::Detail(detail) if detail.is_editing())
+    }
+
+    /// Whether a sub-flow is open (any non-`List`, non-`Detail` mode). While true, `Esc` cancels
+    /// the sub-flow and `Tab` switches the focused field rather than cycling the top-level tabs.
+    /// The detail view is **not** counted here — it has its own input-capturing handling
+    /// ([`Self::detail_open`]) so that `?` stays reachable over it (Assumption A7).
     #[must_use]
     pub fn in_sub_flow(&self) -> bool {
-        !matches!(self.mode, NotesMode::List)
+        matches!(
+            self.mode,
+            NotesMode::Creating(_) | NotesMode::Editing { .. } | NotesMode::ConfirmingDelete { .. }
+        )
     }
 
     fn move_selection(&mut self, forward: bool) {
@@ -178,7 +308,7 @@ impl NotesState {
         }
         match &self.mode {
             NotesMode::List => self.handle_list_event(event, session),
-            NotesMode::Viewing(_) => self.handle_view_event(event),
+            NotesMode::Detail(_) => self.handle_detail_event(event, session),
             NotesMode::Creating(_) => self.handle_create_event(event, session),
             NotesMode::Editing { .. } => self.handle_edit_event(event, session),
             NotesMode::ConfirmingDelete { .. } => self.handle_delete_event(event, session),
@@ -239,13 +369,58 @@ impl NotesState {
         }
     }
 
-    fn handle_view_event(&mut self, event: Event) -> Option<ClientRequest> {
-        // The view is read-only: any cancel-equivalent returns to the list (the caller routes
-        // `Esc` to `Cancel`); the rest are inert.
-        if matches!(event, Event::Cancel) {
-            self.mode = NotesMode::List;
+    /// Handle a key while the per-field detail view is open (ADR-0010 §4). Two-tiered `Esc`:
+    /// while editing a field, `Cancel` reverts the edit; with no edit, `Cancel` exits to the list.
+    /// `e` opens the edit buffer on the focused editable pane; `Next`/`Prev` cycle panes when not
+    /// editing; `Char`/`Backspace` mutate the buffer; `Submit` commits the focused field.
+    fn handle_detail_event(
+        &mut self,
+        event: Event,
+        session: Option<&Session>,
+    ) -> Option<ClientRequest> {
+        let NotesMode::Detail(detail) = &mut self.mode else {
+            return None;
+        };
+        if detail.is_editing() {
+            match event {
+                Event::Char(c) => detail.push_char(c),
+                Event::Backspace => detail.backspace(),
+                Event::Cancel => detail.cancel_edit(),
+                Event::Submit => return self.submit_field(session),
+                _ => {}
+            }
+            return None;
+        }
+        match event {
+            Event::Next => detail.cycle(true),
+            Event::Prev => detail.cycle(false),
+            Event::BeginEditNote => detail.begin_edit(),
+            Event::Cancel => self.mode = NotesMode::List,
+            _ => {}
         }
         None
+    }
+
+    /// Commit the focused detail field via [`UpdateNoteRequest`], re-sending the unedited field from
+    /// the snapshot (the request has no optional fields, plan R5). A no-op if not editing.
+    fn submit_field(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
+        let session = session?;
+        let NotesMode::Detail(detail) = &mut self.mode else {
+            return None;
+        };
+        let buffer = detail.edit.as_ref()?.clone();
+        let (title, content) = match detail.focused_pane() {
+            NotePane::Title => (buffer.trim().to_owned(), detail.note.content.clone()),
+            NotePane::Content => (detail.note.title.clone(), buffer),
+            NotePane::Created => return None,
+        };
+        let req = UpdateNoteRequest { title, content };
+        Some(ClientRequest::UpdateNote {
+            token: session.token.clone(),
+            profile_id: session.profile_id.clone(),
+            note_id: detail.note.id.clone(),
+            req,
+        })
     }
 
     fn handle_create_event(

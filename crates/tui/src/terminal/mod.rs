@@ -71,7 +71,8 @@ fn detail_view_open(screen: &Screen) -> bool {
     match screen {
         Screen::Main(main) => match main.active_tab {
             Tab::Tasks => main.tasks.detail.is_some(),
-            Tab::Notes | Tab::Profiles => false,
+            Tab::Notes => main.notes.detail_open(),
+            Tab::Profiles => false,
         },
         _ => false,
     }
@@ -183,6 +184,7 @@ pub fn map_key(
         // pane (inert on a read-only pane, handled by the core), and `?` stays reachable. `Enter`
         // (above) opens/commits, `Tab`/arrows cycle panes, `Esc` is two-tiered (above).
         KeyCode::Char('e') if detail_idle && on_tasks => Some(Event::BeginEditTask),
+        KeyCode::Char('e') if detail_idle && on_notes => Some(Event::BeginEditNote),
         KeyCode::Char('?') if detail_idle => Some(Event::ToggleHelp),
         // Per-tab action keys (idle list, no overlay/detail capturing input). The final keymap
         // (ADR-0010 §4): `Space` toggles done (was `c`), `d` deletes (was `x`).

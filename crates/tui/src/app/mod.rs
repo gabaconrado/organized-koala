@@ -28,7 +28,7 @@ pub mod token;
 
 pub use auth::{AuthField, AuthMode, AuthState};
 pub use main_view::{MainState, Tab};
-pub use notes::{NoteForm, NotesMode, NotesState};
+pub use notes::{NoteDetail, NoteForm, NotePane, NotesMode, NotesState};
 pub use profiles::{ProfileForm, ProfilesMode, ProfilesState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
 pub use task_add::{AddTaskState, EditTaskState};
@@ -265,7 +265,7 @@ impl App {
                         || main.tasks.confirming_delete.is_some()
                         || main.tasks.detail.is_some()
                 }
-                Tab::Notes => main.notes.in_sub_flow(),
+                Tab::Notes => main.notes.in_sub_flow() || main.notes.detail_open(),
                 Tab::Profiles => main.profiles.in_sub_flow(),
             },
             Screen::Auth(_) | Screen::Offline { .. } => false,
@@ -278,7 +278,8 @@ impl App {
         match &self.screen {
             Screen::Main(main) => match main.active_tab {
                 Tab::Tasks => main.tasks.detail.is_some(),
-                Tab::Notes | Tab::Profiles => false,
+                Tab::Notes => main.notes.detail_open(),
+                Tab::Profiles => false,
             },
             _ => false,
         }
@@ -290,7 +291,8 @@ impl App {
         match &self.screen {
             Screen::Main(main) => match main.active_tab {
                 Tab::Tasks => main.tasks.detail_editing(),
-                Tab::Notes | Tab::Profiles => false,
+                Tab::Notes => main.notes.detail_editing(),
+                Tab::Profiles => false,
             },
             _ => false,
         }
@@ -428,7 +430,7 @@ impl App {
                         || main.tasks.editing.is_some()
                         || main.tasks.detail.is_some()
                 }
-                Tab::Notes => main.notes.in_sub_flow(),
+                Tab::Notes => main.notes.in_sub_flow() || main.notes.detail_open(),
                 Tab::Profiles => main.profiles.in_sub_flow(),
             },
             _ => false,
@@ -1163,7 +1165,7 @@ impl App {
                     let prev = &main.notes;
                     if matches!(
                         prev.mode,
-                        NotesMode::Creating(_) | NotesMode::Editing { .. }
+                        NotesMode::Creating(_) | NotesMode::Editing { .. } | NotesMode::Detail(_)
                     ) {
                         state.mode = prev.mode.clone();
                     }
@@ -1217,7 +1219,7 @@ impl App {
         match result {
             Ok(note) => {
                 if let Some(notes) = self.notes_pane_mut() {
-                    notes.mode = NotesMode::Viewing(note);
+                    notes.mode = NotesMode::Detail(NoteDetail::new(note));
                 }
             }
             Err(err) => self.handle_post_auth_error(err),
@@ -1230,9 +1232,16 @@ impl App {
         result: crate::client::ClientResult<contract::Note>,
     ) -> Option<Dispatch> {
         match result {
-            Ok(_) => {
+            Ok(note) => {
+                // A commit from the per-field detail view re-derives the open detail from the
+                // server's returned note (#1) and stays in the view (clearing the edit buffer); a
+                // commit from the legacy edit dialog returns to the list. Both then refresh the list
+                // so it reflects the change from a server response.
                 if let Some(notes) = self.notes_pane_mut() {
-                    notes.mode = NotesMode::List;
+                    match &mut notes.mode {
+                        NotesMode::Detail(detail) => detail.refresh_from(note),
+                        _ => notes.mode = NotesMode::List,
+                    }
                 }
                 // Chain a refresh so the edited note is shown from a server response (#1).
                 let Some(session) = self.session.clone() else {

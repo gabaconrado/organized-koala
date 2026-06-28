@@ -17,8 +17,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::app::{
-    App, AuthField, AuthMode, AuthState, MainState, NotesMode, NotesState, ProfilesMode,
-    ProfilesState, Screen, Tab, TaskDetail, TaskListState, TaskPane, Timer,
+    App, AuthField, AuthMode, AuthState, MainState, NoteDetail, NotePane, NotesMode, NotesState,
+    ProfilesMode, ProfilesState, Screen, Tab, TaskDetail, TaskListState, TaskPane, Timer,
 };
 use contract::{Note, TaskStatus, TimerSession};
 
@@ -281,8 +281,8 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
     }
 }
 
-/// The note add / edit / delete-confirm dialog, if one is open. The read-only Viewing mode is the
-/// 0016 detail view and is **not** a dialog (Assumption A6).
+/// The note add / edit / delete-confirm dialog, if one is open. The per-field detail view
+/// (`NotesMode::Detail`) renders in the main content area, **not** as a dialog (ADR-0010 §4).
 fn draw_note_dialog(frame: &mut Frame, notes: &NotesState) {
     match &notes.mode {
         NotesMode::Creating(form) => draw_dialog(
@@ -344,7 +344,7 @@ fn draw_note_dialog(frame: &mut Frame, notes: &NotesState) {
                 },
             );
         }
-        NotesMode::List | NotesMode::Viewing(_) => {}
+        NotesMode::List | NotesMode::Detail(_) => {}
     }
 }
 
@@ -866,27 +866,57 @@ fn task_message_line(list: &TaskListState, timer: &Timer) -> String {
     }
 }
 
-/// Render the Notes pane (the active profile's notes, or the open view sub-flow) into `area`. The
-/// title, tab bar, message line, and footer are owned by [`draw_main`].
+/// Render the note detail view: Title/Content editable, Created read-only, with the focused
+/// editable pane purple-bordered. An in-progress edit shows the live buffer value.
+fn draw_note_detail(frame: &mut Frame, area: Rect, detail: &NoteDetail) {
+    let note = &detail.note;
+    let panes: Vec<DetailPane> = NotePane::ALL
+        .iter()
+        .enumerate()
+        .map(|(i, pane)| {
+            let focused = i == detail.focused;
+            let editing = focused && detail.is_editing();
+            let value = match pane {
+                NotePane::Title => note_editing_or(detail, editing, note.title.clone()),
+                NotePane::Content => note_editing_or(detail, editing, note.content.clone()),
+                NotePane::Created => format_created_at(note),
+            };
+            DetailPane {
+                label: note_pane_label(*pane),
+                value,
+                focused,
+                editable: pane.is_editable(),
+            }
+        })
+        .collect();
+    draw_detail_panes(frame, area, "Note", &panes);
+}
+
+/// The live note edit buffer when this pane is being edited, else the snapshot `value`.
+fn note_editing_or(detail: &NoteDetail, editing: bool, value: String) -> String {
+    if editing {
+        detail.edit.clone().unwrap_or(value)
+    } else {
+        value
+    }
+}
+
+/// The display label for a note detail pane.
+fn note_pane_label(pane: NotePane) -> &'static str {
+    match pane {
+        NotePane::Title => "Title",
+        NotePane::Content => "Content",
+        NotePane::Created => "Created",
+    }
+}
+
+/// Render the Notes pane (the active profile's notes, or the open per-field detail view) into
+/// `area`. The title, tab bar, message line, and footer are owned by [`draw_main`].
 fn draw_notes_pane(frame: &mut Frame, area: Rect, notes: &NotesState) {
-    // The viewing sub-flow replaces the list with the single note's title + body; otherwise the
-    // list of notes is shown with its selection highlight.
-    if let NotesMode::Viewing(note) = &notes.mode {
-        let body = vec![
-            Line::from(Span::styled(
-                note.title.clone(),
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::raw(format_created_at(note))),
-            Line::from(""),
-            Line::from(Span::raw(note.content.clone())),
-        ];
-        frame.render_widget(
-            Paragraph::new(body)
-                .block(Block::default().borders(Borders::ALL).title("Note"))
-                .wrap(Wrap { trim: false }),
-            area,
-        );
+    // The detail sub-flow replaces the list with the note's per-field panes; otherwise the list of
+    // notes is shown with its selection highlight.
+    if let NotesMode::Detail(detail) = &notes.mode {
+        draw_note_detail(frame, area, detail);
     } else {
         let items: Vec<ListItem> = notes
             .notes
@@ -910,8 +940,8 @@ fn draw_notes_pane(frame: &mut Frame, area: Rect, notes: &NotesState) {
 }
 
 /// The message line for the notes screen: the screen's transient message. The create/edit/delete
-/// sub-flows render as dialogs now (ADR-0010 §3); the read-only Viewing mode is unchanged
-/// (Assumption A6) and shows no message-band text.
+/// sub-flows render as dialogs now (ADR-0010 §3); the per-field detail view renders in the content
+/// area (ADR-0010 §4) and shows no message-band text.
 fn note_message_line(notes: &NotesState) -> String {
     notes.message.clone().unwrap_or_default()
 }
