@@ -64,6 +64,18 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
     }
 }
 
+/// Whether the **note detail's Content pane** is the active text-entry context: the note detail
+/// view is open with a field edit in progress and the focused pane is the multiline `Content`
+/// pane (ADR-0011 §2). This is the sole discriminant for the context-dependent commit keymap —
+/// `Enter` inserts a newline only here, and `Ctrl+S` commits only a text-entry edit. It relies on
+/// no terminal enhancement flags (ADR-0011 rejection of Shift+Enter).
+fn editing_note_content(screen: &Screen) -> bool {
+    match screen {
+        Screen::Main(main) => main.active_tab == Tab::Notes && main.notes.editing_content_pane(),
+        _ => false,
+    }
+}
+
 /// Whether a detail view (task or note) is open on the active tab, regardless of whether a field
 /// edit is in progress. While a detail view is open `Tab`/`Shift+Tab` cycle its panes (not the
 /// top-level tabs), `Esc` is two-tiered, and the per-tab list action keys (`a`/`d`/`Space`) are
@@ -138,6 +150,16 @@ pub fn map_key(
     }
 
     let text_entry = is_text_entry(screen, editing_duration);
+    // `Ctrl+S` commits the focused field while a text-entry context is active (the multiline
+    // Content pane's commit key, ADR-0011 §2); inert outside text entry so it never collides with
+    // a global hotkey. Checked after `Ctrl+C` (Quit), like the existing modifier branch.
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('s') {
+        return if text_entry {
+            Some(Event::Commit)
+        } else {
+            None
+        };
+    }
     let active_tab = match screen {
         Screen::Main(main) => Some(main.active_tab),
         _ => None,
@@ -169,6 +191,10 @@ pub fn map_key(
                 Some(Event::Quit)
             }
         }
+        // `Enter` inserts a line break only while editing the multiline note-detail Content pane
+        // (ADR-0011 §2); in every other commit context (Title, forms, auth, dialogs, list-open,
+        // profile-switch) it stays `Submit`.
+        KeyCode::Enter if editing_note_content(screen) => Some(Event::Newline),
         KeyCode::Enter => Some(Event::Submit),
         // On an idle post-auth list, Tab/Shift+Tab cycle tabs (ADR-0010 §1); inside an overlay
         // (or on the auth form) they switch the focused field. Arrows always move the selection.

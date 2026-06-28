@@ -56,6 +56,15 @@ pub enum Event {
     Prev,
     /// Confirm the current screen's primary action (submit a form, confirm input).
     Submit,
+    /// Commit the focused field explicitly (the multiline Content pane's `Ctrl+S`, ADR-0011 §2).
+    /// The note detail handler treats this identically to [`Event::Submit`] so the single-line
+    /// Title commits on `Enter` ([`Event::Submit`]) while the multiline Content commits on
+    /// `Ctrl+S` ([`Event::Commit`]). Inert outside a text-entry context.
+    Commit,
+    /// Insert a line break into the focused multiline edit buffer (the Content pane's `Enter`,
+    /// ADR-0011 §2). `Enter` maps here **only** while editing the note detail's Content pane;
+    /// everywhere else `Enter` stays [`Event::Submit`].
+    Newline,
     /// Toggle the auth screen between login and register modes.
     ToggleAuthMode,
     /// Begin the add-task input flow (task list only).

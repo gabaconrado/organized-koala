@@ -297,6 +297,18 @@ impl NotesState {
         matches!(&self.mode, NotesMode::Detail(detail) if detail.is_editing())
     }
 
+    /// Whether the detail view is editing the multiline `Content` pane — the discriminant the
+    /// keymap uses to route `Enter` to a newline and `Ctrl+S` to commit (ADR-0011 §2). `false`
+    /// while editing the single-line `Title`, or when not editing.
+    #[must_use]
+    pub fn editing_content_pane(&self) -> bool {
+        matches!(
+            &self.mode,
+            NotesMode::Detail(detail)
+                if detail.is_editing() && detail.focused_pane() == NotePane::Content
+        )
+    }
+
     /// Whether a sub-flow is open (any non-`List`, non-`Detail` mode). While true, `Esc` cancels
     /// the sub-flow and `Tab` switches the focused field rather than cycling the top-level tabs.
     /// The detail view is **not** counted here — it has its own input-capturing handling
