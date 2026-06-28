@@ -54,7 +54,7 @@ backlog".
 | [0014](./features/0014-tui-layout-shell.md) | TUI layout shell — top-level tabs, centred title, centred auth form, tight footer | feature | merged | medium | — | — (merged) |
 | [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | merged | medium | 0014 (merged ✓) | — (merged) |
 | [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | merged | medium | 0015 (merged ✓) | — (merged) |
-| [0017](./features/0017-timer-completion-desktop-notification.md) | Desktop notification when the focus timer ends (cross-OS, Ubuntu-first) | feature | awaiting-merge | medium | 0008 (merged ✓) | feature/0017-timer-completion-desktop-notification |
+| [0017](./features/0017-timer-completion-desktop-notification.md) | Desktop notification when the focus timer ends (cross-OS, Ubuntu-first) | feature | merged | medium | 0008 (merged ✓) | — (merged) |
 
 > **0010 — Notes — MERGED.** The final missing
 > domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
@@ -179,7 +179,7 @@ backlog".
 > [`ideas/0003`](./ideas/0003-stale-viewing-doccomment-notes.md) on `main`. At the AI-terminal
 > `awaiting-merge` on its branch; awaiting the human's merge.
 >
-> **0017 — Timer-completion desktop notification — `awaiting-merge` on its branch.** When the
+> **0017 — Timer-completion desktop notification — MERGED.** When the
 > TUI observes a focus session transition into `Completed`, it fires **exactly one** desktop
 > notification (title `"Focus timer"`, body `"Your focus session has ended."`; no sound, no
 > actions). **`tui`-crate-only**, **no** `contract`/server/migration change and **no ADR**
@@ -199,8 +199,8 @@ backlog".
 > **visual appearance** on a real Ubuntu desktop is the operator's manual confirmation (criterion 4
 > / R2; not a capability gap). Two out-of-scope follow-ups filed as ideas on `main`
 > ([`ideas/0004`](./ideas/0004-surface-notification-delivery-failures.md),
-> [`ideas/0005`](./ideas/0005-move-notification-show-off-poll-loop.md)). At the AI-terminal
-> `awaiting-merge` on its branch; awaiting the human's merge.
+> [`ideas/0005`](./ideas/0005-move-notification-show-off-poll-loop.md)). Operator-authorised
+> ff-merge; the operator's real-Ubuntu visual confirmation (criterion 4) remains a manual check.
 >
 > **0015 — TUI dialog system — MERGED (Phase 2 of 3).** A **`tui`-crate-only**
 > modal framework with **no** `contract`/server/domain change (the
