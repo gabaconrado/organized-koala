@@ -553,5 +553,16 @@ Postgres booted cleanly). Report-only — never a gate.
   `./ok.sh fmt --check | lint | test` all green — `tests/detail.rs` now 25 tests; whole tui
   `TestBackend` suite green.
 
+- [x] 2026-06-28 [reviewer] **REVIEW-STATUS: approved** (re-review after the focus-skip feedback
+  fix) — pinned to code-tree hash `18d6445a05b7834320186551a6ee72e1972c3a08` (commit `eff9e17`).
+  Prior `59ab3172` verdicts void (code changed). Gate green (`test`=25 detail tests / `lint` /
+  `fmt --check`); boundary still **presentation-only** (`crates/contract/**`, `crates/server/**`,
+  `Cargo.toml`/`Cargo.lock` byte-identical to the approved snapshot — only the 3 TUI files moved).
+  New `cycle` correct (editable-only traversal + wrap, **total** — `if len==0` guard + bounded
+  `.get().is_some_and()` scan, no panic/OOB); read-only panes never a focus stop / initial /
+  fallback focus. Untouched invariants (two-tiered `Esc`, A7 suppression, per-field commit R5, A6
+  `begin_edit` no-op, render path) intact in byte-identical files. `focus_pane` test seams have no
+  production callers and route A6 tests through the real `begin_edit` path. No out-of-scope nits.
+
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
