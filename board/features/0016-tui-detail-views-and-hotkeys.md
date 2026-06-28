@@ -2,7 +2,7 @@
 id: 0016
 title: TUI detail views + final hotkey scheme — per-field task/note panes, full keymap
 type: feature      # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0015]
