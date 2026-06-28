@@ -2,7 +2,7 @@
 id: 0018
 title: Notes detail view — multiline Content text area (fills the pane), Created moved above
 type: feature      # feature | chore
-status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # builds on 0016 (detail views + final keymap, merged); no in-flight item gates this.
@@ -210,6 +210,18 @@ Description multiline change.
 - 2026-06-28 [drive] Claimed `0018`; cut worktree `feature/0018-notes-detail-multiline-content`
   from `main@7a96ee1` (plan + ADR-0011 present in base). Status `ready`→`working`. Branch copy
   is now authoritative; `main`'s copy frozen at the claim snapshot.
+- 2026-06-28 [tui-dev] Slices 1–4 (source): `Event::Commit`/`Event::Newline` + `map_key`
+  context branch (`Ctrl+S`→commit, `Enter`→newline only in the Content edit, via
+  `editing_note_content`/`NotesState::editing_content_pane`) [`7f57046`]; detail handler treats
+  `Submit`/`Commit` as commit, `Newline`→`\n` [`02466e9`]; `NotePane::ALL`→`[Title, Created,
+  Content]`, opt-in `DetailPane.fill` → Content `Constraint::Min(3)` + `Wrap{trim:false}` (task
+  detail unchanged) [`b737b48`]; discoverability copy in `draw_help` + Content label [`5f915be`].
+  `build`/`lint`/`fmt --check` clean; full `./ok.sh test` green (docker available).
+- 2026-06-28 [tester] Slice 5 (TestBackend suite): pane order, Content fill/multiline render,
+  `Enter`→newline insertion, `Ctrl+S` commit (asserts `UpdateNote` carries `\n` content), `Esc`
+  cancel/revert, and the regression fork (Title still commits on `Enter`; `Ctrl+S` inert with no
+  text entry) across `tests/detail.rs` + `tests/keybindings.rs` + `tests/common/` [`b62b503`].
+  No source bugs found. `./ok.sh test|lint|fmt --check` all green. Status `working`→`review`.
 - [x] 2026-06-28 [human] Filed from a direct operator request. Two design forks resolved up
   front (see Feature request): (1) newline binding = `Enter`-newline / `Ctrl+S`-commit in the
   Content pane (Shift+Enter rejected as terminal-dependent); (2) routed through the formal
