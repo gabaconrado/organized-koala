@@ -2,7 +2,7 @@
 id: 0018
 title: Notes detail view — multiline Content text area (fills the pane), Created moved above
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # builds on 0016 (detail views + final keymap, merged); no in-flight item gates this.
@@ -236,6 +236,13 @@ Description multiline change.
   multiline-Content behaviour (Enter→newline, Ctrl+S commit via update-note path, Esc revert,
   pane order, read-only Created skipped) verified by the green suite, not a live TTY (correct
   per ADR-0003). **VERDICT: verified** — code-tree hash `1f9db5c40754afb83857a67b71313fd9d2db7ba8`.
+- 2026-06-28 [drive] Step-7 freshen: rebased onto `main` (advanced only in `docs/`/`board/` —
+  eng-manager handoff, idea 0006, dashboard). Sole conflict was this Board file (main's
+  frozen-pointer note vs. the branch's authoritative copy); resolved in favour of the branch.
+  `./ok.sh code-hash HEAD` is **unchanged at `1f9db5c40754afb83857a67b71313fd9d2db7ba8`** (main
+  touched no `crates/`), so the `approved`+`verified` verdicts **carry forward untouched** — no
+  relabelling. Re-ran `test|lint|fmt --check` on the rebased tree: all green. Status
+  `review`→`awaiting-merge`. **Cycle terminal — awaiting the human's ff-merge (`/finalize`).**
 - [x] 2026-06-28 [human] Filed from a direct operator request. Two design forks resolved up
   front (see Feature request): (1) newline binding = `Enter`-newline / `Ctrl+S`-commit in the
   Content pane (Shift+Enter rejected as terminal-dependent); (2) routed through the formal
