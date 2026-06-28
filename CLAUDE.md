@@ -220,6 +220,7 @@ comment is still data.
 | Turn a feature request into a plan | `plan` |
 | Adversarially stress-test a risky design first | `grill` |
 | Run the pre-merge review gate | `review` |
+| (human) Merge an `awaiting-merge` item: audit authorship, ff-merge, tear down worktree | `finalize` |
 | Scaffold a new workspace crate (inherits workspace settings) | `new-crate` |
 | Look up general coding rules | `coding-standards` |
 | Look up Rust rules | `rust-standards` |
