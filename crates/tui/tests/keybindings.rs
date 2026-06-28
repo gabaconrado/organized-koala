@@ -29,11 +29,12 @@ use tui::terminal::map_key;
 
 use common::{
     auth_screen, auth_screen_pending, notes_screen, notes_screen_confirming_delete,
-    notes_screen_creating, notes_screen_editing, offline_screen, offline_screen_pending,
-    profiles_screen, profiles_screen_confirming_delete, profiles_screen_creating,
-    profiles_screen_pending, profiles_screen_renaming, screen_overlay_capturing, task_list_screen,
-    task_list_screen_adding, task_list_screen_confirming_delete, task_list_screen_editing,
-    task_list_screen_pending,
+    notes_screen_creating, notes_screen_detail_idle, notes_screen_editing,
+    notes_screen_editing_content, notes_screen_editing_title, offline_screen,
+    offline_screen_pending, profiles_screen, profiles_screen_confirming_delete,
+    profiles_screen_creating, profiles_screen_pending, profiles_screen_renaming,
+    screen_overlay_capturing, task_list_screen, task_list_screen_adding,
+    task_list_screen_confirming_delete, task_list_screen_editing, task_list_screen_pending,
 };
 
 fn key(code: KeyCode) -> KeyEvent {
@@ -755,6 +756,112 @@ fn question_mark_opens_help_only_on_an_idle_post_auth_screen() {
         map(&offline_screen(), key(KeyCode::Char('?'))),
         None,
         "? is unbound on the offline screen",
+    );
+}
+
+// ---- 0018: context-dependent commit keymap in the multiline note Content pane (ADR-0011 §2) ----
+
+#[test]
+fn enter_inserts_a_newline_only_while_editing_the_note_content_pane() {
+    // ADR-0011 §2 / Risk R1: `Enter` maps to `Newline` ONLY while the multiline Content pane's edit
+    // buffer is the active text-entry context; in every other commit context it stays `Submit`.
+    // While editing Content, Enter → Newline.
+    assert_eq!(
+        map(&notes_screen_editing_content(), key(KeyCode::Enter)),
+        Some(Event::Newline),
+        "Enter inserts a newline while editing the multiline Content pane",
+    );
+
+    // Editing the single-line Title pane: Enter stays Submit (Title commits on Enter).
+    assert_eq!(
+        map(&notes_screen_editing_title(), key(KeyCode::Enter)),
+        Some(Event::Submit),
+        "Enter commits (Submit) while editing the single-line Title pane, never a newline",
+    );
+
+    // An open but idle note detail (no field edit): Enter stays Submit (it opens/commits, never a
+    // newline) — the Content pane is not the active text-entry context.
+    assert_eq!(
+        map(&notes_screen_detail_idle(), key(KeyCode::Enter)),
+        Some(Event::Submit),
+        "Enter is Submit over an idle note detail, never a newline",
+    );
+
+    // And every other commit context keeps Enter as Submit (the broad-predicate regression, R1).
+    for screen in [
+        auth_screen(),
+        task_list_screen(),
+        notes_screen(),
+        notes_screen_creating(),
+        notes_screen_editing(),
+        task_list_screen_editing(),
+        profiles_screen(),
+    ] {
+        assert_eq!(
+            map(&screen, key(KeyCode::Enter)),
+            Some(Event::Submit),
+            "Enter stays Submit (not Newline) on {screen:?}",
+        );
+    }
+}
+
+#[test]
+fn ctrl_s_commits_while_a_text_entry_context_is_active_and_is_inert_otherwise() {
+    // ADR-0011 §2 / Assumption A2: `Ctrl+S` maps to `Commit` while a text-entry context is active
+    // (the multiline Content pane's commit key), and is INERT (None) everywhere else so it never
+    // collides with a global hotkey.
+    assert_eq!(
+        map(&notes_screen_editing_content(), ctrl('s')),
+        Some(Event::Commit),
+        "Ctrl+S commits the focused field while editing the multiline Content pane",
+    );
+    // Ctrl+S also commits while editing the Title pane (a text-entry context); the note detail
+    // handler treats Submit/Commit identically, so this stays consistent (A2).
+    assert_eq!(
+        map(&notes_screen_editing_title(), ctrl('s')),
+        Some(Event::Commit),
+        "Ctrl+S commits while editing a single-line field too (it is a text-entry context)",
+    );
+    // Ctrl+S in the create/edit note forms (text-entry contexts) commits as well.
+    for screen in [
+        notes_screen_creating(),
+        notes_screen_editing(),
+        task_list_screen_adding(),
+        auth_screen(),
+    ] {
+        assert_eq!(
+            map(&screen, ctrl('s')),
+            Some(Event::Commit),
+            "Ctrl+S commits in the text-entry context {screen:?}",
+        );
+    }
+
+    // Inert (None) on every NON-text-entry context: idle lists, an idle detail, dialogs, offline —
+    // it must never become a global action there (no collision, A2).
+    for screen in [
+        task_list_screen(),
+        notes_screen(),
+        notes_screen_detail_idle(),
+        notes_screen_confirming_delete(),
+        profiles_screen(),
+        offline_screen(),
+    ] {
+        assert_eq!(
+            map(&screen, ctrl('s')),
+            None,
+            "Ctrl+S is inert (no global collision) when no text entry is active on {screen:?}",
+        );
+    }
+}
+
+#[test]
+fn ctrl_c_still_quits_over_ctrl_s_while_editing_content() {
+    // Ctrl+C is checked first and always quits, even in the multiline Content edit where Ctrl+S is
+    // the commit key — the two modifier branches do not interfere.
+    assert_eq!(
+        map(&notes_screen_editing_content(), ctrl('c')),
+        Some(Event::Quit),
+        "Ctrl+C quits even while editing the Content pane (checked before Ctrl+S)",
     );
 }
 

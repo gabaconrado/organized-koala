@@ -957,6 +957,353 @@ fn focused_editable_note_pane_carries_the_purple_focus_border() {
 }
 
 // ============================================================================
+// 0018: multiline Content text area in the note detail (ADR-0011)
+// ============================================================================
+
+/// The 0-based index of the first buffer row whose text contains `needle`, or a large sentinel if
+/// absent (so an ordering assertion fails loudly rather than silently passing on a missing label).
+fn first_row(text: &str, needle: &str) -> usize {
+    text.lines()
+        .position(|line| line.contains(needle))
+        .unwrap_or(usize::MAX)
+}
+
+#[test]
+fn note_detail_renders_panes_in_order_title_created_content() {
+    // Acceptance 1: the note detail view renders panes top-to-bottom as Title → Created → Content
+    // (Created moved above the multiline Content, ADR-0011 / NotePane::ALL).
+    let (client, mut app) = logged_in_notes(vec![note(
+        "n1",
+        "the title",
+        "the body",
+        "2026-06-18T10:00:00Z",
+    )]);
+    open_note_detail(
+        &mut app,
+        &client,
+        note("n1", "the title", "the body", "2026-06-18T10:00:00Z"),
+    );
+
+    // The pane order is fixed in NotePane::ALL — assert the data order first.
+    assert_eq!(
+        NotePane::ALL,
+        [NotePane::Title, NotePane::Created, NotePane::Content],
+        "the note detail pane order is Title → Created → Content",
+    );
+
+    // And the rendered layout reflects it: the Title pane's label row sits above the Created label
+    // row, which sits above the Content label row.
+    let text = render(&app, W, H);
+    let title = first_row(&text, "Title");
+    let created = first_row(&text, "Created");
+    let content = first_row(&text, "Content");
+    assert!(
+        title < created && created < content,
+        "panes render in order Title({title}) → Created({created}) → Content({content}):\n{text}",
+    );
+}
+
+#[test]
+fn content_pane_fills_the_remaining_height_and_renders_multiline_without_truncation() {
+    // Acceptance 2: the Content pane takes the remaining height (taller than the fixed 3-row
+    // Title/Created boxes) and a multi-line value renders across lines; Title/Created are not
+    // truncated.
+    let body = "line one\nline two\nline three\nline four";
+    let (client, mut app) =
+        logged_in_notes(vec![note("n1", "the title", body, "2026-06-18T10:00:00Z")]);
+    open_note_detail(
+        &mut app,
+        &client,
+        note("n1", "the title", body, "2026-06-18T10:00:00Z"),
+    );
+
+    let text = render(&app, W, H);
+
+    // Title and Created are still fully rendered (not pushed out or truncated by the growing
+    // Content pane).
+    assert!(
+        text.contains("the title"),
+        "the Title value still renders, not truncated:\n{text}",
+    );
+    assert!(
+        text.contains("2026-06-18"),
+        "the read-only Created timestamp still renders, not truncated:\n{text}",
+    );
+
+    // Every line of the multi-line Content renders on its own row (the '\n' line breaks are
+    // honoured, not collapsed).
+    for line in ["line one", "line two", "line three", "line four"] {
+        assert!(
+            text.contains(line),
+            "Content line {line:?} renders:\n{text}"
+        );
+    }
+    let l1 = first_row(&text, "line one");
+    let l4 = first_row(&text, "line four");
+    assert!(
+        l1 < l4 && l4 != usize::MAX,
+        "the Content lines render top-to-bottom across distinct rows (line one @ {l1}, four @ {l4})",
+    );
+
+    // The Content box spans more rows than the fixed 3-row Title box: measure the row span between
+    // the Content label and the last Content line, which exceeds the 3-row Title box.
+    let content_label = first_row(&text, "Content");
+    let content_span = l4.saturating_sub(content_label);
+    assert!(
+        content_span >= 4,
+        "the Content pane fills more than a fixed 3-row box (span {content_span} rows):\n{text}",
+    );
+}
+
+#[test]
+fn newline_inserts_a_line_break_into_the_content_buffer_and_renders_it() {
+    // Acceptance 3: while editing the Content pane, `Event::Newline` (Enter, mapped per ADR-0011 §2)
+    // pushes a '\n' into the edit buffer, and the rendered Content shows the break.
+    let (client, mut app) = logged_in_notes(vec![note(
+        "n1",
+        "the title",
+        "start",
+        "2026-06-18T10:00:00Z",
+    )]);
+    open_note_detail(
+        &mut app,
+        &client,
+        note("n1", "the title", "start", "2026-06-18T10:00:00Z"),
+    );
+
+    // Focus the Content pane, begin editing, clear the seeded value, then type "a", newline, "b".
+    let _ = app.handle_event(Event::Next); // Title -> Content (Created skipped)
+    let _ = app.handle_event(Event::BeginEditNote);
+    assert!(
+        notes_pane(&app).editing_content_pane(),
+        "precondition: editing the multiline Content pane",
+    );
+    for _ in 0.."start".len() {
+        let _ = app.handle_event(Event::Backspace);
+    }
+    // Distinctive tokens so the render-row assertion is unambiguous against the rest of the chrome.
+    for c in "ALPHATOKEN".chars() {
+        let _ = app.handle_event(Event::Char(c));
+    }
+    let _ = app.handle_event(Event::Newline);
+    for c in "BRAVOTOKEN".chars() {
+        let _ = app.handle_event(Event::Char(c));
+    }
+
+    // The edit buffer holds the embedded newline.
+    let NotesMode::Detail(detail) = &notes_pane(&app).mode else {
+        panic!("detail open");
+    };
+    assert_eq!(
+        detail.edit.as_deref(),
+        Some("ALPHATOKEN\nBRAVOTOKEN"),
+        "Newline inserted a '\\n' into the Content edit buffer",
+    );
+
+    // And the in-progress buffer renders across two lines (the break is visible).
+    let text = render(&app, W, H);
+    let row_a = first_row(&text, "ALPHATOKEN");
+    let row_b = first_row(&text, "BRAVOTOKEN");
+    assert!(
+        row_a != usize::MAX && row_b != usize::MAX && row_a < row_b,
+        "the buffered line break renders as two rows (ALPHATOKEN @ {row_a}, BRAVOTOKEN @ {row_b}):\n{text}",
+    );
+}
+
+#[test]
+fn ctrl_s_commits_multiline_content_via_the_update_note_path() {
+    // Acceptance 4: while editing Content, `Event::Commit` (Ctrl+S) commits the field via the
+    // existing UpdateNote path, and the issued UpdateNoteRequest carries the multi-line content
+    // (the untouched Title preserved from the snapshot, R5).
+    let (client, mut app) = logged_in_notes(vec![note(
+        "n1",
+        "keep title",
+        "old body",
+        "2026-06-18T10:00:00Z",
+    )]);
+    open_note_detail(
+        &mut app,
+        &client,
+        note("n1", "keep title", "old body", "2026-06-18T10:00:00Z"),
+    );
+
+    // Edit the Content pane into a multi-line value.
+    let _ = app.handle_event(Event::Next); // focus Content
+    let _ = app.handle_event(Event::BeginEditNote);
+    for _ in 0.."old body".len() {
+        let _ = app.handle_event(Event::Backspace);
+    }
+    let _ = app.handle_event(Event::Char('x'));
+    let _ = app.handle_event(Event::Newline);
+    let _ = app.handle_event(Event::Char('y'));
+
+    // `Ctrl+S` (Event::Commit) commits via UpdateNote; the success re-derives the detail and chains
+    // a list refresh.
+    let committed = note("n1", "keep title", "x\ny", "2026-06-18T10:00:00Z");
+    client.push_update_note(Ok(committed.clone()));
+    client.push_notes(Ok(vec![committed]));
+    submit(&mut app, &client, Event::Commit);
+
+    // The issued UpdateNoteRequest carried the multi-line content and the preserved title.
+    let calls = client.calls();
+    let update = calls
+        .iter()
+        .find_map(|c| match c {
+            Call::UpdateNote {
+                note_id,
+                title,
+                content,
+                ..
+            } => Some((note_id.clone(), title.clone(), content.clone())),
+            _ => None,
+        })
+        .expect("an UpdateNote call was made on Ctrl+S commit");
+    assert_eq!(
+        update,
+        ("n1".to_owned(), "keep title".to_owned(), "x\ny".to_owned()),
+        "Ctrl+S commits the multi-line Content via UpdateNote, preserving the Title (R5): {calls:?}",
+    );
+    assert!(
+        matches!(calls.last(), Some(Call::ListNotes { .. })),
+        "the Content commit chains a list refresh (statelessness, #1): {calls:?}",
+    );
+
+    // The detail stays open, re-derived from the returned note, edit buffer cleared.
+    let NotesMode::Detail(detail) = &notes_pane(&app).mode else {
+        panic!("the note detail stays open after a Ctrl+S commit");
+    };
+    assert!(
+        !detail.is_editing(),
+        "the edit buffer cleared after the Ctrl+S commit",
+    );
+    assert_eq!(
+        detail.note.content, "x\ny",
+        "the detail re-derived the multi-line content from the server note",
+    );
+}
+
+#[test]
+fn esc_cancels_a_content_edit_reverting_the_buffer_and_stays_in_the_detail() {
+    // Acceptance 5: `Esc` while editing Content reverts the buffer (no commit) and stays in the
+    // detail view — the first tier of the two-tiered Esc, on the multiline pane.
+    let (client, mut app) = logged_in_notes(vec![note(
+        "n1",
+        "the title",
+        "original body",
+        "2026-06-18T10:00:00Z",
+    )]);
+    open_note_detail(
+        &mut app,
+        &client,
+        note("n1", "the title", "original body", "2026-06-18T10:00:00Z"),
+    );
+
+    let _ = app.handle_event(Event::Next); // focus Content
+    let _ = app.handle_event(Event::BeginEditNote);
+    let _ = app.handle_event(Event::Newline);
+    let _ = app.handle_event(Event::Char('Z'));
+    let NotesMode::Detail(detail) = &notes_pane(&app).mode else {
+        panic!("detail open");
+    };
+    assert_eq!(
+        detail.edit.as_deref(),
+        Some("original body\nZ"),
+        "the Content edit buffer holds the in-progress multi-line value",
+    );
+
+    // Esc cancels the edit: the buffer drops, the snapshot is untouched, the detail stays open, and
+    // no UpdateNote crossed the wire (no commit).
+    let before = client.calls().len();
+    let _ = app.handle_event(Event::Cancel);
+    assert!(
+        notes_pane(&app).detail_open(),
+        "still in the note detail view after cancelling the Content edit",
+    );
+    let NotesMode::Detail(detail) = &notes_pane(&app).mode else {
+        panic!("detail still open");
+    };
+    assert!(
+        !detail.is_editing(),
+        "the in-progress Content edit was cancelled (buffer dropped)",
+    );
+    assert_eq!(
+        detail.note.content, "original body",
+        "the Content reverted to the snapshot value (no commit)",
+    );
+    assert!(
+        !app.should_quit(),
+        "cancelling a Content edit does not quit"
+    );
+    let calls = client.calls();
+    assert_eq!(
+        calls.len(),
+        before,
+        "no request crossed the wire on an Esc-cancelled Content edit: {calls:?}",
+    );
+    assert!(
+        !calls.iter().any(|c| matches!(c, Call::UpdateNote { .. })),
+        "Esc cancel never issues an UpdateNote: {calls:?}",
+    );
+}
+
+#[test]
+fn title_pane_still_commits_on_enter_in_the_note_detail() {
+    // Acceptance 6 (regression fork): outside the Content edit, Enter is NOT a newline — the
+    // single-line Title pane still commits on Enter (Event::Submit) via UpdateNote.
+    let (client, mut app) = logged_in_notes(vec![note(
+        "n1",
+        "old title",
+        "the body",
+        "2026-06-18T10:00:00Z",
+    )]);
+    open_note_detail(
+        &mut app,
+        &client,
+        note("n1", "old title", "the body", "2026-06-18T10:00:00Z"),
+    );
+
+    // Edit the Title pane (focused on open) and commit with Enter (Submit).
+    let _ = app.handle_event(Event::BeginEditNote);
+    assert!(
+        !notes_pane(&app).editing_content_pane(),
+        "editing the single-line Title pane, not Content",
+    );
+    for _ in 0.."old title".len() {
+        let _ = app.handle_event(Event::Backspace);
+    }
+    for c in "new title".chars() {
+        let _ = app.handle_event(Event::Char(c));
+    }
+
+    let committed = note("n1", "new title", "the body", "2026-06-18T10:00:00Z");
+    client.push_update_note(Ok(committed.clone()));
+    client.push_notes(Ok(vec![committed]));
+    submit(&mut app, &client, Event::Submit); // Enter commits the Title
+
+    let calls = client.calls();
+    let update = calls
+        .iter()
+        .find_map(|c| match c {
+            Call::UpdateNote { title, content, .. } => Some((title.clone(), content.clone())),
+            _ => None,
+        })
+        .expect("an UpdateNote call was made on the Enter commit of the Title");
+    assert_eq!(
+        update,
+        ("new title".to_owned(), "the body".to_owned()),
+        "Enter commits the Title field (Submit), preserving Content (R5): {calls:?}",
+    );
+
+    let NotesMode::Detail(detail) = &notes_pane(&app).mode else {
+        panic!("the note detail stays open after the Enter commit");
+    };
+    assert_eq!(
+        detail.note.title, "new title",
+        "the detail re-derived the committed title from the server note",
+    );
+}
+
+// ============================================================================
 // Help body documents the Detail bindings (final hotkey scheme)
 // ============================================================================
 

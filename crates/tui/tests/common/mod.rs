@@ -36,8 +36,8 @@ use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use tui::app::{
     AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, Dispatch,
-    EditTaskState, Event, MainState, NoteForm, NotesMode, NotesState, Outcome, ProfileForm,
-    ProfilesMode, ProfilesState, RequestId, Screen, Tab, TaskListState,
+    EditTaskState, Event, MainState, NoteDetail, NoteForm, NotePane, NotesMode, NotesState,
+    Outcome, ProfileForm, ProfilesMode, ProfilesState, RequestId, Screen, Tab, TaskListState,
 };
 use tui::client::{Client, ClientError, ClientResult};
 
@@ -885,8 +885,11 @@ pub fn screen_overlay_capturing(screen: &Screen) -> bool {
                 main.tasks.adding.is_some()
                     || main.tasks.editing.is_some()
                     || main.tasks.confirming_delete.is_some()
+                    || main.tasks.detail.is_some()
             }
-            Tab::Notes => main.notes.in_sub_flow(),
+            // An open note detail view counts as input-capturing too (it suppresses globals and
+            // makes `Esc` two-tiered), mirroring `App::overlay_capturing_input`.
+            Tab::Notes => main.notes.in_sub_flow() || main.notes.detail_open(),
             Tab::Profiles => main.profiles.in_sub_flow(),
         },
         Screen::Auth(_) | Screen::Offline { .. } => false,
@@ -1125,6 +1128,39 @@ pub fn notes_screen_confirming_delete() -> Screen {
         note_id: "n1".to_owned(),
         title: "a note".to_owned(),
     };
+    main_screen_full(Tab::Notes, empty_tasks_pane(), notes, two_profiles_pane())
+}
+
+/// The tabbed view on the Notes tab with the per-field detail view open and no field edit in
+/// progress (the idle detail; `Title` focused). Used by the keybinding suite to pin that `Enter`
+/// stays `Submit` (commit/open) when no Content edit is active.
+pub fn notes_screen_detail_idle() -> Screen {
+    let detail = NoteDetail::new(note("n1", "a note", "body", "2026-06-18T10:00:00Z"));
+    notes_detail_screen(detail)
+}
+
+/// The tabbed view on the Notes tab editing the single-line `Title` pane of the detail view.
+/// `Enter` must stay `Submit` here (Title commits on Enter, ADR-0011 §2).
+pub fn notes_screen_editing_title() -> Screen {
+    let mut detail = NoteDetail::new(note("n1", "a note", "body", "2026-06-18T10:00:00Z"));
+    detail.focus_pane(NotePane::Title);
+    detail.begin_edit();
+    notes_detail_screen(detail)
+}
+
+/// The tabbed view on the Notes tab editing the multiline `Content` pane of the detail view — the
+/// sole context where `Enter` maps to `Newline` and `Ctrl+S` commits (ADR-0011 §2).
+pub fn notes_screen_editing_content() -> Screen {
+    let mut detail = NoteDetail::new(note("n1", "a note", "body", "2026-06-18T10:00:00Z"));
+    detail.focus_pane(NotePane::Content);
+    detail.begin_edit();
+    notes_detail_screen(detail)
+}
+
+/// Wrap a [`NoteDetail`] into the Notes-tab tabbed view in `NotesMode::Detail`.
+fn notes_detail_screen(detail: NoteDetail) -> Screen {
+    let mut notes = one_note_pane();
+    notes.mode = NotesMode::Detail(detail);
     main_screen_full(Tab::Notes, empty_tasks_pane(), notes, two_profiles_pane())
 }
 
