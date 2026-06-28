@@ -56,6 +56,15 @@ Everything is driven through `./ok.sh`, so the software below is what those verb
   editor's lint-on-save hook. Optional for a manual workflow, but install them to match the
   linting the repo expects.
 
+### Runtime: desktop notifications (Linux)
+
+The terminal app fires a desktop notification when a focus timer ends. **Nothing is needed to
+build or run** — no build-time apt package is required (the notification crate uses a pure-Rust
+D-Bus backend). For the notification to actually **appear** on Linux you need a **notification
+daemon** running on your session D-Bus; one is present on Ubuntu's default GNOME desktop out of
+the box. In a bare TTY, headless, or SSH-without-a-graphical-session context there may be no
+daemon — delivery then degrades **silently and non-fatally** (the app never crashes or blocks).
+
 ### One-time repository setup
 
 - Enable the committed git hooks (the pre-commit secret scan):

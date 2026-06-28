@@ -5,6 +5,66 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-28 (0017 timer-completion desktop notification — TUI-only; `feature`)
+
+A clean, well-scoped, **`tui`-crate-only** feature with **no** `contract`/server/migration change
+and **no** ADR (Decision 2 — the only new state is a transient in-memory marker on `Timer`, the
+same #1-blessed category as `pending`/`loaded`/`applied_at`; #2/#3 untouched; inside the ADR-0006
+render loop). When the TUI observes a focus session transition into `Completed`, it fires
+**exactly one** desktop notification (title `"Focus timer"`, body `"Your focus session has
+ended."`; no sound, no actions).
+
+What shipped:
+
+- **An injected `Notifier` seam** (`crates/tui/src/client/notify.rs`) modelled on the sanctioned
+  `Client` external-service boundary (ADR-0003): production `DesktopNotifier` wraps `notify-rust`,
+  `.show()`s a sound-less notification, and maps **every** delivery failure to a no-op — silent,
+  non-fatal, writing nothing to the alt-screen terminal (A2).
+- **A pure fire-once core on `Timer`** — transient `notified_for_session` (guard) +
+  `notify_pending` (one-shot signal); `apply_timer_session` detects the Running→Completed edge
+  before overwriting the session, arms+signals on that edge, re-arms on a new `Running`/`Idle`,
+  and for the initial post-login fold only **arms** an already-`Completed` session without
+  signalling (A4 — no stale replay on launch). `App::take_pending_notification` consumes once.
+- **The poll-loop fire site** — `terminal::run<N: Notifier>` fires after draining each worker
+  response; **no new request, no new poll** (ADR-0006 untouched). `main.rs` wires the production
+  `DesktopNotifier`.
+- **Tests** — `crates/tui/tests/notifications.rs` (13) drive the fire-once core via the public
+  two-step `App` API + a thin `SpyNotifier` edge pair; only the sanctioned `Notifier`/`Client`
+  external-service traits are mocked.
+
+**notify-rust no-apt-package fact (A1 confirmed).** The crate is declared with **default features
+only** and the C `dbus`/`d` feature left **off** (rationale commented on the dep line); the default
+**`zbus` pure-Rust D-Bus backend** compiled on Ubuntu with **no apt package** — no `dbus` C-binding
+crate in `Cargo.lock`, no `libdbus-1-dev`/`pkg-config`/system `.so`. Recorded as observed truth in
+`crates/tui/README.md` and the root `README.md` dev-env note (the latter `eng-manager`'s home-#1
+edit this cycle: a notification *daemon* is needed on Linux for notifications to **appear**, none
+is needed to build/run).
+
+Reviewer **approved** (no fix-now findings) + verifier **verified** (DoD clause 4 — 13/13 tests +
+live `./ok.sh up` exercising the server-owned running→completed timer path per ADR-0002), both
+pinned to code-hash `d3fa1fc5b3ed5ac0770085809aac150e25012849`.
+
+coverage: **72.18%** line (`./ok.sh coverage` in the worktree; docker + throwaway test Postgres
+booted cleanly). Report-only — never a gate.
+
+**Operator's remaining manual confirmation (acceptance criterion 4 / R2).** No daemon exists in
+the verifier/CI environment, so the **visual appearance** of the notification on a real Ubuntu
+desktop is the operator's manual step — by design, not the verifier's, and not a capability gap
+(the fire-once *logic* is proven daemon-free by the spy suite).
+
+**Two out-of-scope ideas filed on `main`** (both pre-documented as non-blocking plan
+assumptions): [`ideas/0004`](../board/ideas/0004-surface-notification-delivery-failures.md)
+(A2 — surface delivery failures without a logging dep / terminal corruption) and
+[`ideas/0005`](../board/ideas/0005-move-notification-show-off-poll-loop.md) (A6 — move `.show()`
+off the poll loop if it is ever found to block materially).
+
+**No CLAUDE.md gotcha or standards/agent change this cycle.** Nothing new and surprising failed:
+the notify-rust default-backend / no-apt fact is recorded where it is load-bearing (the READMEs +
+the dep-line comment), and the injected-effect-trait seam and alt-screen-no-stderr constraint are
+not new learnings — they are the **existing** `Client`-trait pattern (ADR-0003) and the existing
+rust-standards pure-core/effectful-shell rule, which this cycle simply followed correctly. No new
+crate, so no new dev agent.
+
 ## Handoff — 2026-06-28 (0016 focus-cycling re-entry — read-only panes excluded from Tab; `feature`)
 
 Human feedback re-opened 0016 from `awaiting-merge`: in both detail views the **read-only panes
@@ -1933,8 +1993,8 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   `b9884943f36f3ac6c9d56fd2be46e31057a9060a`; the help-modal layout re-entry re-attested at
   `00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc`; coverage 73.81% line. Fast-forward merged into `main`;
   0016 unblocked.
-- **The TUI detail views + final hotkey scheme are at `awaiting-merge` on
-  `feature/0016-tui-detail-views-and-hotkeys`** (0016, Phase 3 / **final** of the TUI overhaul, a
+- **The TUI detail views + final hotkey scheme are MERGED on `main`**
+  (0016, Phase 3 / **final** of the TUI overhaul, a
   `feature`, live-verified): per-field **task & note detail views** (each field its own bordered pane,
   opened with `Enter`, panes cycled with `Tab`/`Shift+Tab` **between editable panes only** —
   read-only panes stay rendered but are skipped, with initial/fallback focus on the first editable
@@ -1955,6 +2015,30 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   `18d6445a05b7834320186551a6ee72e1972c3a08`; coverage 72.05% line. The re-entry added one durable
   rule to the `coding-standards` skill (focus traversal skips non-interactive fields, learned 0016);
   no gotcha/agent change. With 0016, **the three-part TUI overhaul (0014→0015→0016) is complete.**
-  Awaiting the human's merge.
+  Operator-authorised fast-forward merge into `main`.
+- **Timer-completion desktop notification is at `awaiting-merge` on
+  `feature/0017-timer-completion-desktop-notification`** (0017, a `feature`, live-verified): when
+  the TUI observes a focus session transition into `Completed` it fires **exactly one** desktop
+  notification (title `"Focus timer"`, body `"Your focus session has ended."`; no sound, no
+  actions). **`tui`-crate-only**, **no** `contract`/server/migration change and **no** ADR
+  (Decision 2 — the only new state is a transient in-memory marker on `Timer`, #1-blessed; #2/#3
+  untouched; inside the [ADR-0006][adr-0006] render loop). An injected `Notifier` seam
+  (`crates/tui/src/client/notify.rs`, modelled on the sanctioned `Client` boundary, ADR-0003):
+  production `DesktopNotifier` wraps `notify-rust` and maps every delivery failure to a silent
+  no-op (A2 — writes nothing to the alt-screen). A pure fire-once core on `Timer`
+  (`notified_for_session` guard + `notify_pending` one-shot signal): `apply_timer_session` detects
+  the Running→Completed edge before overwriting the session, arms+signals once, re-arms on a new
+  `Running`/`Idle`, and only arms (never signals) the initial post-login `Completed` (A4).
+  `terminal::run<N: Notifier>` fires after draining each worker response — no new request, no new
+  poll. **A1 confirmed:** the `notify-rust` default `zbus` pure-Rust backend compiled on Ubuntu
+  with **no apt package** (no `dbus` C crate in `Cargo.lock`); the C `dbus` feature is left off
+  with a commented rationale. Tests `crates/tui/tests/notifications.rs` (13). Reviewer **approved**
+  (no fix-now) + verifier **verified** (13/13 + live `./ok.sh up` over the server-owned
+  running→completed timer path), both pinned to code-hash
+  `d3fa1fc5b3ed5ac0770085809aac150e25012849`; coverage 72.18% line. The **visual appearance** of
+  the notification on a real Ubuntu desktop is the operator's manual confirmation (criterion 4 /
+  R2 — no daemon in the verifier env; not a capability gap). Two out-of-scope follow-ups filed as
+  ideas on `main` (`ideas/0004` surface delivery failures, `ideas/0005` move `.show()` off the
+  poll loop). No CLAUDE.md gotcha or standards/agent change this cycle. Awaiting the human's merge.
 
 [adr-0010-0014-snap]: ./adr/0010-tui-navigation-and-interaction-model.md

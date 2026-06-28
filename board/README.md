@@ -54,6 +54,7 @@ backlog".
 | [0014](./features/0014-tui-layout-shell.md) | TUI layout shell — top-level tabs, centred title, centred auth form, tight footer | feature | merged | medium | — | — (merged) |
 | [0015](./features/0015-tui-dialog-system.md) | TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus | feature | merged | medium | 0014 (merged ✓) | — (merged) |
 | [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | merged | medium | 0015 (merged ✓) | — (merged) |
+| [0017](./features/0017-timer-completion-desktop-notification.md) | Desktop notification when the focus timer ends (cross-OS, Ubuntu-first) | feature | awaiting-merge | medium | 0008 (merged ✓) | feature/0017-timer-completion-desktop-notification |
 
 > **0010 — Notes — MERGED.** The final missing
 > domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
@@ -176,6 +177,29 @@ backlog".
 > no new gotcha/agent change; no new crate. One out-of-scope cosmetic nit
 > (stale `Viewing` doc comment in `notes.rs`) filed as
 > [`ideas/0003`](./ideas/0003-stale-viewing-doccomment-notes.md) on `main`. At the AI-terminal
+> `awaiting-merge` on its branch; awaiting the human's merge.
+>
+> **0017 — Timer-completion desktop notification — `awaiting-merge` on its branch.** When the
+> TUI observes a focus session transition into `Completed`, it fires **exactly one** desktop
+> notification (title `"Focus timer"`, body `"Your focus session has ended."`; no sound, no
+> actions). **`tui`-crate-only**, **no** `contract`/server/migration change and **no ADR**
+> (Decision 2 — the only new state is a transient in-memory marker on `Timer`, #1-blessed; #2/#3
+> untouched; inside [ADR-0006](../docs/adr/0006-tui-concurrency-and-responsiveness.md)). An
+> injected `Notifier` seam (`crates/tui/src/client/notify.rs`, modelled on the sanctioned
+> `Client` boundary, [ADR-0003](../docs/adr/0003-verification-layering.md)): production
+> `DesktopNotifier` wraps `notify-rust` (default `zbus` pure-Rust backend, C `dbus` feature off)
+> and maps every delivery failure to a silent no-op (A2). A pure fire-once core on `Timer`
+> (`notified_for_session` guard + `notify_pending` one-shot signal) detects the Running→Completed
+> edge, arms+signals once, re-arms on a new `Running`/`Idle`, and only arms the initial post-login
+> `Completed` (A4 — no stale replay); `terminal::run<N: Notifier>` fires after draining each
+> worker response (no new request/poll). **A1 confirmed:** the default backend compiled on Ubuntu
+> with **no apt package**. Tests: `crates/tui/tests/notifications.rs` (13). Reviewer **approved**
+> (no fix-now) + verifier **verified** (13/13 + live `./ok.sh up`), both pinned to code-hash
+> `d3fa1fc5b3ed5ac0770085809aac150e25012849`; coverage 72.18% line (report-only). The notification's
+> **visual appearance** on a real Ubuntu desktop is the operator's manual confirmation (criterion 4
+> / R2; not a capability gap). Two out-of-scope follow-ups filed as ideas on `main`
+> ([`ideas/0004`](./ideas/0004-surface-notification-delivery-failures.md),
+> [`ideas/0005`](./ideas/0005-move-notification-show-off-poll-loop.md)). At the AI-terminal
 > `awaiting-merge` on its branch; awaiting the human's merge.
 >
 > **0015 — TUI dialog system — MERGED (Phase 2 of 3).** A **`tui`-crate-only**
