@@ -564,5 +564,16 @@ Postgres booted cleanly). Report-only — never a gate.
   `begin_edit` no-op, render path) intact in byte-identical files. `focus_pane` test seams have no
   production callers and route A6 tests through the real `begin_edit` path. No out-of-scope nits.
 
+- [x] 2026-06-28 [verifier] **VERIFY: verified** (re-verify after the focus-skip fix) — pinned to
+  code-tree hash `18d6445a05b7834320186551a6ee72e1972c3a08` (head `2363574`). (1) `./ok.sh test`
+  green workspace-wide; `tests/detail.rs` 25 passed incl. `read_only_*_never_a_focus_stop`,
+  the updated cycle walks, `*_opens_focused_on_the_first_editable_pane`, the seam-driven A6
+  inert-`e` tests. (2) Booted `./ok.sh up` (migrate exit 0, healthz 200, no migration-history
+  conflict) and re-exercised the existing `UpdateTask`/`UpdateNote`/`GetNote` + list routes live:
+  per-field PATCH, status=done closing, validation 400 / 401 / 404 / cross-profile #4, error
+  contract `{code,message}`, OTel spans (`get_note`/`patch_task`/`update_note`/…). (3) `git diff
+  --stat` from the prior verified snapshot touches **only** the 3 TUI files — no `contract`/server/
+  `Cargo.*` delta; wire byte-identical. Stack torn down, volume not reset, no capability gap.
+
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
