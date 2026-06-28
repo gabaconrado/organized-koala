@@ -401,23 +401,25 @@ fn draw_profile_dialog(frame: &mut Frame, profiles: &ProfilesState) {
 }
 
 /// The `?` help overlay: a centred dialog listing the full post-auth hotkey reference (the keys
-/// the trimmed footer no longer enumerates), derived from the action keys 0014 documents plus the
-/// globals (Assumption A7). Closed with `Esc` / `?`.
+/// the trimmed footer no longer enumerates), in the final hotkey scheme (ADR-0010 §4). Closed with
+/// `Esc` / `?`.
 fn draw_help(frame: &mut Frame) {
     let body = vec![
         Line::from("Global"),
         Line::from("  Tab / Shift+Tab   switch tab (Tasks / Notes / Profiles)"),
         Line::from("  Up / Down         move the selection"),
-        Line::from("  p                 start / stop the focus timer"),
-        Line::from("  d                 set the timer duration"),
+        Line::from("  t                 start / stop the focus timer"),
+        Line::from("  T                 set the timer duration"),
         Line::from("  r                 refresh the current view"),
         Line::from("  Esc               cancel an in-flight / loading request"),
         Line::from("  q                 quit"),
         Line::from("  ? / Esc           close help"),
         Line::from(""),
-        Line::from("Tasks    a add · e edit · c toggle done · x delete"),
-        Line::from("Notes    a add · e edit · x delete · Enter open"),
-        Line::from("Profiles Enter switch · a add · e rename · x delete"),
+        Line::from("Tasks    a add · e edit · Space done · d delete · Enter detail"),
+        Line::from("Notes    a add · e edit · d delete · Enter detail"),
+        Line::from("Profiles Enter switch · a add · e rename · d delete"),
+        Line::from(""),
+        Line::from("Detail   Tab panes · e edit · Enter commit · Esc back"),
     ];
     draw_dialog(
         frame,

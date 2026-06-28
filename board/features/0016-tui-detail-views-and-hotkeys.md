@@ -367,6 +367,20 @@ reqwest-client confirmation only.
   `apply_notes` preserves an open `Detail` across the list refresh. No new `Event` variants (reused
   `BeginEditNote`/`Submit`/`Next`/`Prev`/`Cancel`). `./ok.sh fmt` clean; `cargo clippy -p tui
   --lib --bins` clean; `cargo build -p tui` green.
+- [x] 2026-06-28 [tui-dev] Slice 4 — Rendering (`crates/tui/src/ui/mod.rs`). Both detail views draw
+  as per-field bordered panes in the main content area (**not** a floating dialog): a shared
+  `draw_detail_panes` stacks 3-row bordered boxes, the focused **editable** pane carrying the purple
+  focus border (reusing the dialog/`draw_field` `Color::Magenta` cue); a focused read-only pane is
+  bordered but not purple (signalling `e` is inert, A6). `draw_task_pane`/`draw_notes_pane` render
+  the detail when open. Updated `draw_help` body to the final scheme (`t`/`T` timer, `Space` done,
+  `d` delete, `Enter` detail, plus a Detail row) and confirmed the longest help line is **62 display
+  columns = the dialog inner width** (`DIALOG_WIDTH` 64 − 2 border), so no line wraps/clips at the
+  80×24 viewport (ADR-0006 §8.3 caption/band coupling honoured — `FOOTER_CAPTION` and
+  `BOTTOM_BAND_ROWS` unchanged, no action key added to the caption). `./ok.sh fmt` clean; `cargo
+  clippy -p tui --lib --bins` clean; `cargo build -p tui` green. `./ok.sh test` run: the **library**
+  builds, but `crates/tui/tests/**` fails to compile against the new `TaskListState.detail` field and
+  the `NotesMode::Viewing`→`Detail` rename — those test files are `tester`-owned (slice 5) and are
+  intentionally left untouched per the file-ownership boundary; the suite goes green in slice 5.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
