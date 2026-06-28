@@ -2,12 +2,12 @@
 id: 0018
 title: Notes detail view — multiline Content text area (fills the pane), Created moved above
 type: feature      # feature | chore
-status: ready          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # builds on 0016 (detail views + final keymap, merged); no in-flight item gates this.
-branch: null
-worktree: null
+branch: feature/0018-notes-detail-multiline-content
+worktree: .claude/worktrees/0018-notes-detail-multiline-content
 created: 2026-06-28
 updated: 2026-06-28
 ---
@@ -207,12 +207,9 @@ Description multiline change.
 
 ## Log / comments
 
-> **Frozen pointer (main copy).** Claimed 2026-06-28 onto
-> `feature/0018-notes-detail-multiline-content` (worktree
-> `.claude/worktrees/0018-notes-detail-multiline-content`), cut from `main@7a96ee1`. The
-> **branch copy is authoritative** while in flight; this `main` copy stays frozen at the claim
-> snapshot until the human's merge brings the finished item back atomically with the code.
-
+- 2026-06-28 [drive] Claimed `0018`; cut worktree `feature/0018-notes-detail-multiline-content`
+  from `main@7a96ee1` (plan + ADR-0011 present in base). Status `ready`→`working`. Branch copy
+  is now authoritative; `main`'s copy frozen at the claim snapshot.
 - [x] 2026-06-28 [human] Filed from a direct operator request. Two design forks resolved up
   front (see Feature request): (1) newline binding = `Enter`-newline / `Ctrl+S`-commit in the
   Content pane (Shift+Enter rejected as terminal-dependent); (2) routed through the formal
