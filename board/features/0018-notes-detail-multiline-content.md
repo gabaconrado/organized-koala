@@ -244,3 +244,53 @@ Description multiline change.
   binding plus context-dependent `Enter` (newline in the multiline Content edit, commit
   elsewhere) **is** a keymap change to ADR-0010 §4, not in-scope clarification — recorded in
   **ADR-0011** (amends §4 for the multiline pane); plan written, item `planned`→`ready`.
+
+## Summary
+
+A **`tui`-crate-only** change that turns the Notes detail view's **Content** field into a
+multiline text area filling the rest of the pane, with **no** `contract`/server/migration change
+(`Note.content` is already a `String`; reviewer + verifier confirmed `crates/contract` +
+`crates/server` byte-identical to `main`). Implements [ADR-0011][adr-0011], which amends
+[ADR-0010][adr-0010] §4 for the multiline pane only.
+
+What shipped (`crates/tui/` only):
+
+- **Pane reorder** `NotePane::ALL` → `[Title, Created, Content]` so the read-only `Created`
+  field sits above the now-growing Content. `cycle`/`first_editable` still skip read-only
+  `Created` and land only on Title/Content (unchanged logic over the editable set).
+- **Content fills the pane.** An opt-in `DetailPane.fill` flag drives a per-pane layout
+  constraint: Title and Created stay `Constraint::Length(3)`, Content takes `Constraint::Min(3)`
+  (fills the remaining height) and renders with `Wrap { trim: false }` so multi-line content
+  displays without truncating the fixed fields. The task detail path defaults to `Length(3)` and
+  is unchanged.
+- **Context-dependent commit keymap.** Two new `Event` variants — `Event::Commit` ("commit the
+  focused field") and `Event::Newline` ("insert a line break"). `map_key` maps `Ctrl+S` →
+  `Commit` while a text-entry context is active, and `Enter` → `Newline` **only** when the
+  active text-entry context is the multiline Content edit (predicate
+  `editing_note_content` / `NotesState::editing_content_pane`), else `Enter` stays `Submit`. The
+  note detail handler treats `Submit` and `Commit` identically (both call `submit_field`) and
+  routes `Newline` → `'\n'` into the edit buffer. `Ctrl+S` is inert outside a text-entry context;
+  `Ctrl+C` still wins as the unconditional Quit; no terminal enhancement flags are pushed (the
+  Shift+Enter rejection in ADR-0011). Title still commits on `Enter`.
+- **Discoverability.** The `?` help overlay `Detail` line and the Content pane caption surface
+  the `Ctrl+S` commit affordance.
+
+DoD evidence (`feature` track, all seven): `./ok.sh test | lint | fmt --check` all green (test
+booted the throwaway Postgres). Clause 4 is satisfied per [ADR-0003][adr-0003] — interactive TUI
+behaviour is owned by `tester`'s `TestBackend` suite, and there is no server-API/reqwest delta to
+boot for (the `crates/contract`/`crates/server` diff against `main` is empty); the verifier
+confirmed the suite exists and is green (`tests/detail.rs` 31 passed, `tests/keybindings.rs` 38
+passed — covering pane order, Content fill, newline insertion, `Ctrl+S` commit via the
+`UpdateNote` path, `Esc` revert, and the regression fork that Title still commits on `Enter`).
+Reviewer **REVIEW-STATUS: approved** + verifier **VERDICT: verified**, both pinned to code-tree
+hash `1f9db5c40754afb83857a67b71313fd9d2db7ba8` (head commit `d2b46e1`).
+
+coverage: 72.47%
+
+Out-of-scope follow-up captured as an idea on `main` (A5 / reviewer): a Content scroll/cursor
+affordance for content that exceeds the visible pane height (the current change fills + wraps but
+has no scroll or cursor).
+
+[adr-0003]: ../../docs/adr/0003-verification-layering.md
+[adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
+[adr-0011]: ../../docs/adr/0011-multiline-content-editing-keymap.md
