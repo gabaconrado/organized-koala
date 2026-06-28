@@ -24,6 +24,7 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
 use crate::app::{App, ClientResponse, Dispatch, Event, Screen, Tab};
+use crate::client::Notifier;
 use crate::ui;
 
 /// The poll-loop tick: how long each iteration waits for input before redrawing. Bounds input
@@ -261,10 +262,11 @@ impl Drop for TerminalGuard {
 /// # Errors
 ///
 /// Returns an error if terminal setup, drawing, or reading input fails.
-pub fn run(
+pub fn run<N: Notifier>(
     mut app: App,
     requests: Sender<Dispatch>,
     responses: Receiver<ClientResponse>,
+    notifier: N,
 ) -> anyhow::Result<()> {
     let mut guard = TerminalGuard::enter()?;
     let mut tick: u64 = 0;
@@ -318,6 +320,12 @@ pub fn run(
                     anyhow::bail!("request worker stopped unexpectedly");
                 }
             }
+        }
+
+        // Purely reactive: if folding a response just crossed the Running→Completed edge, fire one
+        // best-effort desktop notification. No new request and no new poll (ADR-0006 unchanged).
+        if let Some(note) = app.take_pending_notification() {
+            notifier.notify_timer_complete(note.title, note.body);
         }
     }
     Ok(())

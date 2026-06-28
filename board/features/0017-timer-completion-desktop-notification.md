@@ -409,6 +409,11 @@ Design is low-risk and bounded; no `grill` pass needed.
   public `TimerNotification` type (fixed copy: title `"Focus timer"`, body
   `"Your focus session has ended."`) and `App::take_pending_notification(&mut self) ->
   Option<TimerNotification>` (consume-once). `./ok.sh build` clean.
+- [x] 2026-06-28 [tui-dev] Slice 3 done: wired the edge. `terminal::run` is now
+  `run<N: Notifier>(app, requests, responses, notifier)`; after draining worker responses (and
+  their chained follow-ups) it calls `app.take_pending_notification()` and, if `Some`, fires
+  `notifier.notify_timer_complete(..)`. Purely reactive — no new request, no new poll (ADR-0006
+  unchanged). `main.rs` constructs `DesktopNotifier::new()` and passes it in. `./ok.sh build` clean.
 - [x] 2026-06-28 [orchestrator] Claimed `ready`→`working`; cut worktree
   `.claude/worktrees/0017-timer-completion-desktop-notification` + branch
   `feature/0017-timer-completion-desktop-notification` from `main@a016e6d` (the commit carrying

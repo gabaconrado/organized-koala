@@ -7,8 +7,8 @@
 
 use anyhow::Context;
 use tui::app::App;
-use tui::client::HttpClient;
 use tui::client::worker;
+use tui::client::{DesktopNotifier, HttpClient};
 use tui::terminal;
 
 /// Environment variable overriding the server base URL.
@@ -24,5 +24,7 @@ fn main() -> anyhow::Result<()> {
     // exits and the worker holds no state needing flush (hard-constraint #1).
     let (requests, responses, _worker) = worker::spawn(client);
     let app = App::new();
-    terminal::run(app, requests, responses)
+    // The production desktop notifier (best-effort; a missing daemon degrades silently — A2).
+    let notifier = DesktopNotifier::new();
+    terminal::run(app, requests, responses, notifier)
 }
