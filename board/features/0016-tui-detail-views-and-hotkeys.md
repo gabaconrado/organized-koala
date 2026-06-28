@@ -315,5 +315,13 @@ reqwest-client confirmation only.
 
 <!-- feature: planned by `architect` (`plan` skill); `## Plan(s)` block above. -->
 
+## Log / comments
+
+> **Frozen pointer (main copy).** Claimed 2026-06-28 into worktree
+> `.claude/worktrees/0016-tui-detail-views-and-hotkeys` (branch
+> `feature/0016-tui-detail-views-and-hotkeys`, cut from `main@7cae76a`). From the claim the
+> **branch copy is authoritative**; this `main` copy stays frozen at the claim snapshot until
+> the human's merge brings the finished item back atomically with the code.
+
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
