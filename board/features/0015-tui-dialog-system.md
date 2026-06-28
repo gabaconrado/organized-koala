@@ -2,7 +2,7 @@
 id: 0015
 title: TUI dialog system — help/add/delete/timer modals, trimmed footer caption, purple focus
 type: feature      # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0014]
@@ -598,3 +598,9 @@ cleanly. The help-text split into two tabbed Global rows plus one regression tes
   background test runs poisoned the shared throwaway test PG (transient auth-suite failures), which
   the clean serialized re-run cleared — reviewer did NOT reset the shared volume (correctly outside
   read-only authority); orphaned `pgrep` waiter shells were the churn, not a code defect.
+- [x] 2026-06-28 [orchestrator] Step-7 freshen: rebased onto `main@8138f8c` (docs/`.claude` only —
+  the bash-standards anti-self-match-pgrep rule + handoff + dashboard regen; no `crates/` change).
+  `./ok.sh code-hash` at the rebased head is still `00b1cb162b4c8c9bea9ce1e3eb840c0c50ebafcc` —
+  byte-identical code, so per verdict pinning the `approved` + `VERIFIED` attestations carry forward
+  untouched (commit shas in the verdict lines above are now stale pointers, expected). Help-modal
+  layout re-entry complete: all 7 feature DoD clauses met. `working` → `awaiting-merge`.
