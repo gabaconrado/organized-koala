@@ -2,7 +2,7 @@
 id: 0017
 title: Desktop notification when the focus timer ends (cross-OS, Ubuntu-first)
 type: feature      # feature | chore
-status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # builds on 0008 (timer, merged); ADR-0002 already on `main`. No in-flight item gates this.
