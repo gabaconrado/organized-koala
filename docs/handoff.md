@@ -5,6 +5,46 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-28 (0016 focus-cycling re-entry — read-only panes excluded from Tab; `feature`)
+
+Human feedback re-opened 0016 from `awaiting-merge`: in both detail views the **read-only panes
+were still `Tab`/`Shift+Tab` focus stops** — cycling from an editable pane landed on a
+non-editable pane (task Status/Created/Closed, note Created) that does nothing, forcing a second
+`Tab` to reach the next editable field. `architect` triaged it as a behaviour refinement **within
+ADR-0010 §4's existing presentation-only scope — no ADR amendment** (§4 was silent on read-only
+focusability).
+
+What changed:
+
+- **tui-dev** excluded read-only panes from focus cycling while keeping them **rendered**:
+  `cycle(forward)` in `crates/tui/src/app/task_detail.rs` + `crates/tui/src/app/notes.rs` now
+  scans to the next/prev **editable** pane (wrapping among editable panes only, with the totality
+  guard preserved — no panic/OOB on an empty or all-read-only pane vector); initial + fallback
+  focus land on the first editable pane (`first_editable`). The render path (`crates/tui/src/ui/
+  mod.rs`) is untouched. Added `focus_pane` test seams (`TaskDetail::focus_pane` /
+  `NoteDetail::focus_pane`) so `tester` can construct a read-only-*focused* state directly.
+- **tester** updated the two cycle-sequence tests and added read-only-skip / initial-focus / A6
+  coverage; `crates/tui/tests/detail.rs` is now **25 tests** (was 21).
+
+The earlier `59ab3172` verdicts were **voided** by this code change (a real code-changing
+re-entry, not the docs-only step-7 freshen). Reviewer **approved** (re-review) + verifier
+**verified** (re-verify) both pinned to the new code-hash
+`18d6445a05b7834320186551a6ee72e1972c3a08`; verifier re-booted `./ok.sh up` and re-exercised the
+existing `UpdateTask`/`UpdateNote`/`GetNote` reqwest routes (no server/contract delta, wire
+byte-identical). Back at the AI-terminal `awaiting-merge` on its branch.
+
+coverage: **72.05%** line (re-captured via `./ok.sh coverage` in the worktree after the fix;
+docker + throwaway test Postgres booted cleanly). Report-only — never a gate.
+
+**Durable learning captured.** This was a recognisable, recurring UX-correctness class — *a
+per-field detail/form view included read-only/display-only fields in `Tab` focus traversal,
+creating dead focus stops* — and the plan, ADR review, cold review, and live verify **all passed
+it** before human feedback caught it. Added a rule to the **`coding-standards`** skill ("Focus
+traversal skips non-interactive elements", learned 0016): focus cycling must move only between
+interactive fields; read-only fields stay rendered but are excluded from the focus order, with
+initial/fallback focus on the first interactive field. No new gotcha in CLAUDE.md (the rule lives
+in the standards skill where developer agents load it), no new crate, no agent change.
+
 ## Handoff — 2026-06-28 (0016 TUI detail views + final hotkey scheme — Phase 3 / final; `feature`)
 
 The three-part TUI overhaul (0014 shell → 0015 dialogs → **0016**) is complete. 0016 is a clean,
@@ -1896,8 +1936,10 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
 - **The TUI detail views + final hotkey scheme are at `awaiting-merge` on
   `feature/0016-tui-detail-views-and-hotkeys`** (0016, Phase 3 / **final** of the TUI overhaul, a
   `feature`, live-verified): per-field **task & note detail views** (each field its own bordered pane,
-  opened with `Enter`, panes cycled with `Tab`/`Shift+Tab`, `e`→edit / `Enter`→commit-one-field /
-  two-tiered `Esc`) and the **canonical hotkey remap** (`c`(done)→`Space`, `x`(delete)→`d`,
+  opened with `Enter`, panes cycled with `Tab`/`Shift+Tab` **between editable panes only** —
+  read-only panes stay rendered but are skipped, with initial/fallback focus on the first editable
+  pane, `e`→edit / `Enter`→commit-one-field / two-tiered `Esc`) and the **canonical hotkey remap**
+  (`c`(done)→`Space`, `x`(delete)→`d`,
   `p`(timer)→`t`, duration-edit `d`→`T`). `tui`-crate-only, presentation-only — **no** new ADR and
   **no** `contract`/server/domain delta (byte-identical, confirmed both ways), implementing
   [ADR-0010][adr-0010-0014-snap] §3–§5. Task detail is a new `crates/tui/src/app/task_detail.rs`
@@ -1907,10 +1949,12 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   field (R5, wire unchanged). A7 contract: an open non-editing detail view captures action keys + `Tab`
   but keeps `?` reachable; two-tiered `Esc` modelled via an `Option<String>` edit buffer; all gating
   folded into the existing unified `overlay_capturing_input` predicate (no parallel gate). Tests: new
-  `tests/detail.rs` (21) + re-pinned keymap regressions; tui suite 189, workspace 405/0. Reviewer
-  **approved** + verifier **verified**, both pinned to code-hash
-  `59ab31720df13c2a1f1c7a55752eeec48c7e3504`; coverage 71.73% line. Reused the 0015 framework
-  cleanly — no new gotcha/skill/agent change. With 0016, **the three-part TUI overhaul
-  (0014→0015→0016) is complete.** Awaiting the human's merge.
+  `tests/detail.rs` (25, incl. read-only-skip / initial-focus / A6 seams) + re-pinned keymap
+  regressions. Reviewer **approved** + verifier **verified** (after a human-feedback focus-cycling
+  re-entry — read-only panes excluded from `Tab`), both re-pinned to code-hash
+  `18d6445a05b7834320186551a6ee72e1972c3a08`; coverage 72.05% line. The re-entry added one durable
+  rule to the `coding-standards` skill (focus traversal skips non-interactive fields, learned 0016);
+  no gotcha/agent change. With 0016, **the three-part TUI overhaul (0014→0015→0016) is complete.**
+  Awaiting the human's merge.
 
 [adr-0010-0014-snap]: ./adr/0010-tui-navigation-and-interaction-model.md

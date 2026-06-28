@@ -151,7 +151,9 @@ backlog".
 > §3–§5 with **no new ADR** and **no** `contract`/server/domain delta (reviewer + verifier confirmed
 > `crates/contract/**`, `crates/server/**`, `Cargo.toml`/`Cargo.lock` byte-identical to `main`). Two
 > things landed: per-field **task & note detail views** — each field its own bordered pane, opened with
-> `Enter`, panes cycled with `Tab`/`Shift+Tab`, `e`→edit / `Enter`→commit-one-field / two-tiered
+> `Enter`, panes cycled with `Tab`/`Shift+Tab` **between editable panes only** (read-only panes stay
+> rendered but are skipped; initial/fallback focus on the first editable pane), `e`→edit /
+> `Enter`→commit-one-field / two-tiered
 > `Esc` — and the **canonical hotkey remap** (`c`(done)→`Space`, `x`(delete)→`d`, `p`(timer)→`t`,
 > duration-edit `d`→`T`). Task detail is a new `crates/tui/src/app/task_detail.rs` (`TaskDetail`
 > sub-state, a `Screen::Main` sub-mode, not a new `Screen` variant); note detail converted the
@@ -161,13 +163,17 @@ backlog".
 > view captures action keys + `Tab` but keeps `?` reachable; two-tiered `Esc` modelled via an
 > `Option<String>` edit buffer (its presence is the tier discriminant); all gating folded into the
 > existing unified `overlay_capturing_input` predicate (no parallel gate). Tests: new
-> `tests/detail.rs` (21) + re-pinned keymap regressions (old `c`/`x`/`p`/duration-`d` asserted gone);
-> tui suite 189, workspace 405/0. Reviewer **approved** + verifier **verified** (booted `./ok.sh up`,
+> `tests/detail.rs` (25, incl. read-only-skip / initial-focus / A6 seams) + re-pinned keymap
+> regressions (old `c`/`x`/`p`/duration-`d` asserted gone). Reviewer **approved** + verifier
+> **verified** (booted `./ok.sh up`,
 > exercised the existing `UpdateTask`/`UpdateNote`/`GetNote` reqwest routes — per-field PATCH leaving
 > other fields intact, GetNote+UpdateNote round-trip, 400/401/404/profile-scoping, error contract, OTel
-> spans; no server/contract delta), both pinned to code-hash
-> `59ab31720df13c2a1f1c7a55752eeec48c7e3504`; coverage 71.73% line (report-only). Reused the 0015
-> framework cleanly — no new gotcha/skill/agent change; no new crate. One out-of-scope cosmetic nit
+> spans; no server/contract delta) — both re-pinned to code-hash
+> `18d6445a05b7834320186551a6ee72e1972c3a08` after a **human-feedback focus-cycling re-entry**
+> (read-only panes were `Tab` focus stops — excluded from cycling; the earlier `59ab3172` verdicts
+> were voided by the code change); coverage 72.05% line (report-only). The re-entry added one durable
+> rule to the `coding-standards` skill (focus traversal skips non-interactive fields, learned 0016);
+> no new gotcha/agent change; no new crate. One out-of-scope cosmetic nit
 > (stale `Viewing` doc comment in `notes.rs`) filed as
 > [`ideas/0003`](./ideas/0003-stale-viewing-doccomment-notes.md) on `main`. At the AI-terminal
 > `awaiting-merge` on its branch; awaiting the human's merge.

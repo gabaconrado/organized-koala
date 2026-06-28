@@ -27,6 +27,16 @@ audience: dev
   pass-through layers.
 - **Tracer-bullet development.** Build a thin end-to-end slice first (a real request flowing
   through every layer), then widen it. Prove the seams early; don't build a layer in isolation.
+- **Focus traversal skips non-interactive elements (learned 0016).** In any per-field
+  detail/form view, `Tab`/`Shift+Tab` (or arrow) focus cycling must move only between
+  **interactive** panes/fields; read-only / display-only fields stay **rendered** but are
+  **excluded from the focus order** (and initial + fallback focus land on the first interactive
+  field). Including a read-only field in the focus ring creates a dead stop — focus lands
+  somewhere that does nothing and the user must press again to reach the next editable field.
+  This is a recurring UX miss: in 0016 the task Status/Created/Closed and note Created panes were
+  focus stops, and the plan, ADR review, cold review, and live verify **all passed it** before
+  human feedback caught it — model the focus order over the *editable* set, not the full pane
+  list.
 
 ### Testing
 
