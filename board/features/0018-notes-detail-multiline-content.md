@@ -222,6 +222,13 @@ Description multiline change.
   cancel/revert, and the regression fork (Title still commits on `Enter`; `Ctrl+S` inert with no
   text entry) across `tests/detail.rs` + `tests/keybindings.rs` + `tests/common/` [`b62b503`].
   No source bugs found. `./ok.sh test|lint|fmt --check` all green. Status `working`→`review`.
+- 2026-06-28 [reviewer] Cold review at head `d2b46e1`. Mechanical gate all green
+  (build/test/lint/fmt; docker available). No contract drift (`crates/contract`+`crates/server`
+  diff empty), #1/#3 hold, keymap matches ADR-0011 (Enter→Newline only in Content edit; Ctrl+S
+  commit inert outside text entry; Ctrl+C wins; no enhancement flags), layout fill opt-in (task
+  detail unchanged), coverage claims verified against present passing tests. No blocking findings.
+  **REVIEW-STATUS: approved** — code-tree hash `1f9db5c40754afb83857a67b71313fd9d2db7ba8`
+  (head commit `d2b46e1`).
 - [x] 2026-06-28 [human] Filed from a direct operator request. Two design forks resolved up
   front (see Feature request): (1) newline binding = `Enter`-newline / `Ctrl+S`-commit in the
   Content pane (Shift+Enter rejected as terminal-dependent); (2) routed through the formal
