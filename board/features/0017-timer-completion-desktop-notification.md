@@ -423,6 +423,23 @@ Design is low-risk and bounded; no `grill` pass needed.
   confirmation to `eng-manager` at the learn step. The note to add under "Setting up a development
   environment": *a notification daemon is needed on Linux for timer notifications to appear; none
   is needed to build or run.* All four slices complete — `./ok.sh build | lint | fmt --check` green.
+- [x] 2026-06-28 [tester] Slice 5 done: added `crates/tui/tests/notifications.rs` (13 tests) for
+  the timer-completion notification. Bulk drives the pure fire-once core through the public two-step
+  `App` API + the synchronous worker-analogue executor in `tests/common/mod.rs` (the only mock is
+  the sanctioned `Client` external-service trait), asserting `take_pending_notification()`: fires
+  exactly once on the Running→Completed edge with the fixed copy (`"Focus timer"` /
+  `"Your focus session has ended."`) then `None` on the immediate re-call (consume-once); does **not**
+  fire on Idle→Running, Running→Running re-pull, Completed→Completed re-pull, Running→Idle (stop), or
+  Idle→Idle; the initial-load `Completed` only arms (A4) and a follow-up re-pull stays silent; re-arms
+  on a new Running and fires a **second** time on the next completion; logout (`Timer::reset` via the
+  unauthenticated path) clears `notified_for_session`/`notify_pending` (re-arm) and drops any
+  undrained signal. A thin edge-level pair pumps the signal through a test `SpyNotifier`
+  (implementing `tui::client::Notifier`, recording count + last title/body behind a `RefCell`) to
+  assert the one-call count + fixed text and a two-call count across two sessions — mirroring the
+  edge's drain-and-fire step in `terminal::run`; no internal collaborator mocked. **`common.rs`
+  diagnostic was stale:** `crates/tui/tests/common/mod.rs` exists and is the standard `mod common;`
+  shared fixture every integration test already uses; nothing was missing. `./ok.sh test | lint |
+  fmt --check` all green (notifications: 13 passed).
 - [x] 2026-06-28 [orchestrator] Claimed `ready`→`working`; cut worktree
   `.claude/worktrees/0017-timer-completion-desktop-notification` + branch
   `feature/0017-timer-completion-desktop-notification` from `main@a016e6d` (the commit carrying
