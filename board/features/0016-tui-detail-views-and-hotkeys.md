@@ -480,17 +480,32 @@ hotkey remap**.
 `keybindings.rs`/`navigation.rs`/`tasks.rs` (old `c`/`x`/`p`/duration-`d` asserted **gone**); tui
 suite 189 (168 carried + 21 new), whole workspace green (verifier: 405 passed / 0 failed).
 
-**DoD:** `./ok.sh test | lint | fmt --check` all green; reviewer **REVIEW-STATUS: approved** and
-verifier **verified**, both pinned to code-hash
-`59ab31720df13c2a1f1c7a55752eeec48c7e3504`. Verifier booted `./ok.sh up` and exercised the
-existing reqwest `UpdateTask`/`UpdateNote`/`GetNote` routes the per-field edits ride (per-field
-PATCH leaving other fields intact, GetNote+UpdateNote round-trip, validation 400 / 401 / 404 /
-profile-scoping #4, error contract `{code,message}`; OTel spans observed) — **no server/contract
-delta**. One out-of-scope cosmetic nit (stale `Viewing` doc comment, `notes.rs`) filed as
-`board/ideas/0003-stale-viewing-doccomment-notes.md` on `main`, not folded in.
+**Feedback re-entry (focus-cycling fix).** Human feedback from `awaiting-merge`: in both detail
+views the **read-only panes were still `Tab`/`Shift+Tab` focus stops** — cycling from an editable
+pane landed on a non-editable pane (task Status/Created/Closed, note Created) that does nothing, so
+the user had to press `Tab` again to reach the next editable field. Fix: read-only panes stay
+**rendered** but are **excluded from focus cycling** — `cycle(forward)` now scans to the next/prev
+**editable** pane (wrapping among editable panes only), and initial + fallback focus land on the
+first editable pane (`first_editable`). `architect` triaged it as a behaviour refinement **within
+ADR-0010 §4's existing presentation-only scope — no ADR amendment** (§4 was silent on read-only
+focusability). Changed `cycle`/`new`/`refresh_from` in `crates/tui/src/app/task_detail.rs` +
+`crates/tui/src/app/notes.rs` (the render path in `crates/tui/src/ui/mod.rs` is untouched); added
+`focus_pane` test seams so `tester` can construct a read-only-*focused* state directly. `tester`
+updated the two cycle-sequence tests and added read-only-skip / initial-focus / A6 coverage —
+`crates/tui/tests/detail.rs` is now **25 tests**. The earlier `59ab3172` verdicts were **voided**
+by this code change.
 
-coverage: 71.73% line (captured via `./ok.sh coverage` in the worktree; docker + throwaway test
-Postgres booted cleanly). Report-only — never a gate.
+**DoD:** `./ok.sh test | lint | fmt --check` all green; reviewer **REVIEW-STATUS: approved**
+(re-review) and verifier **verified** (re-verify) after the focus-cycling fix, both pinned to the
+current code-hash `18d6445a05b7834320186551a6ee72e1972c3a08`. Verifier booted `./ok.sh up` and
+exercised the existing reqwest `UpdateTask`/`UpdateNote`/`GetNote` routes the per-field edits ride
+(per-field PATCH leaving other fields intact, GetNote+UpdateNote round-trip, validation 400 / 401 /
+404 / profile-scoping #4, error contract `{code,message}`; OTel spans observed) — **no
+server/contract delta**. One out-of-scope cosmetic nit (stale `Viewing` doc comment, `notes.rs`)
+filed as `board/ideas/0003-stale-viewing-doccomment-notes.md` on `main`, not folded in.
+
+coverage: 72.05% line (captured via `./ok.sh coverage` in the worktree after the focus-cycling fix;
+docker + throwaway test Postgres booted cleanly). Report-only — never a gate.
 
 - [x] 2026-06-28 [orchestrator] Step-7 freshen: rebased onto `main` (docs/`board`-only advance
   through `01e3686`); the one expected Board-file conflict (frozen-pointer vs authoritative copy)
@@ -552,7 +567,6 @@ Postgres booted cleanly). Report-only — never a gate.
   purple focus border on editable panes, per-field commit payloads R5, help body) intact.
   `./ok.sh fmt --check | lint | test` all green — `tests/detail.rs` now 25 tests; whole tui
   `TestBackend` suite green.
-
 - [x] 2026-06-28 [reviewer] **REVIEW-STATUS: approved** (re-review after the focus-skip feedback
   fix) — pinned to code-tree hash `18d6445a05b7834320186551a6ee72e1972c3a08` (commit `eff9e17`).
   Prior `59ab3172` verdicts void (code changed). Gate green (`test`=25 detail tests / `lint` /
@@ -563,7 +577,6 @@ Postgres booted cleanly). Report-only — never a gate.
   fallback focus. Untouched invariants (two-tiered `Esc`, A7 suppression, per-field commit R5, A6
   `begin_edit` no-op, render path) intact in byte-identical files. `focus_pane` test seams have no
   production callers and route A6 tests through the real `begin_edit` path. No out-of-scope nits.
-
 - [x] 2026-06-28 [verifier] **VERIFY: verified** (re-verify after the focus-skip fix) — pinned to
   code-tree hash `18d6445a05b7834320186551a6ee72e1972c3a08` (head `2363574`). (1) `./ok.sh test`
   green workspace-wide; `tests/detail.rs` 25 passed incl. `read_only_*_never_a_focus_stop`,
