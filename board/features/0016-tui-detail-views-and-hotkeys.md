@@ -415,7 +415,6 @@ reqwest-client confirmation only.
   One out-of-scope cosmetic nit (stale `Viewing` doc comment at `notes.rs:341`) filed as a
   `board/ideas/` follow-up on `main` — not folded into 0016. Still requires the live `verifier`
   pass (DoD clause 4) before `awaiting-merge`.
-
 - [x] 2026-06-28 [verifier] **VERIFY: verified** — pinned to code-tree hash
   `59ab31720df13c2a1f1c7a55752eeec48c7e3504` (code-bearing head `9b68c01`). (1) `TestBackend`
   suite green: `./ok.sh test` = 405 passed / 0 failed workspace-wide; tui suite 189 (incl. new
@@ -429,6 +428,69 @@ reqwest-client confirmation only.
   throughout. OTel spans observed (`patch_task`×5, `update_note`×2, `get_note`×3). **No
   server/contract delta**; edits round-trip over the unchanged wire. Stack torn down, no capability
   gap.
+
+## Summary
+
+**Phase 3 (final) of the 0014 → 0015 → 0016 TUI overhaul shipped** — `tui`-crate-only,
+presentation-only, implementing [ADR-0010][adr-0010] §3–§5 with **no new ADR** and **no
+`contract`/server/domain delta** (reviewer + verifier both confirmed `crates/contract/**`,
+`crates/server/**`, and `Cargo.toml`/`Cargo.lock` byte-identical to `main`). Two things landed:
+per-field **task & note detail views** (each field its own bordered pane) and the **canonical
+hotkey remap**.
+
+**What shipped:**
+
+- **Task detail view** (new `crates/tui/src/app/task_detail.rs`; `TaskDetail` sub-state on
+  `tasks.detail: Option<…>`): a transient sub-mode of `Screen::Main` (not a new `Screen`
+  variant, A2), opened with `Enter` from the selected task. Panes: Title/Description editable,
+  Status/Created read-only, Closed read-only when done. `Tab`/`Shift+Tab`/arrows cycle panes
+  (wrapping); `e` opens the edit buffer on a focused editable pane (inert on read-only, A6);
+  `Enter` commits that one field via `UpdateTask` with **only** the edited `Option` set; on
+  success `apply_update` re-derives the detail from the returned task + chains a list refresh
+  (#1). `d` delete converted to the 0015 confirm dialog (A5).
+- **Note detail view** (`NotesMode::Viewing(Note)` → editable `NotesMode::Detail(NoteDetail)`):
+  Title/Content editable, Created read-only. `Enter` still issues `GetNote` first so the view
+  derives from a fresh server response (#1); per-field commit re-sends the **unchanged field
+  from the snapshot** (`UpdateNoteRequest` has no `Option` fields, R5), then re-derives + refreshes.
+- **Final hotkey remap:** `c`(done)→`Space`, `x`(delete)→`d` (all three tabs), `p`(timer)→`t`,
+  duration-edit `d`→`T` (configure). Per-entity keys context-scoped to the active tab; globals
+  live only when no overlay/edit captures input. Reused the existing `Event` alphabet — **no new
+  variants**. `draw_help` body + footer caption updated; the old `c`/`x`/`p`/duration-`d` doc
+  comments refreshed.
+
+**Key decisions (the load-bearing ones for future readers):**
+
+- **A7 — global-suppression contract for an open-but-not-editing detail view.** An open detail
+  view captures the per-tab action keys and `Tab` (pane cycle) plus other globals
+  (`t`/`T`/`r`/`q`/tab-switch all suppressed), **but `?` help stays reachable** while no field
+  edit is in progress; once a field edit *is* in progress everything including `?` is captured as
+  text. Encoded in `App::can_open_help` / `detail_idle`; recorded so `tester`/`reviewer` check the
+  same contract.
+- **Two-tiered `Esc` via an `Option<String>` edit buffer** — the buffer's *presence* is the tier
+  discriminant (R1): edit-in-progress ⇒ cancel the edit (revert the pane value); no edit ⇒ exit
+  the detail view to the list. `Esc` unwinds exactly one level.
+- **One unified gate, no parallel gate** — the open detail view + its edit state were folded into
+  the existing `overlay_capturing_input()` / `active_pane_in_sub_flow()` / `is_text_entry`
+  predicates (R2/R3), so globals/tab-switch suppression and `Tab`-as-pane-cycle reuse the 0015
+  framework rather than rebuilding it.
+- **Note per-field commit re-sends the snapshot field** (R5) — committing Title re-sends the
+  current Content and vice versa, so the untouched field is never blanked (the wire stays unchanged).
+
+**Tests:** new `crates/tui/tests/detail.rs` (21) + re-pinned keymap regressions in
+`keybindings.rs`/`navigation.rs`/`tasks.rs` (old `c`/`x`/`p`/duration-`d` asserted **gone**); tui
+suite 189 (168 carried + 21 new), whole workspace green (verifier: 405 passed / 0 failed).
+
+**DoD:** `./ok.sh test | lint | fmt --check` all green; reviewer **REVIEW-STATUS: approved** and
+verifier **verified**, both pinned to code-hash
+`59ab31720df13c2a1f1c7a55752eeec48c7e3504`. Verifier booted `./ok.sh up` and exercised the
+existing reqwest `UpdateTask`/`UpdateNote`/`GetNote` routes the per-field edits ride (per-field
+PATCH leaving other fields intact, GetNote+UpdateNote round-trip, validation 400 / 401 / 404 /
+profile-scoping #4, error contract `{code,message}`; OTel spans observed) — **no server/contract
+delta**. One out-of-scope cosmetic nit (stale `Viewing` doc comment, `notes.rs`) filed as
+`board/ideas/0003-stale-viewing-doccomment-notes.md` on `main`, not folded in.
+
+coverage: 71.73% line (captured via `./ok.sh coverage` in the worktree; docker + throwaway test
+Postgres booted cleanly). Report-only — never a gate.
 
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
