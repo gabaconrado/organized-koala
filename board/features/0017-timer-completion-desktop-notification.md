@@ -2,7 +2,7 @@
 id: 0017
 title: Desktop notification when the focus timer ends (cross-OS, Ubuntu-first)
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []      # builds on 0008 (timer, merged); ADR-0002 already on `main`. No in-flight item gates this.
@@ -468,6 +468,12 @@ Design is low-risk and bounded; no `grill` pass needed.
   caveat:** visual desktop-notification appearance is the **operator's manual acceptance** (no
   daemon in this env) — explicitly not the verifier's, not a capability gap. No Board/code edited.
   **VERIFY: verified.**
+- [x] 2026-06-28 [orchestrator] Step-7 freshen: rebased onto `main@af43bea` (eng-manager's
+  docs/ideas/dashboard advance). Rebase was **docs-only** — `./ok.sh code-hash HEAD` is
+  **unchanged at d3fa1fc5b3ed5ac0770085809aac150e25012849** (= the attested verdict hash), so the
+  approved+verified verdicts **carry forward untouched** (no relabelling; CLAUDE.md verdict
+  pinning). Re-ran gates on the rebased tree: `./ok.sh test | lint | fmt --check` all green
+  (`notifications.rs` 13/13). Board-only commit — does not retrigger review. → `awaiting-merge`.
 
 ## Summary
 
