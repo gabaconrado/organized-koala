@@ -416,5 +416,19 @@ reqwest-client confirmation only.
   `board/ideas/` follow-up on `main` — not folded into 0016. Still requires the live `verifier`
   pass (DoD clause 4) before `awaiting-merge`.
 
+- [x] 2026-06-28 [verifier] **VERIFY: verified** — pinned to code-tree hash
+  `59ab31720df13c2a1f1c7a55752eeec48c7e3504` (code-bearing head `9b68c01`). (1) `TestBackend`
+  suite green: `./ok.sh test` = 405 passed / 0 failed workspace-wide; tui suite 189 (incl. new
+  `detail.rs` 21, re-pinned `keybindings.rs` 35). (2) Presentation-only **verified live**:
+  `git diff main -- crates/contract crates/server` empty (byte-identical); only `crates/tui/**`
+  changed. (3) Booted `./ok.sh up` (migrate one-shot exit 0, server healthy, no migration-history
+  conflict) and exercised the existing reqwest routes the per-field edits ride: per-field PATCH
+  task (title-only / desc-only / status=done each leaving the other fields intact), GetNote +
+  UpdateNote round-trip, empty-title 400 `{code:"validation_failed"}`, 401 unauthenticated, 404
+  unknown/cross-profile, profile-scoping isolation (#4) — error contract `{code,message}` honoured
+  throughout. OTel spans observed (`patch_task`×5, `update_note`×2, `get_note`×3). **No
+  server/contract delta**; edits round-trip over the unchanged wire. Stack torn down, no capability
+  gap.
+
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0010]: ../../docs/adr/0010-tui-navigation-and-interaction-model.md
