@@ -469,6 +469,68 @@ Design is low-risk and bounded; no `grill` pass needed.
   daemon in this env) — explicitly not the verifier's, not a capability gap. No Board/code edited.
   **VERIFY: verified.**
 
+## Summary
+
+**What shipped (TUI-only — no `contract`/server/migration/ADR change).** When the TUI observes
+a focus session transition into `Completed`, it fires **exactly one** desktop notification
+(title `"Focus timer"`, body `"Your focus session has ended."`; no sound, no actions). The
+implementation:
+
+- **An injected `Notifier` seam** (`crates/tui/src/client/notify.rs`) — a narrow trait modelled
+  on the sanctioned `Client` external-service boundary (ADR-0003): production `DesktopNotifier`
+  wraps `notify-rust` (default `zbus` pure-Rust backend; the C `dbus` feature is left **off**,
+  rationale commented on the dep line so a future bump cannot silently flip to the C backend),
+  builds a sound-less/button-less notification and `.show()`s it, mapping **every** delivery
+  failure to a no-op — silent, non-fatal, and writing nothing to the alt-screen terminal (A2).
+- **A pure fire-once core on `Timer`** — transient `notified_for_session` (the guard) +
+  `notify_pending` (the one-shot signal), both default `false` and cleared by `reset()` (logout
+  re-arms). `App::apply_timer_session` detects the Running→Completed edge **before** overwriting
+  the session, arms+signals on that edge, re-arms on a new `Running`/`Idle`, and — for the
+  initial post-login fold (A4) — only **arms** an already-`Completed` session without signalling
+  (no stale replay on launch). `App::take_pending_notification` consumes the signal once.
+- **The poll-loop fire site** — `terminal::run<N: Notifier>` calls `take_pending_notification()`
+  after draining each worker response (and chained follow-ups) and fires the notifier if `Some`;
+  purely reactive, **no new request and no new poll** (ADR-0006 render-loop model untouched).
+  `main.rs` wires the production `DesktopNotifier`.
+- **Docs** — `crates/tui/README.md` gained a "Desktop notifications" subsection (per-platform
+  build/runtime matrix, no-apt-package statement, runtime daemon expectation + silent-non-fatal
+  degradation). The root `README.md` dev-env note is `eng-manager`'s (home #1, on `main`).
+
+**Key decisions.** **A1 confirmed** — the `notify-rust` default `zbus` backend compiled with
+**no apt package** on Ubuntu (no `dbus` C-binding crate in `Cargo.lock`; no `libdbus-1-dev`/
+`pkg-config`/system `.so` needed). **No-ADR** (Decision 2): the only new state is a transient
+in-memory marker on `Timer` (the same #1-blessed category as `pending`/`loaded`/`applied_at`);
+no `contract`/wire (#2), no domain structure (#3), inside the ADR-0006 render loop. **Test seam**
+(Decision 3): the decision-to-notify is pure core state (`TestBackend`-observable); the D-Bus
+effect sits behind the injected `Notifier` trait, spied in tests — only a sanctioned
+external-service trait is mocked, no internal collaborator.
+
+**Tests.** `crates/tui/tests/notifications.rs` (13) covers the fire-once core via the public
+two-step `App` API and a thin `SpyNotifier` edge pair: fires once on Running→Completed with the
+fixed copy then `None` on re-call (consume-once); silent on Idle→Running, Running→Running,
+Completed→Completed, Running→Idle, Idle→Idle; initial-load `Completed` only arms (A4); re-arms
+and fires a second time on the next completion; logout clears the guard/signal.
+
+**Verdicts (both pinned to code-hash `d3fa1fc5b3ed5ac0770085809aac150e25012849`).** Reviewer
+`REVIEW-STATUS: approved` (sha `d082668`; no fix-now findings; #1/#2/#3 + ADR-0006 confirmed,
+A2/A4/logout-re-arm correct in code, A1 confirmed). Verifier `VERIFY: verified` (DoD clause 4):
+`notifications.rs` 13/13 + full workspace green; live `./ok.sh up` exercised the affected
+timer-session path (server-owned running→completed verdict per ADR-0002, fire-once-relevant
+Completed→Completed re-pull, stop→idle→start re-arm, error contract, account-global scoping,
+OTel spans). `./ok.sh test | lint | fmt --check` green.
+
+**coverage: 72.18%** line (re-captured via `./ok.sh coverage` in the worktree; docker +
+throwaway test Postgres booted cleanly). Report-only — never a gate.
+
+**Operator's remaining manual step (acceptance criterion 4 / R2).** No daemon exists in the
+verifier/CI environment, so the **visual appearance** of the notification on a real Ubuntu
+desktop is the operator's manual confirmation — by design, explicitly not the verifier's, and
+not a capability gap (the fire-once *logic* is proven daemon-free by the spy suite).
+
+**Out-of-scope follow-ups filed as ideas (non-blocking, on `main`).** A2 (surface delivery
+failures without a logging dep / terminal corruption) → idea `0004`; A6 (move `.show()` off the
+poll loop if it is ever found to block) → idea `0005`.
+
 [adr-0002]: ../../docs/adr/0002-pomodoro-timer-authority.md
 [adr-0003]: ../../docs/adr/0003-verification-layering.md
 [adr-0006]: ../../docs/adr/0006-tui-concurrency-and-responsiveness.md
