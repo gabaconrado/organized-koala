@@ -73,6 +73,18 @@ pub fn router(state: AppState) -> Router {
             patch(handlers::patch_task).delete(handlers::delete_task),
         )
         .route(
+            "/api/profiles/{profile_id}/subtasks",
+            get(handlers::list_profile_subtasks),
+        )
+        .route(
+            "/api/profiles/{profile_id}/tasks/{task_id}/subtasks",
+            get(handlers::list_subtasks).post(handlers::create_subtask),
+        )
+        .route(
+            "/api/profiles/{profile_id}/tasks/{task_id}/subtasks/{subtask_id}",
+            patch(handlers::patch_subtask).delete(handlers::delete_subtask),
+        )
+        .route(
             "/api/profiles/{profile_id}/notes",
             get(handlers::list_notes).post(handlers::create_note),
         )

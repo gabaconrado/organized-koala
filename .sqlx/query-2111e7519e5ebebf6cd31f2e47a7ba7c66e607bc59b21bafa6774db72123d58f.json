@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM subtasks s USING tasks t WHERE s.id = $1 AND s.task_id = $2 AND t.id = s.task_id AND t.profile_id = $3 RETURNING s.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2111e7519e5ebebf6cd31f2e47a7ba7c66e607bc59b21bafa6774db72123d58f"
+}

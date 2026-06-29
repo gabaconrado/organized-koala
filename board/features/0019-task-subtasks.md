@@ -240,3 +240,16 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   `UpdateSubtaskRequest` to `crates/contract/src/task/mod.rs` (ADR-0013 §1–2), re-exported from
   `lib.rs`; `Task`/`TaskStatus`/`CreateTaskRequest`/`UpdateTaskRequest` untouched. build/lint/
   fmt --check clean.
+- 2026-06-29 [server-dev] Slice 2 done: paired reversible migration
+  `20260612163051_subtasks.{up,down}.sql` (`subtasks` table, `task_id` FK to `tasks`
+  ON DELETE CASCADE — the no-orphans guarantee R4, `status` CHECK open/done, internal
+  `created_at`, index on `(task_id, created_at)`; down = DROP TABLE). New
+  `crates/server/src/handlers/subtasks.rs` with five handlers (list per-task, create, patch,
+  delete, list per-profile), declared in `handlers/mod.rs`, routed in `app.rs`. Each passes
+  `assert_owned(pid)` then a query joined `subtasks → tasks` on `task_id` AND
+  `tasks.profile_id = $pid` (A1): cross-profile/wrong-parent reach is `404`, indistinguishable
+  from absent. Reuses `validation_failed`/`not_found`; no new `ErrorCode`. `created_at` never
+  on the wire (A5). `tasks`/`notes`/`profiles` untouched. `./ok.sh prepare` ran (docker
+  available; throwaway test Postgres) — `.sqlx/` refreshed with 5 new query files.
+  build/lint/fmt --check clean; `./ok.sh test` green (subtask integration tests are tester's
+  slice).
