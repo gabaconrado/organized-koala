@@ -355,6 +355,18 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   `tui` test crate until the `tester` slice updates the help-overlay assertion in
   `crates/tui/tests/` — the documented harness-stranding pattern (CLAUDE.md gotcha, learned
   0019), not a defect of this slice.
+- 2026-06-29 [tester] Un-stranded the harness for the help-overlay fix and pinned the wrap
+  regression. The existing `tui` integration suite (`crates/tui/tests/`) was already consistent
+  with the source after the dev's `5fc5021` (only the help box widened to `HELP_DIALOG_WIDTH = 72`;
+  the 72-wide box still centres within the 80-col test viewport, so no existing `contains`/
+  relative-column assertion in `crates/tui/tests/dialogs.rs` moved — none needed adjusting).
+  Added a new regression test `help_modal_tasks_line_renders_intact_without_wrapping_d_delete` in
+  `crates/tui/tests/dialogs.rs` (mirroring the sibling `help_modal_global_block_…` pattern, real
+  `?` keypress via `press`, rendered at 80×24): it asserts (1) `d delete` renders on the SAME row
+  as `a add` / `A add sub-task` (the Tasks line did not wrap), and (2) no row begins with a
+  stranded flush-left `d delete` continuation. Pins the 0019 sub-task-hotkey overflow closed
+  against a future hotkey addition or a width revert. Gates all green: `./ok.sh test`,
+  `./ok.sh lint` (`--all-targets`), `./ok.sh fmt --check`.
 
 ## Summary
 

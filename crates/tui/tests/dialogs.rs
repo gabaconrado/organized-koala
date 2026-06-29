@@ -428,6 +428,48 @@ fn help_modal_global_block_lists_quit_and_close_help_as_separate_aligned_rows() 
 }
 
 #[test]
+fn help_modal_tasks_line_renders_intact_without_wrapping_d_delete() {
+    // Operator bug (fixed in 5fc5021): the 0019 sub-task hotkeys grew the Tasks reference line to
+    // `Tasks    a add · A add sub-task · e edit · Space done · d delete` (64 chars), which overflowed
+    // the 62-col inner area of the old DIALOG_WIDTH=64 help box, wrapping the trailing `d delete`
+    // token to a flush-left, un-indented continuation row. Fixed by widening ONLY the help overlay to
+    // HELP_DIALOG_WIDTH=72 (inner ~70) so the whole Tasks line fits on one rendered row.
+    //
+    // This pins the line intact: `d delete` renders on the SAME row as the rest of the Tasks line
+    // (the row that also carries `a add` / `A add sub-task`), and is NOT marooned on a separate
+    // flush-left continuation row. The strongest pin against the wrap regressing if a future hotkey
+    // is added or the help width is reverted.
+    let (client, mut app) = logged_in(vec![]);
+    press(&mut app, &client, KeyCode::Char('?'));
+    assert!(app.help_open(), "? opened the help overlay");
+    let text = render(&app, W, H);
+    let rows: Vec<&str> = text.lines().collect();
+
+    // The Tasks line is identified by its leading-token content (`a add` + `A add sub-task`); the box
+    // border/padding indents it, so we match on the action substrings, not a column.
+    let tasks_row = rows
+        .iter()
+        .find(|r| r.contains("a add") && r.contains("A add sub-task"))
+        .unwrap_or_else(|| panic!("the Tasks reference row in the help body:\n{text}"));
+
+    // (1) `d delete` is on the SAME rendered row as the rest of the Tasks line — it did NOT wrap to a
+    // continuation row.
+    assert!(
+        tasks_row.contains("d delete"),
+        "the Tasks line must keep `d delete` on the same row as `a add` / `A add sub-task` \
+         (it must not wrap):\n{tasks_row:?}\nfull help:\n{text}",
+    );
+
+    // (2) No row carries a stranded, flush-left `d delete` continuation — i.e. there is no row whose
+    // trimmed-left content STARTS with `d delete` (the malformed wrap put the orphaned token at the
+    // start of its own un-indented row). The intact Tasks row has `d delete` mid-line, never leading.
+    assert!(
+        !rows.iter().any(|r| r.trim_start().starts_with("d delete")),
+        "no row may begin with a stranded `d delete` (the wrapped-continuation regression):\n{text}",
+    );
+}
+
+#[test]
 fn help_modal_closes_with_esc() {
     // Esc closes the help modal (the two-tiered Esc: an overlay is open, so Esc → Cancel, which the
     // app core folds into closing the help overlay) — without quitting.
