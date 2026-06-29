@@ -11,5 +11,8 @@ pub use auth::{LoginRequest, Password, RegisterRequest, SessionResponse};
 pub use error::{ErrorBody, ErrorCode};
 pub use note::{CreateNoteRequest, Note, UpdateNoteRequest};
 pub use profile::{CreateProfileRequest, Profile, UpdateProfileRequest};
-pub use task::{CreateTaskRequest, Task, TaskStatus, UpdateTaskRequest};
+pub use task::{
+    CreateSubtaskRequest, CreateTaskRequest, Subtask, Task, TaskStatus, UpdateSubtaskRequest,
+    UpdateTaskRequest,
+};
 pub use timer::{TimerConfig, TimerSession, UpdateTimerConfigRequest};

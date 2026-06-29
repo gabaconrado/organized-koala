@@ -236,3 +236,7 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
 - 2026-06-29 [orchestrator] Claimed → `working`. Worktree `.claude/worktrees/0019-task-subtasks`
   / branch `feature/0019-task-subtasks` cut from `main@e80909b` (carries ADR-0012/0013 + plan).
   Build order per plan: contract-owner → server-dev → tui-dev → tester. Session: drive/0019.
+- 2026-06-29 [contract-owner] Slice 1 done: added `Subtask`/`CreateSubtaskRequest`/
+  `UpdateSubtaskRequest` to `crates/contract/src/task/mod.rs` (ADR-0013 §1–2), re-exported from
+  `lib.rs`; `Task`/`TaskStatus`/`CreateTaskRequest`/`UpdateTaskRequest` untouched. build/lint/
+  fmt --check clean.
