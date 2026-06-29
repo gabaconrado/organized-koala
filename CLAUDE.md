@@ -201,6 +201,19 @@ ing unscripted sub-task list calls to an empty list** (the natural "no sub-tasks
 keeping the strict panic-on-empty net for the *mutating* calls — the pattern to reuse when a new
 list/refresh call is threaded into an already-large suite.
 
+**Gotcha — the `?` help overlay packs key·action pairs into a fixed-width box, so a new hotkey can
+silently overflow a reference line and wrap with no indent (learned 0015, recurred 0019).** The
+help overlay's reference lines each pack several `key·action` pairs into one centred, fixed-width
+dialog. Adding (or renaming) a hotkey lengthens a line, and once it exceeds the box's inner width
+`Wrap` reflows the tail to a **flush-left, un-indented continuation** — a layout bug the build and
+clippy never catch (it is pure geometry). It has now bitten **twice**: 0015's Global block crammed
+`q quit` onto the close-help row, and 0019's Tasks line (with the new `A add sub-task` / `x
+collapse/expand`) overflowed and wrapped `d delete`. **When adding or renaming a hotkey, check the
+help-reference line widths against the dialog inner width.** The help overlay now carries its own
+`HELP_DIALOG_WIDTH = 72` (inner ~70, headroom over the other dialogs' `DIALOG_WIDTH = 64`), and
+`crates/tui/tests/dialogs.rs` pins both the Global block and the Tasks line against re-wrap — but a
+*newly added* reference line is only as safe as a regression test that asserts it does not wrap.
+
 > Open design item for the first ADR: **timer authority** — `#1` implies the server owns the
 > Pomodoro countdown and the TUI only renders it. The `architect` settles this in ADR-0002.
 

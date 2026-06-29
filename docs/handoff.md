@@ -5,6 +5,49 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-29 (0019 re-entry — `?` help-overlay Tasks-line wrap fix)
+
+A small post-`awaiting-merge` re-entry on 0019. The operator reported a `?` help-overlay rendering
+bug: the **Tasks** reference line wrapped `d delete` to an un-indented flush-left continuation. The
+line is exactly 64 chars and overflowed the 62-col inner area of the shared `DIALOG_WIDTH = 64`
+box — the 0019 sub-task hotkeys (`A add sub-task`, `x collapse/expand`) pushed it over. Triaged as
+**TUI-presentation-only** (no `contract`/server/domain change, no ADR), re-entering at `working`;
+the code change voided the prior `8c500ca0…` verdicts.
+
+Fix (`tui-dev`, `crates/tui/src/ui/mod.rs`): a `width: u16` field on the `Dialog` struct decouples
+the help box from the shared const — only `draw_help` passes the new `HELP_DIALOG_WIDTH = 72`
+(inner ~70); the five form/confirm/timer dialogs pass `DIALOG_WIDTH = 64` unchanged and render
+byte-identically. Help content/wording/row-count untouched — only the box is wider. `tester` pinned
+the fix with `help_modal_tasks_line_renders_intact_without_wrapping_d_delete` in
+`crates/tui/tests/dialogs.rs` (asserts `d delete` shares the Tasks row with `a add` / `A add
+sub-task` and no row is a stranded flush-left `d delete`; the reviewer confirmed it is a genuine
+pin — it fails on the pre-fix source). Agents that ran: `architect` (triage) → `tui-dev` → `tester`
+→ `reviewer` → `verifier`.
+
+Reviewer **REVIEW-STATUS: approved** + verifier **VERIFY-STATUS: verified**, both pinned to
+code-hash `da5b04634dcedc3a6df38ef65958548981d83775` (commit `54fea75`). The
+`crates/contract`/`crates/server` diff vs. the prior tree is **empty**, so the live-stack-boot
+portion was **N/A** (nothing new server-side); the prior 0019 five-endpoint live verification
+carries forward on the byte-unchanged server surface, and the TUI side (home of help-overlay
+rendering per ADR-0003) is `crates/tui/tests/dialogs.rs` green. coverage **71.23%** line (worktree;
+docker + throwaway test Postgres booted cleanly) — report-only, never a gate.
+
+**New CLAUDE.md gotcha this re-entry:** the `?` help overlay packs key·action pairs into a
+fixed-width box, so a new/renamed hotkey can silently overflow a reference line and wrap with no
+indent — a pure-geometry bug the build/clippy never catch. This is the **second** occurrence (0015's
+Global block crammed-row, 0019's Tasks-line wrap), so the recurrence earned a durable gotcha: when
+adding/renaming a hotkey, check the help-reference line widths against the dialog inner width; the
+help overlay now carries its own `HELP_DIALOG_WIDTH = 72` and `dialogs.rs` pins both lines.
+
+**One out-of-scope follow-up filed as [`ideas/0008`][idea-0008] on `main`** (the reviewer's
+non-blocking nit): the new regression test's comment cites the fixing commit sha inline, against
+`coding-standards` (no dev context in comments) — parked for a future `tui`-tests touch rather than
+churning the just-issued verdicts.
+
+[idea-0008]: ../board/ideas/0008-drop-commit-sha-from-help-regression-test-comment.md
+
+---
+
 ## Handoff — 2026-06-29 (0019 sub-tasks — full-stack `feature`; first #3 exception)
 
 Sub-tasks shipped end-to-end across all three crates — the **first admitted structural exception
