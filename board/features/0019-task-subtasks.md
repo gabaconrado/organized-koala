@@ -2,12 +2,12 @@
 id: 0019
 title: Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse
 type: feature      # feature | chore
-status: ready          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: ready          # FROZEN at claim snapshot — authoritative copy is on feature/0019-task-subtasks (claimed 2026-06-29)
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0016]  # builds on the task detail view + final hotkey scheme (merged)
-branch: null
-worktree: null
+branch: feature/0019-task-subtasks
+worktree: .claude/worktrees/0019-task-subtasks
 created: 2026-06-29
 updated: 2026-06-29
 ---
