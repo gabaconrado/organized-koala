@@ -308,3 +308,16 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   ErrorCode, no `#[allow]`, no secret leak. Satisfies DoD clause 6; clause 4 (live verifier) still
   required before `awaiting-merge`. Non-blocking idea candidate captured on `main` (idea 0007: no
   TUI key to delete a single sub-task — in-scope-correct, future affordance).
+- 2026-06-29 [verifier] **VERIFY-STATUS: verified** `8c500ca092b3c37ec4e95475b794053e470c9077`.
+  Booted the stack (`./ok.sh up`: postgres + one-shot `migrate` exit 0 + server healthy + otel); no
+  learned-0011 migration-history conflict on the shared volume. Exercised all five sub-task
+  endpoints as live HTTP (the reqwest `Client` surface, ADR-0003): create→201 starts `open`/title
+  trimmed/no `description`+`created_at` on wire; list per-task & per-profile→200 creation order;
+  edit-title & toggle→200; empty patch `{}`→200 no-op; delete→204, second→404. Error contract
+  `{code,message}`: blank title→400 `validation_failed`, missing parent/sub-task→404 `not_found`,
+  no token→401. Profile-scoping (#4/A1): cross-profile PATCH/DELETE→404, wrong-profile list→200 `[]`,
+  victim intact. Parent-scoping: sibling `{tid}`→404. Cascade (R4): task-delete and profile-delete
+  both leave no reachable orphan. OTel: all five handlers emit spans (ids only; secret/title grep
+  empty). TUI side delegated to tester per ADR-0003 — `crates/tui/tests/subtasks.rs` 16/16 green
+  (also server 21/21, contract DTO + doctests). Read-only honored; stack torn down (`down`, no `-v`).
+  Satisfies DoD clause 4. → clear for step-7 freshen + `awaiting-merge`.
