@@ -2,7 +2,7 @@
 id: 0019
 title: Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0016]  # builds on the task detail view + final hotkey scheme (merged)
@@ -321,6 +321,14 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   empty). TUI side delegated to tester per ADR-0003 — `crates/tui/tests/subtasks.rs` 16/16 green
   (also server 21/21, contract DTO + doctests). Read-only honored; stack torn down (`down`, no `-v`).
   Satisfies DoD clause 4. → clear for step-7 freshen + `awaiting-merge`.
+- 2026-06-29 [orchestrator] Step-7 freshen: rebased branch onto `main@6726967` (eng-manager
+  learnings + dashboard + idea 0007). Only conflict was this feature-local Board file (main's
+  frozen-pointer note), resolved in favour of the branch. `main`'s CLAUDE.md #3 amendment applied
+  cleanly. **code-hash unchanged at `8c500ca092b3c37ec4e95475b794053e470c9077`** (== attested hash)
+  — the rebase touched no code, so the reviewer `approved` + verifier `verified` verdicts carry
+  forward **untouched** (no relabelling; CLAUDE.md "Verdict pinning"). Re-ran gates on the rebased
+  tree: `./ok.sh fmt --check`/`lint`/`test` all green. Board-only freshen → does not retrigger
+  review/verify.
 
 ## Summary
 
