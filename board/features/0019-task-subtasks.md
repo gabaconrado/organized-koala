@@ -321,3 +321,66 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   empty). TUI side delegated to tester per ADR-0003 — `crates/tui/tests/subtasks.rs` 16/16 green
   (also server 21/21, contract DTO + doctests). Read-only honored; stack torn down (`down`, no `-v`).
   Satisfies DoD clause 4. → clear for step-7 freshen + `awaiting-merge`.
+
+## Summary
+
+Sub-tasks shipped end-to-end across all three crates — a bounded, one-level, title+status-only
+child of a task (no description, no `created_at`, no detail view), created/edited/toggled/
+collapsed from the Tasks tab and the Task Detail page.
+
+- **contract** — `Subtask { id, task_id, title, status }` (reusing `TaskStatus`),
+  `CreateSubtaskRequest { title }`, `UpdateSubtaskRequest { title?, status? }` (optional fields
+  `skip_serializing_if`, `Default`), re-exported from `lib.rs`. `Task`/`TaskStatus`/the existing
+  request DTOs byte-untouched (#2).
+- **server** — paired reversible migration `20260612163051_subtasks.{up,down}.sql`: a `subtasks`
+  table with `task_id` FK to `tasks` **`ON DELETE CASCADE`** (the no-orphans guarantee, R4), a
+  `status` CHECK (open/done), internal `created_at`, index on `(task_id, created_at)`; `down` =
+  `DROP TABLE`. Five handlers (`crates/server/src/handlers/subtasks.rs`): list-per-task,
+  create (`201`, starts `open`, blank title → `400 validation_failed`), patch (all-optional,
+  empty patch a `200` no-op), delete (`204`/`404`), list-per-profile (for the Tasks-tab tree
+  load). Each passes `assert_owned(pid)` then a query joined `subtasks → tasks` on `task_id` AND
+  `tasks.profile_id = $pid` — cross-profile / wrong-parent reach is `404`, indistinguishable from
+  absent. Reuses `validation_failed`/`not_found`, no new `ErrorCode`. `.sqlx/` refreshed.
+- **tui** — five `Client` methods + `HttpClient` impls, `ClientRequest`/`Outcome` variants,
+  worker arms, `Event::BeginAddSubtask`/`ToggleCollapse`. The Tasks-tab list does a **two-call
+  tree load** (`ListTasks` → `ListSubtasks` chained), holding `subtasks: Vec<Subtask>` plus a
+  transient per-parent `collapse_overrides` map; a `VisibleRow` selection model traverses only
+  visible rows. Keys (Tasks context): **`A`** create-sub-task (Shift+a; `a` stays add-task),
+  **`e`** edit-title and **`Space`** toggle (routed to the selected sub-task row, else the task),
+  **`x`** toggle collapse/expand. Collapse derives from parent status each render (open →
+  expanded, done → collapsed) unless an `x` override exists; list indicator `+` only when a task
+  has collapsed sub-tasks, else `>`; sub-task rows indented one level. Task Detail gains a
+  read-only "Sub-tasks" section (title+status, not focusable — a sub-task has no detail view).
+  Defines no DTO of its own (#2).
+
+**ADRs:** [ADR-0012][adr-0012] amends hard-constraint #3 to admit sub-tasks as a bounded,
+one-level, title+status-only exception; [ADR-0013][adr-0013] is the wire contract (the `Subtask`
+DTO, the profile+parent-scoped endpoints, the reversible `subtasks` migration + `ON DELETE
+CASCADE`). Both authored and committed to `main` before the worktree was cut.
+
+**Assumptions realized:** A1 — sub-tasks profile-scoped *via their parent task* (no `profile_id`
+column; every query joins `subtasks → tasks`, cross-reach `404`). A2 — collapse state TUI-local,
+derived, transient (#1; no server storage, no DTO field; `x` sets a process-lifetime override).
+A3 — exactly one level of nesting (no `parent_subtask_id`, structurally enforced). R4 — cascade
+correctness rests on the FK; both task-delete and profile-delete cascade tested (no addressable
+orphan).
+
+**Tests:** contract `tests/subtask.rs` (14: ser/de round-trips, `skip_serializing_if`,
+empty-patch `{}`); server `tests/subtasks.rs` (21 `#[sqlx::test]`: CRUD, creation-order,
+blank-title `400`, empty-patch no-op, parent- and profile-scoping `404`, cascade R4); tui
+`tests/subtasks.rs` (16 TestBackend: `A`/`e`/`Space`/`x`, `+`/`>` indicator, indented render,
+Detail section, collapse-default-from-parent-status, selection traversal across a collapsed
+parent). Tester also un-stranded the `crates/tui/tests/` harness (the fake `Client`'s five new
+methods, worker-analogue arms, `TaskListState` fields, DTO builders, and the auto-chained
+tree-load defaulting to empty for the ~163 unscripted flows).
+
+**Verdicts** (both pinned to code-hash `8c500ca092b3c37ec4e95475b794053e470c9077`): reviewer
+**REVIEW-STATUS: approved** (commit `c39c816`); verifier **VERIFY-STATUS: verified** (live boot,
+all five endpoints exercised + error contract + profile/parent-scoping + cascade + OTel spans;
+TUI suite 16/16 green per ADR-0003).
+
+coverage: 71.22% (`./ok.sh coverage` in the worktree; docker + throwaway test Postgres booted
+cleanly). Report-only — never a gate.
+
+[adr-0012]: ../../docs/adr/0012-subtasks-domain-exception.md
+[adr-0013]: ../../docs/adr/0013-subtasks-wire-contract.md
