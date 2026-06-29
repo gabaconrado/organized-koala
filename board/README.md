@@ -56,10 +56,10 @@ backlog".
 | [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | merged | medium | 0015 (merged ✓) | — (merged) |
 | [0017](./features/0017-timer-completion-desktop-notification.md) | Desktop notification when the focus timer ends (cross-OS, Ubuntu-first) | feature | merged | medium | 0008 (merged ✓) | — (merged) |
 | [0018](./features/0018-notes-detail-multiline-content.md) | Notes detail view — multiline Content text area (fills the pane), Created moved above | feature | merged | medium | 0016 (merged ✓) | — (merged) |
-| [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | ready (branch-owned: awaiting-merge after help-overlay re-entry) | medium | 0016 (merged ✓) | feature/0019-task-subtasks |
+| [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | merged | medium | 0016 (merged ✓) | — (merged) |
 
-> **0019 — Sub-tasks — back at `awaiting-merge` on `feature/0019-task-subtasks` after a
-> help-overlay re-entry (re-approved + re-verified).** The **first admitted structural exception to
+> **0019 — Sub-tasks — `merged`** (operator-authorised ff-merge; `main` @ `540fe4e`). The
+> **first admitted structural exception to
 > the deliberately-flat domain (#3)**: a task may have **one level** of **title+status-only**
 > sub-tasks (no description, no `created_at`, no detail view), per
 > [ADR-0012](../docs/adr/0012-subtasks-domain-exception.md) (amends #3) +

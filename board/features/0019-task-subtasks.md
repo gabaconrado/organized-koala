@@ -2,7 +2,7 @@
 id: 0019
 title: Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse
 type: feature      # feature | chore
-status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0016]  # builds on the task detail view + final hotkey scheme (merged)
