@@ -2,7 +2,7 @@
 id: 0019
 title: Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse
 type: feature      # feature | chore
-status: ready          # FROZEN at claim snapshot — authoritative copy is on feature/0019-task-subtasks (claimed 2026-06-29)
+status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0016]  # builds on the task detail view + final hotkey scheme (merged)
@@ -232,3 +232,7 @@ to `tasks`). **Both authored and committed to `main` before the worktree is cut.
 collapse is derived/transient; #2 contract is sole source — TUI defines no DTO; #3 amended by
 ADR-0012 to a bounded exception; #4 profile-scoping structural via parent join; #5/#6 untouched)
 and the feature-track DoD. No genuine fork remains open. → `status: ready`.
+
+- 2026-06-29 [orchestrator] Claimed → `working`. Worktree `.claude/worktrees/0019-task-subtasks`
+  / branch `feature/0019-task-subtasks` cut from `main@e80909b` (carries ADR-0012/0013 + plan).
+  Build order per plan: contract-owner → server-dev → tui-dev → tester. Session: drive/0019.
