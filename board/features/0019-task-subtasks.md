@@ -2,7 +2,7 @@
 id: 0019
 title: Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse
 type: feature      # feature | chore
-status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0016]  # builds on the task detail view + final hotkey scheme (merged)
@@ -84,6 +84,9 @@ detailed view of its own. Sub-tasks are created, edited, toggled, and collapsed 
 - [ ] 2026-06-29 [human] Filed: add sub-tasks. See acceptance points 1–9 above. I know I
   said no subtasks at the start — I want them now; treat the ADR amending hard-constraint #3
   as part of this work.
+- [ ] 2026-06-29 [human] Bug in the help (`?`) dialog: with the new sub-task hotkeys the Tasks
+  line's `d delete` wraps to the next line with no tabbing/indentation. Make it a borderless
+  table (so indentation is correct automatically) or widen the dialog.
 
 ## Plan(s)
 
@@ -329,6 +332,17 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   forward **untouched** (no relabelling; CLAUDE.md "Verdict pinning"). Re-ran gates on the rebased
   tree: `./ok.sh fmt --check`/`lint`/`test` all green. Board-only freshen → does not retrigger
   review/verify.
+- 2026-06-29 [orchestrator] Re-entry from `awaiting-merge` on `[human]` help-dialog feedback.
+  Triage: TUI-presentation-only rendering bug — the `?` help overlay's Tasks line
+  (`ui/mod.rs` `draw_help`, body line `Tasks … · d delete`) is exactly 64 chars and overflows
+  the 62-col inner area of the `DIALOG_WIDTH = 64` box by 2, so `Wrap` reflows `d delete` to a
+  flush-left, un-indented continuation. The 0019 additions (`A add sub-task`, `x collapse/expand`)
+  pushed it over. **No contract / domain / server change → no ADR; behaviour tweak ⇒ re-enter at
+  `working`** (CLAUDE.md feedback re-entry). This is a code change, so the `approved`/`verified`
+  verdicts pinned to `8c500ca0…` are **void** on the new tree and the item re-runs review + verify.
+  Fix direction (human-preferred): render the help reference as a **borderless table** so per-row
+  indentation is automatic, or widen the help box. `tui-dev` owns `draw_help` in `src/`; `tester`
+  updates the help-overlay `TestBackend` assertion in `tests/`. → `status: working`.
 
 ## Summary
 
