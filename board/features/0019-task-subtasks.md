@@ -2,7 +2,7 @@
 id: 0019
 title: Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse
 type: feature      # feature | chore
-status: inbox          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: ready          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0016]  # builds on the task detail view + final hotkey scheme (merged)
@@ -84,3 +84,151 @@ detailed view of its own. Sub-tasks are created, edited, toggled, and collapsed 
 - [ ] 2026-06-29 [human] Filed: add sub-tasks. See acceptance points 1–9 above. I know I
   said no subtasks at the start — I want them now; treat the ADR amending hard-constraint #3
   as part of this work.
+
+## Plan(s)
+
+### Plan: Sub-tasks — flat title/status children of a task, list nesting + collapse
+
+**Approach (tracer-bullet, then widen).** Build the thinnest end-to-end slice first: the
+`Subtask` DTO in `contract`, the `subtasks` table + the **create** and **per-profile list**
+endpoints in `server`, the matching `Client` methods + the Tasks-tab two-call tree load and
+indented rendering in `tui` — so a real `A`-create flows TUI → contract → server → Postgres and
+the new sub-task renders indented under its parent on the next list load. That proves every seam
+(new table, FK cascade, profile-scoped join, list assembly, indented render). Then widen with the
+remaining mutations (edit-title, toggle, delete + cascade), the `+`/`>` indicator and `x`
+collapse, and the Task Detail "Sub-tasks" section. Single Board item, sliced by crate +
+dependency order; the contract→server→tui dependency chain is strict (each consumes the prior).
+
+**ADR:** **ADR-0012** (amends hard-constraint #3 to admit sub-tasks as a bounded, one-level,
+title+status-only exception) **and ADR-0013** (the wire contract: `Subtask` DTO, the
+profile+parent-scoped endpoints, the reversible `subtasks` migration with the `ON DELETE CASCADE`
+to `tasks`). **Both authored and committed to `main` before the worktree is cut.**
+
+**Slices (dependency order; each bounded by crate ownership):**
+
+1. **[contract-owner]** Add the sub-task wire types to the `task` module (ADR-0013 §1–2) — files:
+   `crates/contract/src/task/mod.rs` (+ `crates/contract/src/task/tests.rs` only if private logic
+   appears; this is a pure-DTO crate so the crate-root `tests/` public-API suite + doctests are the
+   correct home — `tester` owns those). Adds `Subtask { id, task_id, title, status }` (reusing
+   `TaskStatus`), `CreateSubtaskRequest { title }`, and `UpdateSubtaskRequest { title?, status? }`
+   (each `Option` field `skip_serializing_if = "Option::is_none"`; derive `Default`). Re-export
+   from `crates/contract/src/lib.rs` alongside the existing task types. snake_case / UUID-string /
+   lowercase-status conventions (ADR-0005 §1). Each public type derives `Debug` + carries a
+   doctest (rust-standards). **No change to `Task`/`TaskStatus`/`CreateTaskRequest`/
+   `UpdateTaskRequest`.**
+
+2. **[server-dev]** Persistence + endpoints (ADR-0013 §3–6) — files:
+   `crates/server/migrations/<ts>_subtasks.up.sql` + `<ts>_subtasks.down.sql` (new, paired
+   reversible: `subtasks` table with `task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE`,
+   `title TEXT`, `status TEXT CHECK (status IN ('open','done')) DEFAULT 'open'`, internal
+   `created_at TIMESTAMPTZ DEFAULT now()`, index on `(task_id, created_at)`; `down.sql` =
+   `DROP TABLE subtasks`); `crates/server/src/handlers/subtasks.rs` (new); register routes in
+   `crates/server/src/app.rs`; declare the module in `crates/server/src/handlers/mod.rs`; refresh
+   `.sqlx/` via `./ok.sh prepare`. Five handlers, each passing the existing `assert_owned(pid)` gate
+   then a query **joined to `tasks` on `task_id` AND `tasks.profile_id = $pid`** (ADR-0013 §4):
+   - `GET  /api/profiles/{pid}/tasks/{tid}/subtasks` → `200 [Subtask]`, creation order.
+   - `POST /api/profiles/{pid}/tasks/{tid}/subtasks` → `201 Subtask`, starts `open`; blank title →
+     `400 validation_failed`; missing/unowned parent task → `404`.
+   - `PATCH /api/profiles/{pid}/tasks/{tid}/subtasks/{sid}` → `200 Subtask`, all-optional partial
+     (title and/or status); empty patch is a no-op; blank title → `400`; missing → `404`.
+   - `DELETE /api/profiles/{pid}/tasks/{tid}/subtasks/{sid}` → `204`; second/missing → `404`.
+   - `GET  /api/profiles/{pid}/subtasks` → `200 [Subtask]` (all the profile's sub-tasks, for the
+     Tasks-tab tree load; selects `subtasks` joined to `tasks WHERE tasks.profile_id = $pid`).
+
+   No new `ErrorCode`; reuse `validation_failed` / `not_found`. `tasks`/`notes`/`profiles` schema
+   and handlers untouched. Cascade-on-task-delete needs **no** handler code — it is the FK.
+
+3. **[tui-dev]** Client boundary + interaction + rendering (ADR-0013 §3, ADR-0012 §5) — files:
+   `crates/tui/src/client/mod.rs` (five `Client` trait methods + `HttpClient` impls, mirroring the
+   task methods); `crates/tui/src/app/protocol.rs` (`ClientRequest` + `Outcome` variants for the
+   five calls); `crates/tui/src/client/worker.rs` (map each new `ClientRequest` to its client call);
+   `crates/tui/src/app/mod.rs` (new `Event` variants: `BeginAddSubtask`, `ToggleCollapse`; thread
+   apply_response folding for the new outcomes); `crates/tui/src/app/task_list.rs` (hold the
+   profile's `Vec<Subtask>` alongside `tasks`, the two-call tree load on list refresh, per-parent
+   in-session collapse override map, `A`/`e`/`Space`/`x` handling **scoped to the Tasks context**,
+   selection model spanning task + visible sub-task rows); `crates/tui/src/app/task_detail.rs`
+   (the "Sub-tasks" section listing title+status; sub-task rows are **not** focusable detail panes —
+   a sub-task has no detail view, ADR-0012 §1); `crates/tui/src/terminal/mod.rs` (`map_key`: bind
+   `A` (Shift+a) → `BeginAddSubtask`, `x` → `ToggleCollapse`, both Tasks-tab/idle only; confirm no
+   live collision — see Risks); `crates/tui/src/ui/mod.rs` (indent sub-task rows one level under
+   their parent; parent indicator `+` when it has collapsed sub-tasks, else `>`).
+   - **Collapse default derives from parent status each render** (ADR-0012 §5): open parent →
+     expanded, closed parent → collapsed, **unless** the in-session override map has an entry for
+     that parent id (set by `x`). The override map is transient process-lifetime UI state (#1) —
+     never persisted, keyed by task id, reset on a fresh list load for a task no longer present.
+   - **`e` and `Space` act on a sub-task when a sub-task row is selected**, on the task when a task
+     row is selected (the existing task `e`/`Space` paths stay for task rows). `A` always adds a
+     sub-task to the *parent* task of the current selection (the selected task, or the selected
+     sub-task's parent). Defines **no** DTO of its own (#2).
+
+4. **[tester]** Tests across all three crates — files: `crates/contract/tests/…` (sub-task DTO
+   ser/de round-trips, `skip_serializing_if`, empty-patch `{}`); `crates/server/tests/…`
+   (integration over the public API: create/list/edit/toggle/delete; **profile-scoping** — a
+   sub-task under another profile's task is `404`; **parent-scoping** — wrong `{tid}` is `404`;
+   **cascade** — deleting a parent task removes its sub-tasks, deleting a profile removes them
+   transitively; creation-order list; blank-title `400`); `crates/tui` `TestBackend` suite via the
+   `common` harness with the fake `Client` (ADR-0003 layer-2): `A` create, `e` edit-title, `Space`
+   toggle, `x` collapse/expand override, the `+`/`>` indicator, indented render, the Detail
+   "Sub-tasks" section, collapse-default-from-parent-status, selection traversal over task +
+   sub-task rows. Every cited coverage names a real test (coding-standards).
+
+**Assumptions (ambiguity policy — every fork resolved here):**
+
+- **A1 — Sub-tasks are profile-scoped *via their parent task*, not independently** (#4 / ADR-0012
+  §3). Every query joins `subtasks → tasks` and filters `tasks.profile_id = $pid`; no `profile_id`
+  column on `subtasks`. Cross-profile/parent reach is `404` (ADR-0005 §4).
+- **A2 — Collapse state is TUI-local, derived, transient** (#1 / ADR-0012 §5). No server storage,
+  no DTO field. Initial state derived from parent status **each render**; `x` sets an in-session,
+  process-lifetime override. Card point 7's "Defaults" is read as the *initial* render state, not
+  persisted state — reconciled with #1 by deriving it rather than storing it.
+- **A3 — Exactly one level of nesting** (ADR-0012 §2): a sub-task cannot have sub-tasks; the
+  schema has no `parent_subtask_id`, structurally enforcing it.
+- **A4 — Closing a parent sets the *initial* collapse default only; it does not forcibly collapse
+  an already-overridden expansion.** Resolving card open-question 4: "by default" = the derived
+  initial state; once the user presses `x` on a parent, that in-session override wins until the
+  override is cleared (a fresh load drops overrides for absent task ids). A toggle-done that flips a
+  parent's status changes the *derived* default, but an explicit prior `x` override for that parent
+  still takes precedence (last explicit user intent wins).
+- **A5 — Sub-tasks ordered by creation order** (ADR-0013 §3): `created_at ASC` internally;
+  `created_at` is **not** exposed on the wire.
+- **A6 — Tasks-tab list loads sub-tasks in one extra call** via `GET …/subtasks` (ADR-0013 §3),
+  grouped under parents by `task_id` client-side — two round-trips total, no N+1. The Task Detail
+  "Sub-tasks" section uses the per-task `GET …/tasks/{tid}/subtasks` (it is already focused on one
+  task) **or** filters the already-loaded profile set — `tui-dev`'s choice, bounded to no new wire.
+- **A7 — `A` = Shift+a is the add-sub-task key; `x` = toggle-collapse.** Per the card, `a` stays
+  add-task, `A` adds a sub-task; `x` (freed when 0016 remapped delete to `d`) is collapse. The plan
+  *requires* `tui-dev` to confirm no live binding owns `A`/`x` on the Tasks tab before wiring (see
+  Risks R1).
+- **A8 — A sub-task has no detail view** (ADR-0012 §1): selecting one and pressing `Enter` does
+  **not** open a per-field pane; `Enter` on a sub-task row is inert (or, `tui-dev`'s call, opens the
+  *parent* task's detail — default: inert, smallest behaviour).
+- **A9 — Single Board item.** The work is cohesive and strictly ordered (contract → server → tui →
+  tests); splitting would create cross-branch contract churn. Kept as one well-sliced item.
+
+**Risks:**
+
+- **R1 — Keymap collision (`A`, `x`).** `x` was pre-0016 delete; 0016 remapped delete → `d`, so `x`
+  should be free, and `A`/Shift+a is new. **Mitigation:** `tui-dev` greps `map_key` and the keymap
+  tests for any live `A`/`x` binding on the Tasks tab before wiring; the `map_key` keybinding tests
+  pin the new bindings so nothing silently regresses. If a live collision exists, it is a genuine
+  fork → block and ask. (Card point 7 explicitly asks planning to confirm this.)
+- **R2 — Selection model complexity.** The Tasks list now interleaves task and sub-task rows with
+  collapse hiding some; selection must traverse only *visible* rows and know whether the cursor is
+  on a task or a sub-task (routing `e`/`Space`/`A`). Blast radius is contained to `task_list.rs` +
+  `ui/mod.rs`; the `TestBackend` suite must cover traversal across a collapsed parent.
+- **R3 — Two-call list consistency.** Tasks and sub-tasks load in two requests; a sub-task whose
+  parent is absent from the task list (a race) must render safely (dropped/ignored), not panic.
+  Mitigation: group defensively by `task_id`, ignore orphans in the view.
+- **R4 — Cascade correctness.** The no-orphans guarantee rests entirely on the FK
+  `ON DELETE CASCADE`; the reviewer must confirm the down-migration drops the table and the
+  `tester` integration test exercises both task-delete and profile-delete cascade paths.
+- **R5 — Grill candidate (noted, resolved via Assumptions under AFK).** The collapse-override vs.
+  derived-default interaction (A4) and the selection traversal (R2) are the two spots a `grill`
+  would harden. Under the AFK posture they are resolved by the Assumptions above; if the operator
+  prefers, a `grill` on A4/R2 before `tui-dev` starts would de-risk the interaction model. Not
+  blocking.
+
+**Self-acceptance:** plan + both ADRs reviewed against CLAUDE.md hard constraints (#1 stateless —
+collapse is derived/transient; #2 contract is sole source — TUI defines no DTO; #3 amended by
+ADR-0012 to a bounded exception; #4 profile-scoping structural via parent join; #5/#6 untouched)
+and the feature-track DoD. No genuine fork remains open. → `status: ready`.
