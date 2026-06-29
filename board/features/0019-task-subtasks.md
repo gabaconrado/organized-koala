@@ -381,6 +381,18 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   reviewer swapped in the pre-fix source and the test FAILED with the exact marooned-`delete` buffer,
   then restored. Satisfies DoD clause 6. Non-blocking nit (idea candidate, not dragged in): the new
   test comment cites the fixing commit sha inline (coding-standards "no dev context in comments").
+  → captured as idea 0008 on `main` (not minted as work).
+- 2026-06-29 [verifier] **VERIFY-STATUS: verified** `da5b04634dcedc3a6df38ef65958548981d83775`.
+  Re-entry verify, scoped to the presentation-only fix per ADR-0003. Confirmed `git diff
+  --name-only 7f231b0..HEAD -- crates/contract crates/server` is **empty** — no endpoint / reqwest
+  client-path / wire-DTO / migration change — so the **live-stack-boot portion is N/A** (nothing
+  new to exercise server-side); the prior live verification of 0019's five sub-task endpoints
+  (`verified @ 8c500ca0`) carries forward on the byte-unchanged server surface. TUI side (the home
+  of help-overlay rendering per ADR-0003): `crates/tui/tests/dialogs.rs` green 24/24 incl. the new
+  `help_modal_tasks_line_renders_intact_without_wrapping_d_delete`. Mechanical gates clean
+  (`./ok.sh fmt --check`/`lint --all-targets`/`test`, workspace exit 0). Read-only honored, no
+  stack booted (added no signal), no scratch left. Satisfies DoD clause 4. → clear for step-7
+  freshen + `awaiting-merge`.
 
 ## Summary
 
