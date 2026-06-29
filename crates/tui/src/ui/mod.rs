@@ -267,6 +267,38 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
                 hint: "Enter: save | Tab: switch field | Esc: cancel",
             },
         );
+    } else if let Some(add) = &list.adding_subtask {
+        draw_dialog(
+            frame,
+            &Dialog {
+                title: "Add sub-task",
+                fields: vec![DialogField {
+                    label: "Title",
+                    value: &add.title,
+                    focused: true,
+                    masked: false,
+                }],
+                body: Vec::new(),
+                error: add.error.as_deref(),
+                hint: "Enter: save | Esc: cancel",
+            },
+        );
+    } else if let Some(edit) = &list.editing_subtask {
+        draw_dialog(
+            frame,
+            &Dialog {
+                title: "Edit sub-task",
+                fields: vec![DialogField {
+                    label: "Title",
+                    value: &edit.title,
+                    focused: true,
+                    masked: false,
+                }],
+                body: Vec::new(),
+                error: edit.error.as_deref(),
+                hint: "Enter: save | Esc: cancel",
+            },
+        );
     } else if list.confirming_delete.is_some() {
         draw_dialog(
             frame,
@@ -415,7 +447,8 @@ fn draw_help(frame: &mut Frame) {
         Line::from("  q                 quit"),
         Line::from("  ? / Esc           close help"),
         Line::from(""),
-        Line::from("Tasks    a add · e edit · Space done · d delete · Enter detail"),
+        Line::from("Tasks    a add · A add sub-task · e edit · Space done · d delete"),
+        Line::from("         x collapse/expand sub-tasks · Enter detail"),
         Line::from("Notes    a add · e edit · d delete · Enter detail"),
         Line::from("Profiles Enter switch · a add · e rename · d delete"),
         Line::from(""),
@@ -802,7 +835,9 @@ fn draw_detail_panes(frame: &mut Frame, area: Rect, title: &str, panes: &[Detail
 }
 
 /// Render the task detail view: Title/Description editable, Status/Created/Closed read-only, with
-/// the focused editable pane purple-bordered. An in-progress edit shows the live buffer value.
+/// the focused editable pane purple-bordered, and a read-only "Sub-tasks" section below listing
+/// each sub-task's title + status (ADR-0012 §1 — sub-task rows here are **not** focusable panes).
+/// An in-progress edit shows the live buffer value.
 fn draw_task_detail(frame: &mut Frame, area: Rect, detail: &TaskDetail) {
     let task = &detail.task;
     let panes: Vec<DetailPane> = detail
@@ -834,7 +869,50 @@ fn draw_task_detail(frame: &mut Frame, area: Rect, detail: &TaskDetail) {
             }
         })
         .collect();
-    draw_detail_panes(frame, area, "Task", &panes);
+    // Reserve the upper part of the area for the per-field panes and the lower part for the
+    // read-only "Sub-tasks" section. The panes take their fixed 3-row boxes; the section fills the
+    // remainder, with a minimum so it is always visible.
+    let pane_rows = u16::try_from(detail.panes.len())
+        .unwrap_or(0)
+        .saturating_mul(3)
+        .saturating_add(2); // the surrounding "Task" block's top+bottom border
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(pane_rows), Constraint::Min(3)])
+        .split(area);
+    if let Some(slot) = chunks.first() {
+        draw_detail_panes(frame, *slot, "Task", &panes);
+    }
+    if let Some(slot) = chunks.get(1) {
+        draw_task_subtasks_section(frame, *slot, &detail.subtasks);
+    }
+}
+
+/// Render the read-only "Sub-tasks" section of the task detail: one line per sub-task, each its
+/// status marker + title (ADR-0012 §1 — no per-field view, not focusable). An empty section shows
+/// a placeholder line.
+fn draw_task_subtasks_section(frame: &mut Frame, area: Rect, subtasks: &[contract::Subtask]) {
+    let block = Block::default().borders(Borders::ALL).title("Sub-tasks");
+    let lines: Vec<Line> = if subtasks.is_empty() {
+        vec![Line::from(Span::raw("(no sub-tasks)"))]
+    } else {
+        subtasks
+            .iter()
+            .map(|subtask| {
+                Line::from(format!(
+                    "{} {}",
+                    status_marker(subtask.status),
+                    subtask.title
+                ))
+            })
+            .collect()
+    };
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        area,
+    );
 }
 
 /// The live edit buffer when this pane is being edited, else the snapshot `value`.
@@ -857,27 +935,57 @@ fn task_pane_label(pane: TaskPane) -> &'static str {
     }
 }
 
+/// The status marker for a task or sub-task: `[x]` done, `[ ]` open.
+fn status_marker(status: TaskStatus) -> &'static str {
+    match status {
+        TaskStatus::Done => "[x]",
+        TaskStatus::Open => "[ ]",
+    }
+}
+
 /// Render the Tasks pane (the active profile's task list, or the open detail view) into `area`. The
 /// title, tab bar, message line, and footer are owned by [`draw_main`].
+///
+/// The list interleaves task rows and (indented one level) sub-task rows, walking only the
+/// **visible** rows (sub-tasks under a collapsed parent are absent). A task's leading indicator is
+/// `+` when it has sub-tasks **and** they are collapsed, else `>` (the card's A8 indicator rule);
+/// the selection highlight is the reversed style on the selected visible row.
 fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
     if let Some(detail) = &list.detail {
         draw_task_detail(frame, area, detail);
         return;
     }
     let items: Vec<ListItem> = list
-        .tasks
-        .iter()
-        .map(|task| {
-            let marker = match task.status {
-                TaskStatus::Done => "[x]",
-                TaskStatus::Open => "[ ]",
-            };
-            ListItem::new(Line::from(format!("{marker} {}", task.title)))
+        .visible_rows()
+        .into_iter()
+        .filter_map(|row| match row {
+            crate::app::VisibleRow::Task { task_idx } => list.tasks.get(task_idx).map(|task| {
+                // `+` only when the task has sub-tasks AND they are collapsed; otherwise `>`.
+                let indicator = if list.has_subtasks(task) && list.is_collapsed(task) {
+                    '+'
+                } else {
+                    '>'
+                };
+                ListItem::new(Line::from(format!(
+                    "{indicator} {} {}",
+                    status_marker(task.status),
+                    task.title
+                )))
+            }),
+            crate::app::VisibleRow::Subtask { subtask_idx } => {
+                list.subtasks.get(subtask_idx).map(|subtask| {
+                    // Sub-task rows are indented one level under their parent task.
+                    ListItem::new(Line::from(format!(
+                        "    {} {}",
+                        status_marker(subtask.status),
+                        subtask.title
+                    )))
+                })
+            }
         })
         .collect();
     let widget = List::new(items)
         .block(Block::default().borders(Borders::ALL).title("Tasks"))
-        .highlight_symbol("> ")
         .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
     let mut state = ListState::default();
     state.select(list.selected);

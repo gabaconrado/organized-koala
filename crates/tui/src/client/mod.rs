@@ -12,9 +12,10 @@ pub mod worker;
 pub use notify::{DesktopNotifier, Notifier};
 
 use contract::{
-    CreateNoteRequest, CreateProfileRequest, CreateTaskRequest, ErrorBody, ErrorCode, LoginRequest,
-    Note, Profile, RegisterRequest, SessionResponse, Task, TimerConfig, TimerSession,
-    UpdateNoteRequest, UpdateProfileRequest, UpdateTaskRequest, UpdateTimerConfigRequest,
+    CreateNoteRequest, CreateProfileRequest, CreateSubtaskRequest, CreateTaskRequest, ErrorBody,
+    ErrorCode, LoginRequest, Note, Profile, RegisterRequest, SessionResponse, Subtask, Task,
+    TimerConfig, TimerSession, UpdateNoteRequest, UpdateProfileRequest, UpdateSubtaskRequest,
+    UpdateTaskRequest, UpdateTimerConfigRequest,
 };
 
 /// A failure from a client call.
@@ -152,6 +153,55 @@ pub trait Client {
     /// `DELETE /api/profiles/{profile_id}/tasks/{task_id}` — delete a task (`204`, no body). A
     /// missing/unowned task is a `not_found` [`ClientError::Api`].
     fn delete_task(&self, token: &str, profile_id: &str, task_id: &str) -> ClientResult<()>;
+
+    /// `GET /api/profiles/{profile_id}/subtasks` — every sub-task in the profile, grouped under
+    /// its parent task client-side. The Tasks-tab tree load: tasks plus this single call assemble
+    /// the nested list in two round-trips, avoiding an N+1 fetch (ADR-0013 §3).
+    fn list_subtasks(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Subtask>>;
+
+    /// `GET /api/profiles/{profile_id}/tasks/{task_id}/subtasks` — one parent task's sub-tasks,
+    /// in creation order. Backs the Task Detail page's "Sub-tasks" section. An unowned/missing
+    /// profile or parent task is a `not_found` [`ClientError::Api`].
+    fn list_task_subtasks(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+    ) -> ClientResult<Vec<Subtask>>;
+
+    /// `POST /api/profiles/{profile_id}/tasks/{task_id}/subtasks` — create a sub-task under a
+    /// parent task, returning the created [`Subtask`] (starts `open`). A blank title is a
+    /// `validation_failed` [`ClientError::Api`]; a missing/unowned parent task is `not_found`.
+    fn create_subtask(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        req: &CreateSubtaskRequest,
+    ) -> ClientResult<Subtask>;
+
+    /// `PATCH /api/profiles/{profile_id}/tasks/{task_id}/subtasks/{subtask_id}` — apply a partial
+    /// update (title and/or status) to a sub-task, returning the updated [`Subtask`]. A blank
+    /// title is a `validation_failed` [`ClientError::Api`]; a missing/unowned sub-task is
+    /// `not_found`.
+    fn update_subtask(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        subtask_id: &str,
+        req: &UpdateSubtaskRequest,
+    ) -> ClientResult<Subtask>;
+
+    /// `DELETE /api/profiles/{profile_id}/tasks/{task_id}/subtasks/{subtask_id}` — delete a
+    /// sub-task (`204`, no body). A missing/unowned sub-task is a `not_found` [`ClientError::Api`].
+    fn delete_subtask(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        subtask_id: &str,
+    ) -> ClientResult<()>;
 
     /// `GET /api/profiles/{profile_id}/notes` — the profile's notes, newest-first.
     fn list_notes(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Note>>;
@@ -455,6 +505,116 @@ impl Client for HttpClient {
         let status = resp.status();
         if status.is_success() {
             // `204 No Content`: success carries no body to decode.
+            Ok(())
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn list_subtasks(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Subtask>> {
+        let resp = self
+            .http
+            .get(self.url(&format!("/api/profiles/{profile_id}/subtasks")))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn list_task_subtasks(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+    ) -> ClientResult<Vec<Subtask>> {
+        let resp = self
+            .http
+            .get(self.url(&format!(
+                "/api/profiles/{profile_id}/tasks/{task_id}/subtasks"
+            )))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn create_subtask(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        req: &CreateSubtaskRequest,
+    ) -> ClientResult<Subtask> {
+        let resp = self
+            .http
+            .post(self.url(&format!(
+                "/api/profiles/{profile_id}/tasks/{task_id}/subtasks"
+            )))
+            .bearer_auth(token)
+            .json(req)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn update_subtask(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        subtask_id: &str,
+        req: &UpdateSubtaskRequest,
+    ) -> ClientResult<Subtask> {
+        let resp = self
+            .http
+            .patch(self.url(&format!(
+                "/api/profiles/{profile_id}/tasks/{task_id}/subtasks/{subtask_id}"
+            )))
+            .bearer_auth(token)
+            .json(req)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            decode(resp)
+        } else {
+            Err(api_error(status, resp))
+        }
+    }
+
+    fn delete_subtask(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        subtask_id: &str,
+    ) -> ClientResult<()> {
+        let resp = self
+            .http
+            .delete(self.url(&format!(
+                "/api/profiles/{profile_id}/tasks/{task_id}/subtasks/{subtask_id}"
+            )))
+            .bearer_auth(token)
+            .send()
+            .map_err(offline)?;
+        let status = resp.status();
+        if status.is_success() {
+            // `204 No Content` carries no body; success is the status alone.
             Ok(())
         } else {
             Err(api_error(status, resp))

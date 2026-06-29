@@ -9,9 +9,10 @@
 //! and the bearer token, never a live connection.
 
 use contract::{
-    CreateNoteRequest, CreateProfileRequest, CreateTaskRequest, LoginRequest, Note, Profile,
-    RegisterRequest, SessionResponse, Task, TimerConfig, TimerSession, UpdateNoteRequest,
-    UpdateProfileRequest, UpdateTaskRequest, UpdateTimerConfigRequest,
+    CreateNoteRequest, CreateProfileRequest, CreateSubtaskRequest, CreateTaskRequest, LoginRequest,
+    Note, Profile, RegisterRequest, SessionResponse, Subtask, Task, TimerConfig, TimerSession,
+    UpdateNoteRequest, UpdateProfileRequest, UpdateSubtaskRequest, UpdateTaskRequest,
+    UpdateTimerConfigRequest,
 };
 
 use crate::app::token::SessionToken;
@@ -99,6 +100,60 @@ pub enum ClientRequest {
         profile_id: String,
         /// The task to delete.
         task_id: String,
+    },
+    /// `GET /api/profiles/{profile_id}/subtasks` — every sub-task in the profile (the Tasks-tab
+    /// tree load's second call; grouped under parents client-side).
+    ListSubtasks {
+        /// The bearer token to authenticate with.
+        token: SessionToken,
+        /// The profile namespace to list.
+        profile_id: String,
+    },
+    /// `GET /api/profiles/{profile_id}/tasks/{task_id}/subtasks` — one parent task's sub-tasks
+    /// (the Task Detail "Sub-tasks" section's load).
+    ListTaskSubtasks {
+        /// The bearer token to authenticate with.
+        token: SessionToken,
+        /// The profile namespace owning the task.
+        profile_id: String,
+        /// The parent task to list sub-tasks for.
+        task_id: String,
+    },
+    /// `POST /api/profiles/{profile_id}/tasks/{task_id}/subtasks`.
+    CreateSubtask {
+        /// The bearer token to authenticate with.
+        token: SessionToken,
+        /// The profile namespace owning the parent task.
+        profile_id: String,
+        /// The parent task to create the sub-task under.
+        task_id: String,
+        /// The sub-task to create.
+        req: CreateSubtaskRequest,
+    },
+    /// `PATCH /api/profiles/{profile_id}/tasks/{task_id}/subtasks/{subtask_id}` — partial update
+    /// (edit title and/or toggle status).
+    UpdateSubtask {
+        /// The bearer token to authenticate with.
+        token: SessionToken,
+        /// The profile namespace owning the parent task.
+        profile_id: String,
+        /// The parent task owning the sub-task.
+        task_id: String,
+        /// The sub-task to update.
+        subtask_id: String,
+        /// The fields to change (all-optional partial update).
+        req: UpdateSubtaskRequest,
+    },
+    /// `DELETE /api/profiles/{profile_id}/tasks/{task_id}/subtasks/{subtask_id}`.
+    DeleteSubtask {
+        /// The bearer token to authenticate with.
+        token: SessionToken,
+        /// The profile namespace owning the parent task.
+        profile_id: String,
+        /// The parent task owning the sub-task.
+        task_id: String,
+        /// The sub-task to delete.
+        subtask_id: String,
     },
     /// `GET /api/profiles/{profile_id}/notes`.
     ListNotes {
@@ -208,6 +263,16 @@ pub enum Outcome {
     UpdateTask(ClientResult<Task>),
     /// Result of a [`ClientRequest::DeleteTask`] call (`204` carries no body).
     DeleteTask(ClientResult<()>),
+    /// Result of a [`ClientRequest::ListSubtasks`] call (the profile's whole sub-task set).
+    ListSubtasks(ClientResult<Vec<Subtask>>),
+    /// Result of a [`ClientRequest::ListTaskSubtasks`] call (one parent task's sub-tasks).
+    ListTaskSubtasks(ClientResult<Vec<Subtask>>),
+    /// Result of a [`ClientRequest::CreateSubtask`] call.
+    CreateSubtask(ClientResult<Subtask>),
+    /// Result of a [`ClientRequest::UpdateSubtask`] call.
+    UpdateSubtask(ClientResult<Subtask>),
+    /// Result of a [`ClientRequest::DeleteSubtask`] call (`204` carries no body).
+    DeleteSubtask(ClientResult<()>),
     /// Result of a [`ClientRequest::ListNotes`] call.
     ListNotes(ClientResult<Vec<Note>>),
     /// Result of a [`ClientRequest::CreateNote`] call.

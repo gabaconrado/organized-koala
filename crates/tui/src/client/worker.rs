@@ -56,6 +56,53 @@ fn run<C: Client>(client: &C, request: ClientRequest) -> Outcome {
             profile_id,
             task_id,
         } => Outcome::DeleteTask(client.delete_task(token.expose(), &profile_id, &task_id)),
+        ClientRequest::ListSubtasks { token, profile_id } => {
+            Outcome::ListSubtasks(client.list_subtasks(token.expose(), &profile_id))
+        }
+        ClientRequest::ListTaskSubtasks {
+            token,
+            profile_id,
+            task_id,
+        } => Outcome::ListTaskSubtasks(client.list_task_subtasks(
+            token.expose(),
+            &profile_id,
+            &task_id,
+        )),
+        ClientRequest::CreateSubtask {
+            token,
+            profile_id,
+            task_id,
+            req,
+        } => Outcome::CreateSubtask(client.create_subtask(
+            token.expose(),
+            &profile_id,
+            &task_id,
+            &req,
+        )),
+        ClientRequest::UpdateSubtask {
+            token,
+            profile_id,
+            task_id,
+            subtask_id,
+            req,
+        } => Outcome::UpdateSubtask(client.update_subtask(
+            token.expose(),
+            &profile_id,
+            &task_id,
+            &subtask_id,
+            &req,
+        )),
+        ClientRequest::DeleteSubtask {
+            token,
+            profile_id,
+            task_id,
+            subtask_id,
+        } => Outcome::DeleteSubtask(client.delete_subtask(
+            token.expose(),
+            &profile_id,
+            &task_id,
+            &subtask_id,
+        )),
         ClientRequest::ListNotes { token, profile_id } => {
             Outcome::ListNotes(client.list_notes(token.expose(), &profile_id))
         }

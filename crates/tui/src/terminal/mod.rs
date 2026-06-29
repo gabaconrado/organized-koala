@@ -55,6 +55,7 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
             Tab::Tasks => {
                 main.tasks.adding.is_some()
                     || main.tasks.editing.is_some()
+                    || main.tasks.subtask_text_entry()
                     || main.tasks.detail_editing()
             }
             Tab::Notes => main.notes.is_text_entry(),
@@ -117,8 +118,10 @@ fn detail_view_open(screen: &Screen) -> bool {
 /// - `Backspace` → [`Event::Backspace`].
 /// - `F2` (auth screen) → [`Event::ToggleAuthMode`].
 /// - In a text-entry context, a printable key → [`Event::Char`].
-/// - On the Tasks tab (idle, no overlay): `a` → [`Event::BeginAddTask`], `e` →
-///   [`Event::BeginEditTask`], `Space` → [`Event::ToggleDone`], `d` → [`Event::DeleteSelected`].
+/// - On the Tasks tab (idle, no overlay): `a` → [`Event::BeginAddTask`], `A` (Shift+a) →
+///   [`Event::BeginAddSubtask`], `x` → [`Event::ToggleCollapse`], `e` → [`Event::BeginEditTask`],
+///   `Space` → [`Event::ToggleDone`], `d` → [`Event::DeleteSelected`]. `e`/`Space` route to the
+///   selected sub-task when a sub-task row is selected, to the task otherwise.
 /// - On the Notes tab (idle, no overlay): `a` → [`Event::BeginAddNote`], `e` →
 ///   [`Event::BeginEditNote`], `d` → [`Event::BeginDeleteNote`], `Enter` opens the selected note.
 /// - On the Profiles tab (idle, no overlay): `Enter` picks the selected profile (mapped to
@@ -216,6 +219,11 @@ pub fn map_key(
         // Per-tab action keys (idle list, no overlay/detail capturing input). The final keymap
         // (ADR-0010 §4): `Space` toggles done (was `c`), `d` deletes (was `x`).
         KeyCode::Char('a') if on_tasks && globals_live => Some(Event::BeginAddTask),
+        // `A` (Shift+a) adds a sub-task to the parent task of the selection; `x` toggles
+        // collapse/expand of the selected task's sub-tasks (ADR-0012; `x` was freed when 0016
+        // remapped delete to `d`). Both Tasks-tab/idle only.
+        KeyCode::Char('A') if on_tasks && globals_live => Some(Event::BeginAddSubtask),
+        KeyCode::Char('x') if on_tasks && globals_live => Some(Event::ToggleCollapse),
         KeyCode::Char('e') if on_tasks && globals_live => Some(Event::BeginEditTask),
         KeyCode::Char(' ') if on_tasks && globals_live => Some(Event::ToggleDone),
         KeyCode::Char('d') if on_tasks && globals_live => Some(Event::DeleteSelected),

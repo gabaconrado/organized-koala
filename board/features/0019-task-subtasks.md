@@ -253,3 +253,24 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   available; throwaway test Postgres) — `.sqlx/` refreshed with 5 new query files.
   build/lint/fmt --check clean; `./ok.sh test` green (subtask integration tests are tester's
   slice).
+- 2026-06-29 [tui-dev] Slice 3 done: client boundary + interaction + rendering (ADR-0013 §3,
+  ADR-0012 §5). R1 collision-check (grepped `map_key` + the keybinding tests/handlers): no live
+  `A`/`x` on the Tasks-tab idle context — `keybindings.rs` asserts `x` maps to `None` ("x no
+  longer deletes") and `A`/Shift+a is bound nowhere; the only other `x` hits are in text-entry /
+  in-flight contexts (typed literally). No collision; proceeded. Added five `Client` methods
+  (`list_subtasks`, `list_task_subtasks`, `create_subtask`, `update_subtask`, `delete_subtask`)
+  plus their `HttpClient` impls; `ClientRequest`/`Outcome` variants for each; worker arms;
+  `Event::BeginAddSubtask`/`ToggleCollapse`; `apply_response` folds (two-call tree load chains
+  `ListTasks`→`ListSubtasks`; create/edit/toggle refresh the tree). `task_list` holds
+  `subtasks: Vec<Subtask>` + a transient per-parent `collapse_overrides` map (#1, dropped on
+  fresh load for absent task ids); a `VisibleRow` selection model traverses only visible rows;
+  `A`/`e`/`Space`/`x` scoped to the Tasks context (`e`/`Space` route to a selected sub-task row,
+  else the task; `A` adds to the selection's parent). Collapse derives from parent status each
+  render (open→expanded, done→collapsed) unless an `x` override exists (A4). Defensive grouping
+  by `task_id` (orphans dropped, R3). Task Detail gains a read-only "Sub-tasks" section
+  (title+status, not focusable, A8); sub-task rows indented one level; parent indicator `+` only
+  when has-subtasks AND collapsed, else `>`. `FOOTER_CAPTION` unchanged (bottom-band coupling
+  invariant held). Defines no DTO of its own (#2). `./ok.sh build` clean; clippy clean on
+  `tui --lib --bins`; `./ok.sh fmt --check` clean. `./ok.sh lint`/`test` (`--all-targets`) await
+  tester's slice-4 harness update (the fake `Client` + worker-analogue executor track the trait;
+  not edited here, per crate ownership).

@@ -31,9 +31,9 @@ pub use main_view::{MainState, Tab};
 pub use notes::{NoteDetail, NoteForm, NotePane, NotesMode, NotesState};
 pub use profiles::{ProfileForm, ProfilesMode, ProfilesState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
-pub use task_add::{AddTaskState, EditTaskState};
+pub use task_add::{AddSubtaskState, AddTaskState, EditSubtaskState, EditTaskState};
 pub use task_detail::{TaskDetail, TaskPane};
-pub use task_list::TaskListState;
+pub use task_list::{TaskListState, VisibleRow};
 pub use timer::{DurationEditState, Timer};
 pub use token::SessionToken;
 
@@ -69,6 +69,12 @@ pub enum Event {
     ToggleAuthMode,
     /// Begin the add-task input flow (task list only).
     BeginAddTask,
+    /// Begin the add-sub-task input flow for the parent task of the current selection (task list
+    /// only): the selected task, or the selected sub-task's parent (`A` / Shift+a, ADR-0012).
+    BeginAddSubtask,
+    /// Toggle collapse/expand of the selected task's sub-tasks in the list, recording an in-session
+    /// override over the status-derived default (task list only; `x`, ADR-0012 §5).
+    ToggleCollapse,
     /// Begin editing the selected task's title/description (task list only).
     BeginEditTask,
     /// Toggle the selected task between done and open (task list only): a done task is reopened,
@@ -285,12 +291,7 @@ impl App {
         }
         match &self.screen {
             Screen::Main(main) => match main.active_tab {
-                Tab::Tasks => {
-                    main.tasks.adding.is_some()
-                        || main.tasks.editing.is_some()
-                        || main.tasks.confirming_delete.is_some()
-                        || main.tasks.detail.is_some()
-                }
+                Tab::Tasks => main.tasks.in_sub_flow() || main.tasks.confirming_delete.is_some(),
                 Tab::Notes => main.notes.in_sub_flow() || main.notes.detail_open(),
                 Tab::Profiles => main.profiles.in_sub_flow(),
             },
@@ -451,11 +452,7 @@ impl App {
     fn active_pane_in_sub_flow(&self) -> bool {
         match &self.screen {
             Screen::Main(main) => match main.active_tab {
-                Tab::Tasks => {
-                    main.tasks.adding.is_some()
-                        || main.tasks.editing.is_some()
-                        || main.tasks.detail.is_some()
-                }
+                Tab::Tasks => main.tasks.in_sub_flow(),
                 Tab::Notes => main.notes.in_sub_flow() || main.notes.detail_open(),
                 Tab::Profiles => main.profiles.in_sub_flow(),
             },
@@ -666,6 +663,11 @@ impl App {
                     Outcome::CreateTask(result) => self.apply_create(result),
                     Outcome::UpdateTask(result) => self.apply_update(result),
                     Outcome::DeleteTask(result) => self.apply_delete(result),
+                    Outcome::ListSubtasks(result) => self.apply_subtasks(result),
+                    Outcome::ListTaskSubtasks(result) => self.apply_task_subtasks(result),
+                    Outcome::CreateSubtask(result) => self.apply_create_subtask(result),
+                    Outcome::UpdateSubtask(result) => self.apply_update_subtask(result),
+                    Outcome::DeleteSubtask(result) => self.apply_delete_subtask(result),
                     Outcome::ListNotes(result) => self.apply_notes(result),
                     Outcome::CreateNote(result) => self.apply_create_note(result),
                     Outcome::GetNote(result) => self.apply_get_note(result),
@@ -1059,11 +1061,17 @@ impl App {
                 let mut state = TaskListState::new(tasks);
                 match &mut self.screen {
                     // Tabbed view already open: replace only the tasks pane, preserving an
-                    // in-progress add sub-flow, the open detail view, and the selected row
-                    // (transient UI state, #1).
+                    // in-progress add/edit sub-flow (task or sub-task), the open detail view, the
+                    // selected row, and the loaded sub-tasks + collapse overrides (transient UI
+                    // state, #1) — the chained `ListSubtasks` refreshes the tree below.
                     Screen::Main(main) => {
                         state.adding = main.tasks.adding.clone();
+                        state.adding_subtask = main.tasks.adding_subtask.clone();
+                        state.editing_subtask = main.tasks.editing_subtask.clone();
                         state.detail = main.tasks.detail.clone();
+                        state.subtasks = std::mem::take(&mut main.tasks.subtasks);
+                        state.collapse_overrides =
+                            std::mem::take(&mut main.tasks.collapse_overrides);
                         if main.tasks.selected.is_some() && state.selected.is_some() {
                             state.selected = main.tasks.selected;
                         }
@@ -1081,11 +1089,54 @@ impl App {
                         )));
                     }
                 }
+                // Chain the second call of the two-call tree load: the profile's sub-tasks, grouped
+                // under their parents client-side (ADR-0013 §3, no N+1). Carries the in-flight
+                // marker forward.
+                let Some(session) = self.session.clone() else {
+                    self.set_screen_pending(None);
+                    self.go_to_login();
+                    return None;
+                };
+                Some(self.dispatch_screen(ClientRequest::ListSubtasks {
+                    token: session.token,
+                    profile_id: session.profile_id,
+                }))
             }
             Err(err) => {
                 self.set_screen_pending(None);
                 self.handle_post_auth_error(err);
+                None
             }
+        }
+    }
+
+    /// Fold the profile's sub-task list (the second call of the Tasks-tab tree load) into the tasks
+    /// pane: replace the `subtasks` vector and prune any collapse override for a task no longer
+    /// present (ADR-0012 §5 — overrides are dropped on a fresh load for absent task ids). Re-clamp
+    /// the visible-row selection so it never points past the row count after the tree changes.
+    fn apply_subtasks(
+        &mut self,
+        result: crate::client::ClientResult<Vec<contract::Subtask>>,
+    ) -> Option<Dispatch> {
+        self.set_screen_pending(None);
+        match result {
+            Ok(subtasks) => {
+                if let Some(list) = self.tasks_pane_mut() {
+                    list.subtasks = subtasks;
+                    let present: std::collections::HashSet<&str> =
+                        list.tasks.iter().map(|t| t.id.as_str()).collect();
+                    list.collapse_overrides
+                        .retain(|task_id, _| present.contains(task_id.as_str()));
+                    let rows = list.visible_rows().len();
+                    list.selected = match (rows, list.selected) {
+                        (0, _) => None,
+                        (_, Some(i)) if i >= rows => Some(rows - 1),
+                        (_, Some(i)) => Some(i),
+                        (_, None) => Some(0),
+                    };
+                }
+            }
+            Err(err) => self.handle_post_auth_error(err),
         }
         None
     }
@@ -1160,6 +1211,129 @@ impl App {
                 self.set_screen_pending(None);
                 self.handle_post_auth_error(err);
                 None
+            }
+        }
+    }
+
+    /// Fold a per-task sub-task list (the detail view's "Sub-tasks" section load) into the open
+    /// task detail, re-deriving its read-only sub-task section from the server (A6). Dropped if the
+    /// detail closed before the response arrived.
+    fn apply_task_subtasks(
+        &mut self,
+        result: crate::client::ClientResult<Vec<contract::Subtask>>,
+    ) -> Option<Dispatch> {
+        self.set_screen_pending(None);
+        match result {
+            Ok(subtasks) => {
+                if let Some(list) = self.tasks_pane_mut()
+                    && let Some(detail) = &mut list.detail
+                {
+                    detail.set_subtasks(subtasks);
+                }
+            }
+            Err(err) => self.handle_post_auth_error(err),
+        }
+        None
+    }
+
+    /// Fold a create-sub-task response. On success the add-sub-task sub-flow closes and the Tasks
+    /// tree is re-fetched from the server (#1); a blank-title (or other) error surfaces inline in
+    /// the open form.
+    fn apply_create_subtask(
+        &mut self,
+        result: crate::client::ClientResult<contract::Subtask>,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(_) => {
+                if let Some(list) = self.tasks_pane_mut() {
+                    list.adding_subtask = None;
+                }
+                self.refresh_tasks()
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_add_subtask_error(err);
+                None
+            }
+        }
+    }
+
+    /// Fold a sub-task update (edit-title / toggle) response. On success the edit sub-flow closes,
+    /// the open detail's "Sub-tasks" section is refreshed if it owns the parent, and the Tasks tree
+    /// is re-fetched (#1); a blank-title rejection surfaces inline in the edit sub-flow.
+    fn apply_update_subtask(
+        &mut self,
+        result: crate::client::ClientResult<contract::Subtask>,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(_) => {
+                if let Some(list) = self.tasks_pane_mut() {
+                    list.editing_subtask = None;
+                }
+                self.refresh_tasks()
+            }
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_update_subtask_error(err);
+                None
+            }
+        }
+    }
+
+    /// Fold a sub-task delete response. On success the Tasks tree is re-fetched (#1); errors
+    /// surface on the list. (No `tui` key deletes a sub-task today, but the fold keeps the surface
+    /// complete and consistent with the task delete path.)
+    fn apply_delete_subtask(
+        &mut self,
+        result: crate::client::ClientResult<()>,
+    ) -> Option<Dispatch> {
+        match result {
+            Ok(()) => self.refresh_tasks(),
+            Err(err) => {
+                self.set_screen_pending(None);
+                self.handle_post_auth_error(err);
+                None
+            }
+        }
+    }
+
+    /// Error routing for a create-sub-task: offline → blocking, `unauthenticated` → login, and a
+    /// validation (blank-title) or other error surfaces inline in the open add-sub-task form.
+    fn handle_add_subtask_error(&mut self, err: ClientError) {
+        if err.is_offline() {
+            self.go_offline(&err);
+            return;
+        }
+        if err.code() == Some(&ErrorCode::Unauthenticated) {
+            self.go_to_login();
+            return;
+        }
+        let message = err.to_string();
+        if let Some(list) = self.tasks_pane_mut()
+            && let Some(add) = &mut list.adding_subtask
+        {
+            add.error = Some(message);
+        }
+    }
+
+    /// Error routing for a sub-task update: offline → blocking, `unauthenticated` → login. A
+    /// validation (blank-title) error surfaces inline in the edit sub-flow if one is open;
+    /// otherwise (a toggle with no sub-flow) it surfaces on the list.
+    fn handle_update_subtask_error(&mut self, err: ClientError) {
+        if err.is_offline() {
+            self.go_offline(&err);
+            return;
+        }
+        if err.code() == Some(&ErrorCode::Unauthenticated) {
+            self.go_to_login();
+            return;
+        }
+        let message = err.to_string();
+        if let Some(list) = self.tasks_pane_mut() {
+            if let Some(edit) = &mut list.editing_subtask {
+                edit.error = Some(message);
+            } else {
+                list.message = Some(message);
             }
         }
     }

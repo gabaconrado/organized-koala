@@ -7,7 +7,7 @@
 //! re-derives from the server after every commit (the task list refresh re-selects the same task),
 //! and the edit buffer never outlives the edit.
 
-use contract::Task;
+use contract::{Subtask, Task};
 
 /// The panes of the task detail view, in display + cycle order. `Title`/`Description` are editable;
 /// `Status`/`Created`/`Closed` are read-only. `Closed` is only present when the task is done
@@ -42,6 +42,10 @@ impl TaskPane {
 pub struct TaskDetail {
     /// The task being viewed, derived from the server.
     pub task: Task,
+    /// The task's sub-tasks, shown in the read-only "Sub-tasks" section (title + status only;
+    /// ADR-0012 §1). A sub-task row is **not** a focusable pane — selecting one never opens a
+    /// per-field view. Re-derived from the server when the detail opens / refreshes.
+    pub subtasks: Vec<Subtask>,
     /// The panes present for this snapshot, in cycle order.
     pub panes: Vec<TaskPane>,
     /// Index into `panes` of the focused pane.
@@ -52,13 +56,14 @@ pub struct TaskDetail {
 
 impl TaskDetail {
     /// Open the detail view for `task` with the first editable pane focused and no edit in
-    /// progress.
+    /// progress. Sub-tasks start empty; they load via the per-task list once the detail opens.
     #[must_use]
     pub fn new(task: Task) -> Self {
         let panes = Self::panes_for(&task);
         let focused = Self::first_editable(&panes);
         Self {
             task,
+            subtasks: Vec::new(),
             panes,
             focused,
             edit: None,
@@ -99,6 +104,12 @@ impl TaskDetail {
         self.focused = prev
             .and_then(|p| self.panes.iter().position(|q| *q == p))
             .unwrap_or_else(|| Self::first_editable(&self.panes));
+    }
+
+    /// Replace the sub-tasks shown in the read-only "Sub-tasks" section (re-derived from the
+    /// server's per-task list).
+    pub fn set_subtasks(&mut self, subtasks: Vec<Subtask>) {
+        self.subtasks = subtasks;
     }
 
     /// The currently-focused pane, if the pane vector is non-empty.
