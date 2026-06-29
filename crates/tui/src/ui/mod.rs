@@ -197,6 +197,7 @@ fn draw_active_dialog(frame: &mut Frame, main: &MainState, timer: &Timer) {
             frame,
             &Dialog {
                 title: "Timer duration",
+                width: DIALOG_WIDTH,
                 fields: vec![DialogField {
                     label: "Duration (minutes)",
                     value: &edit.buffer,
@@ -224,6 +225,7 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
             frame,
             &Dialog {
                 title: "Add task",
+                width: DIALOG_WIDTH,
                 fields: vec![
                     DialogField {
                         label: "Title",
@@ -248,6 +250,7 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
             frame,
             &Dialog {
                 title: "Edit task",
+                width: DIALOG_WIDTH,
                 fields: vec![
                     DialogField {
                         label: "Title",
@@ -272,6 +275,7 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
             frame,
             &Dialog {
                 title: "Add sub-task",
+                width: DIALOG_WIDTH,
                 fields: vec![DialogField {
                     label: "Title",
                     value: &add.title,
@@ -288,6 +292,7 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
             frame,
             &Dialog {
                 title: "Edit sub-task",
+                width: DIALOG_WIDTH,
                 fields: vec![DialogField {
                     label: "Title",
                     value: &edit.title,
@@ -304,6 +309,7 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
             frame,
             &Dialog {
                 title: "Delete task",
+                width: DIALOG_WIDTH,
                 fields: Vec::new(),
                 body: vec![Line::from("Delete this task?")],
                 error: None,
@@ -321,6 +327,7 @@ fn draw_note_dialog(frame: &mut Frame, notes: &NotesState) {
             frame,
             &Dialog {
                 title: "New note",
+                width: DIALOG_WIDTH,
                 fields: vec![
                     DialogField {
                         label: "Title",
@@ -344,6 +351,7 @@ fn draw_note_dialog(frame: &mut Frame, notes: &NotesState) {
             frame,
             &Dialog {
                 title: "Edit note",
+                width: DIALOG_WIDTH,
                 fields: vec![
                     DialogField {
                         label: "Title",
@@ -369,6 +377,7 @@ fn draw_note_dialog(frame: &mut Frame, notes: &NotesState) {
                 frame,
                 &Dialog {
                     title: "Delete note",
+                    width: DIALOG_WIDTH,
                     fields: Vec::new(),
                     body: vec![Line::from(prompt)],
                     error: None,
@@ -389,6 +398,7 @@ fn draw_profile_dialog(frame: &mut Frame, profiles: &ProfilesState) {
             frame,
             &Dialog {
                 title: "New profile",
+                width: DIALOG_WIDTH,
                 fields: vec![DialogField {
                     label: "Name",
                     value: &form.name,
@@ -404,6 +414,7 @@ fn draw_profile_dialog(frame: &mut Frame, profiles: &ProfilesState) {
             frame,
             &Dialog {
                 title: "Rename profile",
+                width: DIALOG_WIDTH,
                 fields: vec![DialogField {
                     label: "Name",
                     value: &form.name,
@@ -421,6 +432,7 @@ fn draw_profile_dialog(frame: &mut Frame, profiles: &ProfilesState) {
                 frame,
                 &Dialog {
                     title: "Delete profile",
+                    width: DIALOG_WIDTH,
                     fields: Vec::new(),
                     body: vec![Line::from(prompt)],
                     error: None,
@@ -459,6 +471,7 @@ fn draw_help(frame: &mut Frame) {
         frame,
         &Dialog {
             title: "Help — hotkeys",
+            width: HELP_DIALOG_WIDTH,
             fields: Vec::new(),
             body,
             error: None,
@@ -651,6 +664,9 @@ struct DialogField<'a> {
 struct Dialog<'a> {
     /// The dialog title shown on the border.
     title: &'a str,
+    /// The box width in columns. The five form/confirm/timer dialogs pass [`DIALOG_WIDTH`]; the
+    /// `?` help overlay passes the wider [`HELP_DIALOG_WIDTH`] so its reference lines do not wrap.
+    width: u16,
     /// The editable fields, in focus order. Empty for a confirmation dialog.
     fields: Vec<DialogField<'a>>,
     /// Free-form body lines (a confirmation question, or the help reference). Rendered above the
@@ -662,9 +678,17 @@ struct Dialog<'a> {
     hint: &'a str,
 }
 
-/// The width of a centred dialog box. Wide enough for the field hints and the help reference
-/// without dominating the 80-column test viewport.
+/// The width of a centred dialog box. Wide enough for the field hints without dominating the
+/// 80-column test viewport. Shared by the five form/confirm/timer dialog kinds; the `?` help
+/// overlay uses the wider [`HELP_DIALOG_WIDTH`] so its reference lines fit on one row each.
 const DIALOG_WIDTH: u16 = 64;
+
+/// The width of the `?` help overlay box, decoupled from [`DIALOG_WIDTH`] so widening the help
+/// reference does not move the other five dialogs' snapshots. Wide enough that the longest Tasks
+/// reference line (the 64-char `a add · A add sub-task · …`) fits inside the bordered box's inner
+/// area (width − 2) with headroom for future hotkeys, while staying centred within the 80-column
+/// test viewport with comfortable side margin.
+const HELP_DIALOG_WIDTH: u16 = 72;
 
 /// Draw a centred floating [`Dialog`] over the current view: clear its footprint, render the
 /// bordered titled box, then lay out fields / body / error / hint inside it. A deep, narrow helper
@@ -680,7 +704,7 @@ fn draw_dialog(frame: &mut Frame, dialog: &Dialog) {
         .saturating_add(1) // error line
         .saturating_add(1); // hint line
     let box_height = inner.saturating_add(2);
-    let area = centered_rect(DIALOG_WIDTH, box_height, frame.area());
+    let area = centered_rect(dialog.width, box_height, frame.area());
 
     // Clear the footprint so the underlying panes do not bleed through the modal.
     frame.render_widget(Clear, area);

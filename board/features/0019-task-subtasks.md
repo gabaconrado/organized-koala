@@ -343,6 +343,18 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   Fix direction (human-preferred): render the help reference as a **borderless table** so per-row
   indentation is automatic, or widen the help box. `tui-dev` owns `draw_help` in `src/`; `tester`
   updates the help-overlay `TestBackend` assertion in `tests/`. → `status: working`.
+- 2026-06-29 [tui-dev] Fixed the help-overlay wrap (`crates/tui/src/ui/mod.rs`). Decoupled the
+  help box width from the shared `DIALOG_WIDTH = 64` by adding a `width: u16` field to the
+  `Dialog` struct and using `dialog.width` in `draw_dialog` (instead of the const). The five
+  form/confirm/timer callers pass `DIALOG_WIDTH` unchanged; `draw_help` passes a new
+  `HELP_DIALOG_WIDTH = 72` (inner ~70 cols), so the 64-char Tasks line fits with headroom and
+  nothing reflows. `DIALOG_WIDTH` stays 64, so the other five dialogs render byte-identically.
+  Help content/wording/row-count untouched — only the box is wider. No `contract`/server/domain
+  change, no DTO. Gates: `./ok.sh build` clean; `cargo clippy -p tui --lib --bins` clean;
+  `./ok.sh fmt --check` clean. The full `--all-targets` `lint`/`test` is expected RED on the
+  `tui` test crate until the `tester` slice updates the help-overlay assertion in
+  `crates/tui/tests/` — the documented harness-stranding pattern (CLAUDE.md gotcha, learned
+  0019), not a defect of this slice.
 
 ## Summary
 
