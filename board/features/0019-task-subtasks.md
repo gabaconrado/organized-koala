@@ -367,6 +367,20 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   stranded flush-left `d delete` continuation. Pins the 0019 sub-task-hotkey overflow closed
   against a future hotkey addition or a width revert. Gates all green: `./ok.sh test`,
   `./ok.sh lint` (`--all-targets`), `./ok.sh fmt --check`.
+- 2026-06-29 [reviewer] **REVIEW-STATUS: approved** `da5b04634dcedc3a6df38ef65958548981d83775`
+  (commit `54fea75`; verdict re-issued for the help-dialog-fix re-entry — the prior approval pinned
+  to `8c500ca0…` was voided by the code-changing fix). Cold read-only pass. Mechanical gate all
+  green (`test`/`lint --all-targets`/`fmt --check`); no new `#[allow]`, no secret leak. Confirmed:
+  (1) widening contained — `DIALOG_WIDTH = 64` unchanged, the five non-help dialogs pass explicit
+  `width: DIALOG_WIDTH` so they render byte-identically, only `draw_help` uses
+  `HELP_DIALOG_WIDTH = 72` (`centered_rect` `width.min(area.width)`, 4-col margin at 80, inner 70 ≥
+  the 64-char line, no overflow/off-by-one); (2) no scope creep — delta touches only
+  `crates/tui/src/ui/mod.rs` + `crates/tui/tests/dialogs.rs` + the Board file, `contract`/`server`
+  empty, help wording/row-count unchanged (TUI-presentation-geometry only, no #2/#3 delta); (3) #1
+  stateless intact (per-frame geometry, no persistence); (4) the regression test is a genuine pin —
+  reviewer swapped in the pre-fix source and the test FAILED with the exact marooned-`delete` buffer,
+  then restored. Satisfies DoD clause 6. Non-blocking nit (idea candidate, not dragged in): the new
+  test comment cites the fixing commit sha inline (coding-standards "no dev context in comments").
 
 ## Summary
 
