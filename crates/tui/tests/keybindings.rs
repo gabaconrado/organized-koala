@@ -321,17 +321,23 @@ fn task_list_command_keys() {
     );
     assert_eq!(map(&screen, key(KeyCode::Char('r'))), Some(Event::Refresh),);
     assert_eq!(map(&screen, key(KeyCode::Char('q'))), Some(Event::Quit));
-    // The old `c` (toggle-done) and `x` (delete) keys no longer fire their actions — `c`/`x` are
-    // simply unbound on the Tasks tab now.
+    // Sub-tasks (0019): `A` (Shift+a) adds a sub-task to the selection's parent; `x` toggles the
+    // parent's collapse/expand. `a` stays add-task (asserted above).
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('A'))),
+        Some(Event::BeginAddSubtask),
+        "A adds a sub-task (0019)",
+    );
+    assert_eq!(
+        map(&screen, key(KeyCode::Char('x'))),
+        Some(Event::ToggleCollapse),
+        "x toggles collapse on the Tasks tab (0019, the freed pre-0016 delete key)",
+    );
+    // The old `c` (toggle-done) key no longer fires its action — `c` is unbound on the Tasks tab.
     assert_eq!(
         map(&screen, key(KeyCode::Char('c'))),
         None,
         "c no longer toggles done",
-    );
-    assert_eq!(
-        map(&screen, key(KeyCode::Char('x'))),
-        None,
-        "x no longer deletes",
     );
     // The old `n` (open notes) / `s` (open profiles) cross-screen keys are removed (ADR-0010 §1):
     // they are now unbound on the Tasks tab.

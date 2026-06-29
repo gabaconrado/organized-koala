@@ -274,3 +274,24 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   `tui --lib --bins`; `./ok.sh fmt --check` clean. `./ok.sh lint`/`test` (`--all-targets`) await
   tester's slice-4 harness update (the fake `Client` + worker-analogue executor track the trait;
   not edited here, per crate ownership).
+- 2026-06-29 [tester] Slice 4 done: tests across all three crates + un-stranded the tui harness.
+  (a) Harness: `crates/tui/tests/common/mod.rs` gains the five sub-task `Client` methods on the
+  fake, their `Call` variants + `push_*` queues, the five worker-analogue executor arms, the new
+  `TaskListState` fields (`subtasks`/`collapse_overrides`/`adding_subtask`/`editing_subtask`) in the
+  screen builders, and `open_subtask`/`done_subtask` DTO builders; the two auto-chained tree-load
+  list calls (`list_subtasks`/`list_task_subtasks`) default to an empty list when unscripted (the
+  natural "no sub-tasks" state for the many flows that aren't about sub-tasks), while the mutating
+  sub-task calls keep the strict panic-on-empty net. Threaded the new tree-load chain through the
+  existing detail/flows/tasks/profiles suites (an `open_task_detail` helper; `ListTasks`→
+  `ListSubtasks` tail assertions). `keybindings.rs` now pins `A`→`BeginAddSubtask` and `x`→
+  `ToggleCollapse` on the Tasks tab (was asserting `x`→None pre-0019). (b) Coverage: new
+  `crates/contract/tests/subtask.rs` (14 tests: DTO ser/de round-trips, `skip_serializing_if`
+  title-only/status-only, empty-patch `{}`→all-`None`); new `crates/server/tests/subtasks.rs` (21
+  `#[sqlx::test]`: create/list-per-task/list-per-profile creation-order/edit-title/toggle/delete,
+  blank-title 400, empty-patch no-op, parent-scoping wrong-`{tid}`→404, profile-scoping
+  cross-profile→404, cascade R4 — task-delete and profile-delete both remove sub-tasks with no
+  orphan addressable); new `crates/tui/tests/subtasks.rs` (16 TestBackend tests: `A` create, `e`
+  edit-title, `Space` toggle, `x` collapse/expand override, `+`/`>` indicator, indented render,
+  Detail "Sub-tasks" section, collapse-default-from-parent-status, selection traversal across a
+  collapsed parent R2). Gates green: `./ok.sh test` (live test Postgres via docker), `./ok.sh lint`
+  (`--all-targets`), `./ok.sh fmt --check` all clean.

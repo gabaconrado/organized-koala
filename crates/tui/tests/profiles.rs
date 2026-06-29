@@ -132,12 +132,20 @@ fn picking_a_profile_rescopes_the_active_id_with_no_server_switch_call() {
         "pick-active lands on the Tasks tab of the chosen profile",
     );
 
-    // The last call is a ListTasks scoped to the NEWLY-active profile id `p2`.
+    // The re-scope's read ends with the two-call tree load (ListTasks → ListSubtasks, 0019), both
+    // scoped to the NEWLY-active profile id `p2`.
     let calls = client.calls();
     assert!(
-        matches!(calls.last(), Some(Call::ListTasks { token, profile_id })
+        matches!(calls.last(), Some(Call::ListSubtasks { token, profile_id })
             if token == "jwt" && profile_id == "p2"),
-        "next scoped read carries the picked profile id p2: {calls:?}",
+        "the tree load's second call carries the picked profile id p2: {calls:?}",
+    );
+    assert!(
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::ListTasks { token, profile_id }
+            if token == "jwt" && profile_id == "p2")),
+        "next scoped task read carries the picked profile id p2: {calls:?}",
     );
 
     // There is NO server switch call — assert the recorded calls only ever touch the sanctioned
@@ -148,6 +156,7 @@ fn picking_a_profile_rescopes_the_active_id_with_no_server_switch_call() {
             Call::Login { .. }
                 | Call::ListProfiles { .. }
                 | Call::ListTasks { .. }
+                | Call::ListSubtasks { .. }
                 | Call::CreateProfile { .. }
                 | Call::UpdateProfile { .. }
                 | Call::DeleteProfile { .. }
@@ -165,9 +174,16 @@ fn picking_the_already_active_profile_keeps_the_same_scope() {
 
     let calls = client.calls();
     assert!(
-        matches!(calls.last(), Some(Call::ListTasks { token, profile_id })
+        matches!(calls.last(), Some(Call::ListSubtasks { token, profile_id })
             if token == "jwt" && profile_id == "p1"),
-        "scoped read stays on p1: {calls:?}",
+        "scoped read (tree load) stays on p1: {calls:?}",
+    );
+    assert!(
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::ListTasks { token, profile_id }
+            if token == "jwt" && profile_id == "p1")),
+        "scoped task read stays on p1: {calls:?}",
     );
 }
 
@@ -519,9 +535,16 @@ fn deleting_the_active_profile_repoints_to_the_first_remaining() {
     back_to_tasks(&mut app, &client);
     let calls = client.calls();
     assert!(
-        matches!(calls.last(), Some(Call::ListTasks { token, profile_id })
-            if token == "jwt" && profile_id == "p2"),
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::ListTasks { token, profile_id }
+            if token == "jwt" && profile_id == "p2")),
         "after deleting the active profile, the scoped read uses the re-pointed id p2: {calls:?}",
+    );
+    // The tree load's second call (ListSubtasks) carries the same re-pointed id.
+    assert!(
+        matches!(calls.last(), Some(Call::ListSubtasks { profile_id, .. }) if profile_id == "p2"),
+        "the tree load's second call carries the re-pointed id p2: {calls:?}",
     );
 }
 
@@ -540,8 +563,15 @@ fn switching_away_from_the_idle_switcher_returns_to_the_tasks_tab() {
     );
     let calls = client.calls();
     assert!(
-        matches!(calls.last(), Some(Call::ListTasks { profile_id, .. }) if profile_id == "p1"),
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::ListTasks { profile_id, .. } if profile_id == "p1")),
         "the tab switch re-lists the active profile's tasks: {calls:?}",
+    );
+    // The tree load's second call (ListSubtasks) carries the same active id.
+    assert!(
+        matches!(calls.last(), Some(Call::ListSubtasks { profile_id, .. }) if profile_id == "p1"),
+        "the tab switch chains the tree load's ListSubtasks for the active profile: {calls:?}",
     );
 }
 

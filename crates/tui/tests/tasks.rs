@@ -215,9 +215,14 @@ fn edit_issues_title_and_description_patch_and_row_reflects_it() {
         ),
         "edit sends title+description, no status: {calls:?}",
     );
+    // The refresh is the two-call tree load (ListTasks → ListSubtasks, 0019); statelessness #1.
     assert!(
-        matches!(calls.last(), Some(Call::ListTasks { .. })),
-        "a fresh list fetch follows the edit (statelessness): {calls:?}",
+        matches!(calls.last(), Some(Call::ListSubtasks { .. })),
+        "the two-call tree refresh ends with a ListSubtasks: {calls:?}",
+    );
+    assert!(
+        calls.iter().any(|c| matches!(c, Call::ListTasks { .. })),
+        "a fresh task list fetch follows the edit (statelessness): {calls:?}",
     );
 
     // The edit sub-flow closed and the row reflects the server's renamed task.
@@ -343,9 +348,14 @@ fn enter_confirms_delete_request_and_row_is_removed_after_refresh() {
                 if token == "jwt" && profile_id == "p1" && task_id == "t1")),
         "delete targeted the right task: {calls:?}",
     );
+    // The refresh is the two-call tree load (ListTasks → ListSubtasks, 0019); statelessness #1.
     assert!(
-        matches!(calls.last(), Some(Call::ListTasks { .. })),
-        "a fresh list fetch follows the delete (statelessness): {calls:?}",
+        matches!(calls.last(), Some(Call::ListSubtasks { .. })),
+        "the two-call tree refresh ends with a ListSubtasks: {calls:?}",
+    );
+    assert!(
+        calls.iter().any(|c| matches!(c, Call::ListTasks { .. })),
+        "a fresh task list fetch follows the delete (statelessness): {calls:?}",
     );
 
     // The deleted row is gone and the confirm disarmed; the view is exactly the server's list.

@@ -147,9 +147,15 @@ fn add_task_posts_request_then_refreshes_from_server() {
         })
         .expect("a create_task call was made");
     assert_eq!(create, ("Buy milk".to_owned(), "2% organic".to_owned()));
+    // The fresh tree-load follows the create: a `ListTasks` then its chained `ListSubtasks` (the
+    // two-call tree refresh, 0019); statelessness #1.
     assert!(
-        matches!(calls.last(), Some(Call::ListTasks { .. })),
-        "a fresh list fetch follows the create (statelessness): {calls:?}",
+        matches!(calls.last(), Some(Call::ListSubtasks { .. })),
+        "the two-call tree refresh ends with a ListSubtasks: {calls:?}",
+    );
+    assert!(
+        calls.iter().any(|c| matches!(c, Call::ListTasks { .. })),
+        "a fresh task list fetch follows the create (statelessness): {calls:?}",
     );
 
     // The rendered view shows the server-provided task — not anything fabricated.
@@ -238,9 +244,14 @@ fn mark_done_issues_update_status_done_and_rerenders_from_server() {
         ),
         "toggle-done is a status-only patch to the right task: {calls:?}",
     );
+    // The refresh is the two-call tree load (ListTasks → ListSubtasks, 0019); statelessness #1.
     assert!(
-        matches!(calls.last(), Some(Call::ListTasks { .. })),
-        "a fresh list fetch follows the update (statelessness): {calls:?}",
+        matches!(calls.last(), Some(Call::ListSubtasks { .. })),
+        "the two-call tree refresh ends with a ListSubtasks: {calls:?}",
+    );
+    assert!(
+        calls.iter().any(|c| matches!(c, Call::ListTasks { .. })),
+        "a fresh task list fetch follows the update (statelessness): {calls:?}",
     );
 
     // After: the rendered marker flipped to done.
@@ -322,9 +333,10 @@ fn quit_event_sets_should_quit() {
 
 #[test]
 fn at_most_one_request_chains_at_a_time_through_apply_response() {
-    // The auth flow fans out to three server calls (login -> profiles -> tasks) but only ever as
-    // a *chain*: each completes before the next is dispatched. Driving the single login dispatch
-    // to completion yields exactly that ordered sequence with nothing concurrent.
+    // The auth flow fans out to four server calls (login -> profiles -> tasks -> subtasks: the
+    // post-auth bootstrap ends with the second call of the two-call Tasks-tab tree load, 0019) but
+    // only ever as a *chain*: each completes before the next is dispatched. Driving the single
+    // login dispatch to completion yields exactly that ordered sequence with nothing concurrent.
     let client = FakeClient::new();
     client.push_login(Ok(session("jwt")));
     client.push_profiles(Ok(vec![profile("p1", "work")]));
@@ -341,8 +353,9 @@ fn at_most_one_request_chains_at_a_time_through_apply_response() {
         matches!(calls.first(), Some(Call::Login { .. }))
             && matches!(calls.get(1), Some(Call::ListProfiles { .. }))
             && matches!(calls.get(2), Some(Call::ListTasks { .. }))
-            && calls.len() == 3,
-        "exactly the chained login->profiles->tasks sequence: {calls:?}",
+            && matches!(calls.get(3), Some(Call::ListSubtasks { .. }))
+            && calls.len() == 4,
+        "exactly the chained login->profiles->tasks->subtasks sequence: {calls:?}",
     );
     assert!(!app.is_pending(), "settled with no request in flight");
 }

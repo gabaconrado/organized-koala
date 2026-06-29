@@ -23,13 +23,14 @@
 #![allow(dead_code)]
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use contract::{
-    CreateNoteRequest, CreateProfileRequest, CreateTaskRequest, LoginRequest, Note, Profile,
-    RegisterRequest, SessionResponse, Task, TaskStatus, TimerConfig, TimerSession,
-    UpdateNoteRequest, UpdateProfileRequest, UpdateTaskRequest, UpdateTimerConfigRequest,
+    CreateNoteRequest, CreateProfileRequest, CreateSubtaskRequest, CreateTaskRequest, LoginRequest,
+    Note, Profile, RegisterRequest, SessionResponse, Subtask, Task, TaskStatus, TimerConfig,
+    TimerSession, UpdateNoteRequest, UpdateProfileRequest, UpdateSubtaskRequest, UpdateTaskRequest,
+    UpdateTimerConfigRequest,
 };
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -101,6 +102,41 @@ pub enum Call {
         profile_id: String,
         task_id: String,
     },
+    /// Captured `GET …/subtasks` (the profile-wide tree-load list).
+    ListSubtasks {
+        token: String,
+        profile_id: String,
+    },
+    /// Captured `GET …/tasks/{tid}/subtasks` (one parent's sub-tasks, for the detail section).
+    ListTaskSubtasks {
+        token: String,
+        profile_id: String,
+        task_id: String,
+    },
+    /// Captured `POST …/tasks/{tid}/subtasks` (the `A`-create).
+    CreateSubtask {
+        token: String,
+        profile_id: String,
+        task_id: String,
+        title: String,
+    },
+    /// Captured `PATCH …/tasks/{tid}/subtasks/{sid}` partial-update fields (edit-title / toggle),
+    /// so a test can assert exactly what the issued patch carried.
+    UpdateSubtask {
+        token: String,
+        profile_id: String,
+        task_id: String,
+        subtask_id: String,
+        title: Option<String>,
+        status: Option<TaskStatus>,
+    },
+    /// Captured `DELETE …/tasks/{tid}/subtasks/{sid}` target.
+    DeleteSubtask {
+        token: String,
+        profile_id: String,
+        task_id: String,
+        subtask_id: String,
+    },
     ListNotes {
         token: String,
         profile_id: String,
@@ -163,6 +199,11 @@ struct Inner {
     create: RefCell<VecDeque<ClientResult<Task>>>,
     update: RefCell<VecDeque<ClientResult<Task>>>,
     delete: RefCell<VecDeque<ClientResult<()>>>,
+    list_subtasks: RefCell<VecDeque<ClientResult<Vec<Subtask>>>>,
+    list_task_subtasks: RefCell<VecDeque<ClientResult<Vec<Subtask>>>>,
+    create_subtask: RefCell<VecDeque<ClientResult<Subtask>>>,
+    update_subtask: RefCell<VecDeque<ClientResult<Subtask>>>,
+    delete_subtask: RefCell<VecDeque<ClientResult<()>>>,
     notes: RefCell<VecDeque<ClientResult<Vec<Note>>>>,
     create_note: RefCell<VecDeque<ClientResult<Note>>>,
     get_note: RefCell<VecDeque<ClientResult<Note>>>,
@@ -225,6 +266,21 @@ impl FakeClient {
     pub fn push_delete(&self, r: ClientResult<()>) {
         self.inner.delete.borrow_mut().push_back(r);
     }
+    pub fn push_list_subtasks(&self, r: ClientResult<Vec<Subtask>>) {
+        self.inner.list_subtasks.borrow_mut().push_back(r);
+    }
+    pub fn push_list_task_subtasks(&self, r: ClientResult<Vec<Subtask>>) {
+        self.inner.list_task_subtasks.borrow_mut().push_back(r);
+    }
+    pub fn push_create_subtask(&self, r: ClientResult<Subtask>) {
+        self.inner.create_subtask.borrow_mut().push_back(r);
+    }
+    pub fn push_update_subtask(&self, r: ClientResult<Subtask>) {
+        self.inner.update_subtask.borrow_mut().push_back(r);
+    }
+    pub fn push_delete_subtask(&self, r: ClientResult<()>) {
+        self.inner.delete_subtask.borrow_mut().push_back(r);
+    }
     pub fn push_notes(&self, r: ClientResult<Vec<Note>>) {
         self.inner.notes.borrow_mut().push_back(r);
     }
@@ -266,6 +322,22 @@ fn pop<T>(q: &RefCell<VecDeque<ClientResult<T>>>, what: &str) -> ClientResult<T>
     q.borrow_mut()
         .pop_front()
         .unwrap_or_else(|| panic!("fake client: no scripted response for {what}"))
+}
+
+/// Pop the next scripted sub-task list, defaulting to an empty list when none is scripted.
+///
+/// The two-call Tasks-tab tree load chains `ListSubtasks` after every `ListTasks` (post-auth
+/// bootstrap and every task-mutation refresh), and opening a task detail chains
+/// `ListTaskSubtasks`. Those are core-issued infrastructure on flows that are usually not *about*
+/// sub-tasks, so a test that scripts only `push_tasks` is implicitly asserting "this profile/task
+/// has no sub-tasks" — the natural empty default. Tests that exercise sub-tasks script explicit
+/// non-empty responses with `push_list_subtasks` / `push_list_task_subtasks`, which take
+/// precedence (the queue is drained first). The *mutating* sub-task calls keep the strict
+/// panic-on-empty safety net (a missing create/update/delete script is always a test bug).
+fn pop_subtasks_or_empty(
+    q: &RefCell<VecDeque<ClientResult<Vec<Subtask>>>>,
+) -> ClientResult<Vec<Subtask>> {
+    q.borrow_mut().pop_front().unwrap_or_else(|| Ok(Vec::new()))
 }
 
 impl Client for FakeClient {
@@ -375,6 +447,79 @@ impl Client for FakeClient {
             task_id: task_id.to_owned(),
         });
         pop(&self.inner.delete, "delete_task")
+    }
+
+    fn list_subtasks(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Subtask>> {
+        self.inner.calls.borrow_mut().push(Call::ListSubtasks {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+        });
+        pop_subtasks_or_empty(&self.inner.list_subtasks)
+    }
+
+    fn list_task_subtasks(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+    ) -> ClientResult<Vec<Subtask>> {
+        self.inner.calls.borrow_mut().push(Call::ListTaskSubtasks {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+            task_id: task_id.to_owned(),
+        });
+        pop_subtasks_or_empty(&self.inner.list_task_subtasks)
+    }
+
+    fn create_subtask(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        req: &CreateSubtaskRequest,
+    ) -> ClientResult<Subtask> {
+        self.inner.calls.borrow_mut().push(Call::CreateSubtask {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+            task_id: task_id.to_owned(),
+            title: req.title.clone(),
+        });
+        pop(&self.inner.create_subtask, "create_subtask")
+    }
+
+    fn update_subtask(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        subtask_id: &str,
+        req: &UpdateSubtaskRequest,
+    ) -> ClientResult<Subtask> {
+        self.inner.calls.borrow_mut().push(Call::UpdateSubtask {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+            task_id: task_id.to_owned(),
+            subtask_id: subtask_id.to_owned(),
+            title: req.title.clone(),
+            status: req.status,
+        });
+        pop(&self.inner.update_subtask, "update_subtask")
+    }
+
+    fn delete_subtask(
+        &self,
+        token: &str,
+        profile_id: &str,
+        task_id: &str,
+        subtask_id: &str,
+    ) -> ClientResult<()> {
+        self.inner.calls.borrow_mut().push(Call::DeleteSubtask {
+            token: token.to_owned(),
+            profile_id: profile_id.to_owned(),
+            task_id: task_id.to_owned(),
+            subtask_id: subtask_id.to_owned(),
+        });
+        pop(&self.inner.delete_subtask, "delete_subtask")
     }
 
     fn list_notes(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Note>> {
@@ -521,6 +666,53 @@ fn run_request(client: &FakeClient, request: ClientRequest) -> Outcome {
             profile_id,
             task_id,
         } => Outcome::DeleteTask(client.delete_task(token.expose(), &profile_id, &task_id)),
+        ClientRequest::ListSubtasks { token, profile_id } => {
+            Outcome::ListSubtasks(client.list_subtasks(token.expose(), &profile_id))
+        }
+        ClientRequest::ListTaskSubtasks {
+            token,
+            profile_id,
+            task_id,
+        } => Outcome::ListTaskSubtasks(client.list_task_subtasks(
+            token.expose(),
+            &profile_id,
+            &task_id,
+        )),
+        ClientRequest::CreateSubtask {
+            token,
+            profile_id,
+            task_id,
+            req,
+        } => Outcome::CreateSubtask(client.create_subtask(
+            token.expose(),
+            &profile_id,
+            &task_id,
+            &req,
+        )),
+        ClientRequest::UpdateSubtask {
+            token,
+            profile_id,
+            task_id,
+            subtask_id,
+            req,
+        } => Outcome::UpdateSubtask(client.update_subtask(
+            token.expose(),
+            &profile_id,
+            &task_id,
+            &subtask_id,
+            &req,
+        )),
+        ClientRequest::DeleteSubtask {
+            token,
+            profile_id,
+            task_id,
+            subtask_id,
+        } => Outcome::DeleteSubtask(client.delete_subtask(
+            token.expose(),
+            &profile_id,
+            &task_id,
+            &subtask_id,
+        )),
         ClientRequest::ListNotes { token, profile_id } => {
             Outcome::ListNotes(client.list_notes(token.expose(), &profile_id))
         }
@@ -642,6 +834,28 @@ pub fn done_task(id: &str, title: &str, created_at: &str, closed_at: &str) -> Ta
         "closed_at": closed_at,
     });
     serde_json::from_value(json).expect("valid task json")
+}
+
+/// Build an open [`Subtask`] under parent task `task_id` from canonical wire JSON (so its status
+/// is parsed by the `contract` derive). A sub-task carries only id/task_id/title/status.
+pub fn open_subtask(id: &str, task_id: &str, title: &str) -> Subtask {
+    subtask(id, task_id, title, "open")
+}
+
+/// Build a done [`Subtask`] under parent task `task_id` from canonical wire JSON.
+pub fn done_subtask(id: &str, task_id: &str, title: &str) -> Subtask {
+    subtask(id, task_id, title, "done")
+}
+
+/// Build a [`Subtask`] with the given status string (`open`/`done`) from canonical wire JSON.
+fn subtask(id: &str, task_id: &str, title: &str, status: &str) -> Subtask {
+    let json = serde_json::json!({
+        "id": id,
+        "task_id": task_id,
+        "title": title,
+        "status": status,
+    });
+    serde_json::from_value(json).expect("valid subtask json")
 }
 
 /// Build a [`Note`] from canonical wire JSON (so its `chrono` timestamp is parsed by the
@@ -900,9 +1114,13 @@ pub fn screen_overlay_capturing(screen: &Screen) -> bool {
 fn empty_tasks_pane() -> TaskListState {
     TaskListState {
         tasks: Vec::new(),
+        subtasks: Vec::new(),
         selected: None,
+        collapse_overrides: HashMap::new(),
         adding: None,
         editing: None,
+        adding_subtask: None,
+        editing_subtask: None,
         detail: None,
         confirming_delete: None,
         message: None,
@@ -918,9 +1136,13 @@ fn one_task_pane() -> TaskListState {
             "a task",
             "2026-06-18T10:00:00Z",
         )],
+        subtasks: Vec::new(),
         selected: Some(0),
+        collapse_overrides: HashMap::new(),
         adding: None,
         editing: None,
+        adding_subtask: None,
+        editing_subtask: None,
         detail: None,
         confirming_delete: None,
         message: None,
