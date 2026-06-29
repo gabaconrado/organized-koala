@@ -295,3 +295,16 @@ and the feature-track DoD. No genuine fork remains open. → `status: ready`.
   Detail "Sub-tasks" section, collapse-default-from-parent-status, selection traversal across a
   collapsed parent R2). Gates green: `./ok.sh test` (live test Postgres via docker), `./ok.sh lint`
   (`--all-targets`), `./ok.sh fmt --check` all clean.
+- 2026-06-29 [reviewer] **REVIEW-STATUS: approved** `8c500ca092b3c37ec4e95475b794053e470c9077`
+  (commit `c39c816`). Cold read-only pass. Mechanical gate all green (`test`/`lint --all-targets`/
+  `fmt --check`). No blocking findings. Verified the full risk surface: contract no-drift (#2 —
+  `Task`/`TaskStatus`/requests byte-untouched, TUI defines no parallel DTO); profile+parent scoping
+  structural via `assert_owned` + `subtasks→tasks` join on `profile_id` (#4/A1, 404 paths tested);
+  cascade via FK `ON DELETE CASCADE` + `DROP TABLE` down-migration (R4, both task- and
+  profile-delete cascade tests assert no orphans); one-level nesting structural (no
+  `parent_subtask_id`, A3); collapse derived/transient override map, never persisted (#1/A2);
+  keymap `A`/`x` no collision, `a`/`e`/`Space`/`d` preserved, e/Space routing correct (R1);
+  reversible paired migration + `.sqlx/` committed; reused `validation_failed`/`not_found`, no new
+  ErrorCode, no `#[allow]`, no secret leak. Satisfies DoD clause 6; clause 4 (live verifier) still
+  required before `awaiting-merge`. Non-blocking idea candidate captured on `main` (idea 0007: no
+  TUI key to delete a single sub-task — in-scope-correct, future affordance).
