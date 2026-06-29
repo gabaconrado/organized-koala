@@ -56,7 +56,31 @@ backlog".
 | [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | merged | medium | 0015 (merged ✓) | — (merged) |
 | [0017](./features/0017-timer-completion-desktop-notification.md) | Desktop notification when the focus timer ends (cross-OS, Ubuntu-first) | feature | merged | medium | 0008 (merged ✓) | — (merged) |
 | [0018](./features/0018-notes-detail-multiline-content.md) | Notes detail view — multiline Content text area (fills the pane), Created moved above | feature | merged | medium | 0016 (merged ✓) | — (merged) |
+| [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | ready (branch-owned: review → awaiting-merge) | medium | 0016 (merged ✓) | feature/0019-task-subtasks |
 
+> **0019 — Sub-tasks — `review`/in-flight on `feature/0019-task-subtasks` (approved + verified;
+> awaiting the step-7 freshen → `awaiting-merge`).** The **first admitted structural exception to
+> the deliberately-flat domain (#3)**: a task may have **one level** of **title+status-only**
+> sub-tasks (no description, no `created_at`, no detail view), per
+> [ADR-0012](../docs/adr/0012-subtasks-domain-exception.md) (amends #3) +
+> [ADR-0013](../docs/adr/0013-subtasks-wire-contract.md) (wire contract). `contract`
+> `Subtask`/`CreateSubtaskRequest`/`UpdateSubtaskRequest` (existing task DTOs byte-untouched, #2);
+> five profile+parent-scoped server endpoints under `/api/profiles/{pid}/tasks/{tid}/subtasks`
+> (+ a per-profile list) joined `subtasks → tasks` on `task_id` AND `tasks.profile_id` (cross-reach
+> `404`, #4/A1), reversible `subtasks` migration with `task_id` FK `ON DELETE CASCADE` (no-orphans
+> R4). TUI: `A` create / `e` edit-title / `Space` toggle / `x` collapse (Tasks-context, routed by
+> row type), a two-call tree load, indented render + `+`/`>` indicator, collapse derived from
+> parent status (transient override map, #1), and a read-only Task Detail "Sub-tasks" section.
+> Tests: contract 14, server 21 (incl. task- and profile-delete cascade), tui `TestBackend` 16.
+> Reviewer **approved** + verifier **verified**, both pinned to code-hash
+> `8c500ca092b3c37ec4e95475b794053e470c9077` (commit `c39c816`); coverage 71.22% line (report-only).
+> New CLAUDE.md gotcha: extending the `tui` `Client`/`ClientRequest`+`Outcome`/screen-`State`
+> surface strands the tester-owned `crates/tui/tests/` harness (`--lib --bins` green,
+> `--all-targets` red until the tester slice un-strands it). One out-of-scope follow-up filed as
+> [`ideas/0007`](./ideas/0007-delete-single-subtask-affordance.md) (a TUI key to delete a single
+> sub-task — the client/server plumbing + tests exist, but no keymap reaches them). The main
+> snapshot is frozen at the `ready` claim; the authoritative live status is on the branch.
+>
 > **0010 — Notes — MERGED.** The final missing
 > domain feature shipped end-to-end across all three crates — a near-exact structural clone of the
 > task surface governed by [ADR-0007](../docs/adr/0007-notes-wire-contract.md): a `contract` `note`

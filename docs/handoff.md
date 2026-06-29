@@ -5,6 +5,78 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-06-29 (0019 sub-tasks — full-stack `feature`; first #3 exception)
+
+Sub-tasks shipped end-to-end across all three crates — the **first admitted structural exception
+to the deliberately-flat domain (#3)**. A sub-task is a bounded, **one-level**,
+**title+status-only** child of a task (no description, no `created_at`, no detail view),
+created/edited/toggled/collapsed from the Tasks tab and the Task Detail page.
+
+What shipped:
+
+- **contract** — `Subtask { id, task_id, title, status }` (reusing `TaskStatus`),
+  `CreateSubtaskRequest { title }`, `UpdateSubtaskRequest { title?, status? }`; existing task DTOs
+  byte-untouched (#2).
+- **server** — paired reversible migration `20260612163051_subtasks.{up,down}.sql` (`subtasks`
+  table, `task_id` FK to `tasks` **`ON DELETE CASCADE`** — the no-orphans guarantee R4, status
+  CHECK, internal `created_at`, index; `down` = `DROP TABLE`). Five handlers in
+  `crates/server/src/handlers/subtasks.rs`, each `assert_owned(pid)` then joined `subtasks → tasks`
+  on `task_id` AND `tasks.profile_id = $pid` (A1 — cross-profile/wrong-parent → `404`). Reuses
+  `validation_failed`/`not_found`, no new `ErrorCode`.
+- **tui** — five `Client` methods + protocol variants + worker arms;
+  `Event::BeginAddSubtask`/`ToggleCollapse`; a **two-call tree load** (`ListTasks` →
+  `ListSubtasks`); a `VisibleRow` selection model. Keys (Tasks context): **`A`** create (Shift+a;
+  `a` stays add-task), **`e`** edit-title / **`Space`** toggle (routed to a selected sub-task row,
+  else the task), **`x`** toggle collapse. Collapse derives from parent status each render (A2,
+  transient override map — #1); indicator `+` only when a task has collapsed sub-tasks; sub-task
+  rows indented one level; Task Detail gains a read-only "Sub-tasks" section (A8 — not focusable).
+
+**ADRs:** [ADR-0012][adr-0012-0019] amends **hard-constraint #3** to admit the bounded sub-task
+exception; [ADR-0013][adr-0013-0019] is the wire contract + reversible migration. Both landed on
+`main` before the worktree was cut.
+
+**#3 reconciled with ADR-0012 (home-#1 edit this cycle).** `CLAUDE.md` #3 previously listed
+"subtasks" as forbidden structure "without an ADR"; it now reads "**deliberately flat (one
+admitted, bounded exception)**" — sub-tasks are admitted per ADR-0012 (one level, title+status
+only, profile-scoped via the parent), while the boundary (no deeper nesting, no extra sub-task
+fields, no tags/categories/per-profile-timer) **remains forbidden without its own ADR**. #3 is
+still meaningful and enforceable — the exception is narrow and cited, not a gutting.
+
+Tests: contract `tests/subtask.rs` (14), server `tests/subtasks.rs` (21 `#[sqlx::test]`, incl.
+both task-delete and profile-delete cascade R4), tui `tests/subtasks.rs` (16 TestBackend). Reviewer
+**REVIEW-STATUS: approved** + verifier **VERIFY-STATUS: verified**, both pinned to code-hash
+`8c500ca092b3c37ec4e95475b794053e470c9077` (commit `c39c816`). The verifier booted the stack (no
+learned-0011 migration-history conflict on the shared volume) and exercised all five endpoints
+live.
+
+coverage: **71.22%** line (`./ok.sh coverage` in the worktree; docker + throwaway test Postgres
+booted cleanly). Report-only — never a gate.
+
+**New CLAUDE.md gotcha this cycle:** *extending the `tui` `Client` trait / `ClientRequest`+`Outcome`
+enums / a screen-`State` struct's fields strands the tester-owned `crates/tui/tests/` harness* —
+lib+bin build and `clippy --lib --bins` stay green while `--all-targets` lint/test go red (the fake
+`Client` is missing the method, the worker-analogue `match` is non-exhaustive, struct initializers
+miss the field). Expected by crate ownership, **not** a defect: the dev slice is done at
+lib+bins-green and the tester slice un-strands the harness in the same cycle — so a `tui` slice
+touching that surface is not mergeable until the tester slice lands. Corollary recorded: a new
+always-runs request (0019's two-call tree load) becomes an invariant of every post-auth flow; the
+tester absorbed it by defaulting unscripted sub-task list calls to an empty list while keeping the
+strict net for mutating calls.
+
+**No new crate** (no dev-agent registration). No standards-skill change — the harness-stranding
+learning is a recurring cross-cutting gotcha (its correct home is CLAUDE.md, not a per-language
+skill), and the ADR-relationship/assumption detail lives in ADR-0012/0013.
+
+**One out-of-scope follow-up filed as an idea on `main`** (reviewer-flagged, non-blocking):
+[`ideas/0007`](../board/ideas/0007-delete-single-subtask-affordance.md) — there is **no TUI key to
+delete a single sub-task** (the `delete_subtask` client/server path + tests all exist, but nothing
+in the keymap reaches them; today a sub-task only disappears via the parent-task cascade). This is
+**in-scope-correct** for 0019 (the card specified create/edit/toggle/collapse + cascade, not
+single-delete) — idea-first per the backlog policy, awaiting human triage.
+
+[adr-0012-0019]: ./adr/0012-subtasks-domain-exception.md
+[adr-0013-0019]: ./adr/0013-subtasks-wire-contract.md
+
 ## Handoff — 2026-06-28 (0018 notes detail multiline Content text area — TUI-only; `feature`)
 
 A clean, well-scoped, **`tui`-crate-only** feature with **no** `contract`/server/migration change.
@@ -2118,6 +2190,26 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   **verified**, both pinned to code-hash `1f9db5c40754afb83857a67b71313fd9d2db7ba8`; coverage 72.47%
   line. One out-of-scope follow-up filed as `ideas/0006` (Content scroll/cursor affordance). No
   CLAUDE.md gotcha or standards/agent change this cycle.
+- **Sub-tasks are at `review`/in-flight on `feature/0019-task-subtasks`** (0019, a full-stack
+  `feature`; approved + verified, awaiting the step-7 freshen → `awaiting-merge`): the **first
+  admitted #3 exception** — a task may have **one level** of **title+status-only** sub-tasks (no
+  description, no `created_at`, no detail view), per [ADR-0012][adr-0012-snap] (amends #3) +
+  [ADR-0013][adr-0013-snap] (wire contract). `contract` `Subtask`/`CreateSubtaskRequest`/
+  `UpdateSubtaskRequest`; five profile+parent-scoped server endpoints under
+  `/api/profiles/{pid}/tasks/{tid}/subtasks` (+ a per-profile list) joined `subtasks → tasks` on
+  `task_id` AND `tasks.profile_id` (cross-reach `404`, #4/A1), reversible `subtasks` migration with
+  `task_id` FK **`ON DELETE CASCADE`** (no-orphans R4). TUI: `A` create, `e` edit-title, `Space`
+  toggle, `x` collapse (all Tasks-context, routed by row type), a two-call tree load, indented
+  render + `+`/`>` indicator, collapse derived from parent status (transient override map, #1), and
+  a read-only Task Detail "Sub-tasks" section. Tests: contract 14, server 21 (incl. task- and
+  profile-delete cascade), tui `TestBackend` 16. Reviewer **approved** + verifier **verified**, both
+  pinned to code-hash `8c500ca092b3c37ec4e95475b794053e470c9077`; coverage 71.22% line. New CLAUDE.md
+  gotcha: extending the `tui` `Client`/`ClientRequest`+`Outcome`/screen-`State` surface strands the
+  tester-owned `crates/tui/tests/` harness (`--lib --bins` green, `--all-targets` red until the
+  tester slice un-strands it). One out-of-scope follow-up filed as `ideas/0007` (TUI key to delete a
+  single sub-task — plumbing exists, no keymap reaches it). No new crate, no standards-skill change.
 
 [adr-0010-0014-snap]: ./adr/0010-tui-navigation-and-interaction-model.md
 [adr-0011-snap]: ./adr/0011-multiline-content-editing-keymap.md
+[adr-0012-snap]: ./adr/0012-subtasks-domain-exception.md
+[adr-0013-snap]: ./adr/0013-subtasks-wire-contract.md

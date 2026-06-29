@@ -121,10 +121,16 @@ persistence; all state lives server-side. Guarded by: no on-disk/in-memory store
 **#2 — `contract` is the single source of truth for wire shapes.** Server and TUI consume
 it; neither defines its own DTOs. A change here is ADR-worthy and ripples to both sides.
 
-**#3 — The domain is deliberately flat.** TODO = {Title, Description, Status, Created-at,
-Closed-at}; Notes = {Title, Content, Created-at}; Pomodoro = global config, duration is the
-only knob. **Do not** add structure (subtasks, tags, categories, per-profile timer config,
-…) without an ADR.
+**#3 — The domain is deliberately flat (one admitted, bounded exception).** TODO = {Title,
+Description, Status, Created-at, Closed-at}; Notes = {Title, Content, Created-at}; Pomodoro =
+global config, duration is the only knob. **Do not** add structure (tags, categories,
+per-profile timer config, …) without an ADR. **The sole admitted structural exception is
+sub-tasks**, per [ADR-0012][adr-0012-subtasks]: a task may have **one level** of children, each a
+**title+status-only** `Subtask` (reusing `TaskStatus`) — **no** description, **no** timestamps on
+the wire, **no** detail view. The boundary stays forbidden: **no** deeper nesting (a sub-task
+cannot have sub-tasks; structurally enforced by no `parent_subtask_id`), **no** extra fields on a
+sub-task, and **no** other added structure (tags, categories, per-profile timer config) without
+its own ADR. A sub-task is profile-scoped *via its parent task* (#4), never independently.
 
 **#4 — Profiles are namespaces.** Every TODO and Note is scoped to a profile. No
 cross-profile reads or writes; queries are always profile-scoped.
@@ -174,6 +180,26 @@ trait methods, worker/dispatch arms, key handling, captions — resolved as a **
 surfaces. **Plan for it:** merge parallel features in a deliberate order and **budget a
 re-review/re-verify pass for the trailing one**; do not treat its earlier sign-off as still valid
 after the rebase.
+
+**Gotcha — extending the `tui` `Client` trait / `ClientRequest`+`Outcome` enums / a `State`
+struct's fields strands the tester-owned `crates/tui/tests/` harness (learned 0019).** The `tui`
+**lib+bin build and `clippy --lib --bins` stay green** when a dev agent adds a `Client` trait
+method, a `ClientRequest`/`Outcome` variant, or a field to a screen-state struct — but the
+crate's **integration tests** (`crates/tui/tests/common/mod.rs`) carry a *parallel* surface the
+build does not touch: a **fake `Client`** (now missing the new method), a **worker-analogue
+`match`** over `ClientRequest` (now non-exhaustive), and **struct initializers** for the state
+(now missing the new field). So `./ok.sh lint`/`test` — which run `--all-targets` — go **red**
+even though the dev's own gate looked clean. This is **expected and by design** (crate file
+ownership: `tui-dev` owns `src/`, `tester` owns `tests/`), not a defect: the dev's slice is "done"
+at lib+bins green, and the `tester` slice un-strands the harness. **Plan for it:** a `tui` slice
+that touches the `Client`/protocol/state surface is **not** mergeable until the tester slice lands
+the harness update in the same cycle; do not read the dev's `--lib --bins`-green Log entry as a
+passing DoD clause-1/2. **Corollary — a new always-runs request becomes an invariant of every
+post-auth flow.** 0019's two-call tree load (`ListTasks` → chained `ListSubtasks`) forced **every**
+existing `TestBackend` flow through the new chained list call; the tester absorbed it by **default-
+ing unscripted sub-task list calls to an empty list** (the natural "no sub-tasks" state) while
+keeping the strict panic-on-empty net for the *mutating* calls — the pattern to reuse when a new
+list/refresh call is threaded into an already-large suite.
 
 > Open design item for the first ADR: **timer authority** — `#1` implies the server owns the
 > Pomodoro countdown and the TUI only renders it. The `architect` settles this in ADR-0002.
@@ -455,3 +481,4 @@ copy-me starting point.
 
 [adr-0003]: ./docs/adr/0003-verification-layering.md
 [adr-0004]: ./docs/adr/0004-migration-authority-and-binary-cli.md
+[adr-0012-subtasks]: ./docs/adr/0012-subtasks-domain-exception.md
