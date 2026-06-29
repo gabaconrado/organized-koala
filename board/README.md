@@ -56,10 +56,10 @@ backlog".
 | [0016](./features/0016-tui-detail-views-and-hotkeys.md) | TUI detail views + final hotkey scheme — per-field task/note panes, full keymap | feature | merged | medium | 0015 (merged ✓) | — (merged) |
 | [0017](./features/0017-timer-completion-desktop-notification.md) | Desktop notification when the focus timer ends (cross-OS, Ubuntu-first) | feature | merged | medium | 0008 (merged ✓) | — (merged) |
 | [0018](./features/0018-notes-detail-multiline-content.md) | Notes detail view — multiline Content text area (fills the pane), Created moved above | feature | merged | medium | 0016 (merged ✓) | — (merged) |
-| [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | ready (branch-owned: review → awaiting-merge) | medium | 0016 (merged ✓) | feature/0019-task-subtasks |
+| [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | ready (branch-owned: awaiting-merge after help-overlay re-entry) | medium | 0016 (merged ✓) | feature/0019-task-subtasks |
 
-> **0019 — Sub-tasks — `review`/in-flight on `feature/0019-task-subtasks` (approved + verified;
-> awaiting the step-7 freshen → `awaiting-merge`).** The **first admitted structural exception to
+> **0019 — Sub-tasks — back at `awaiting-merge` on `feature/0019-task-subtasks` after a
+> help-overlay re-entry (re-approved + re-verified).** The **first admitted structural exception to
 > the deliberately-flat domain (#3)**: a task may have **one level** of **title+status-only**
 > sub-tasks (no description, no `created_at`, no detail view), per
 > [ADR-0012](../docs/adr/0012-subtasks-domain-exception.md) (amends #3) +
@@ -72,13 +72,25 @@ backlog".
 > row type), a two-call tree load, indented render + `+`/`>` indicator, collapse derived from
 > parent status (transient override map, #1), and a read-only Task Detail "Sub-tasks" section.
 > Tests: contract 14, server 21 (incl. task- and profile-delete cascade), tui `TestBackend` 16.
-> Reviewer **approved** + verifier **verified**, both pinned to code-hash
-> `8c500ca092b3c37ec4e95475b794053e470c9077` (commit `c39c816`); coverage 71.22% line (report-only).
-> New CLAUDE.md gotcha: extending the `tui` `Client`/`ClientRequest`+`Outcome`/screen-`State`
-> surface strands the tester-owned `crates/tui/tests/` harness (`--lib --bins` green,
-> `--all-targets` red until the tester slice un-strands it). One out-of-scope follow-up filed as
+> **Post-`awaiting-merge` re-entry (TUI-presentation-only):** an operator-reported `?` help-overlay
+> bug — the Tasks reference line wrapped `d delete` to an un-indented continuation once the 0019
+> sub-task hotkeys overflowed the shared 64-col box — was fixed by giving the help overlay its own
+> `HELP_DIALOG_WIDTH = 72` (a `width` field on the `Dialog` struct; the other five dialogs keep
+> `DIALOG_WIDTH = 64`) + a regression test in `crates/tui/tests/dialogs.rs`; no `contract`/server/
+> domain change, no ADR. The code-changing fix voided the original `8c500ca0…` verdicts. Reviewer
+> **re-approved** + verifier **re-verified**, both pinned to code-hash
+> `da5b04634dcedc3a6df38ef65958548981d83775` (commit `54fea75`; server/contract diff empty ⇒
+> live-boot N/A, prior endpoint verification carries forward); coverage 71.23% line (report-only).
+> New CLAUDE.md gotcha this re-entry: the `?` help overlay packs key·action pairs into a fixed-width
+> box, so a new/renamed hotkey can silently overflow a reference line and wrap with no indent
+> (second occurrence — 0015 Global block, 0019 Tasks line). The earlier-cycle gotcha (extending the
+> `tui` `Client`/`ClientRequest`+`Outcome`/screen-`State` surface strands the tester-owned
+> `crates/tui/tests/` harness — `--lib --bins` green, `--all-targets` red until the tester slice
+> un-strands it) still stands. Two out-of-scope follow-ups filed as ideas on `main`:
 > [`ideas/0007`](./ideas/0007-delete-single-subtask-affordance.md) (a TUI key to delete a single
-> sub-task — the client/server plumbing + tests exist, but no keymap reaches them). The main
+> sub-task — client/server plumbing + tests exist, but no keymap reaches them) and
+> [`ideas/0008`](./ideas/0008-drop-commit-sha-from-help-regression-test-comment.md) (the new
+> regression test's comment cites the fixing commit sha — a `coding-standards` nit). The main
 > snapshot is frozen at the `ready` claim; the authoritative live status is on the branch.
 >
 > **0010 — Notes — MERGED.** The final missing
