@@ -84,9 +84,13 @@ detailed view of its own. Sub-tasks are created, edited, toggled, and collapsed 
 - [ ] 2026-06-29 [human] Filed: add sub-tasks. See acceptance points 1–9 above. I know I
   said no subtasks at the start — I want them now; treat the ADR amending hard-constraint #3
   as part of this work.
-- [ ] 2026-06-29 [human] Bug in the help (`?`) dialog: with the new sub-task hotkeys the Tasks
+- [x] 2026-06-29 [human] Bug in the help (`?`) dialog: with the new sub-task hotkeys the Tasks
   line's `d delete` wraps to the next line with no tabbing/indentation. Make it a borderless
   table (so indentation is correct automatically) or widen the dialog.
+  - Resolved on-branch: gave the help overlay its own `HELP_DIALOG_WIDTH = 72` (inner ~70, leaving
+    the other dialogs' `DIALOG_WIDTH = 64` untouched) so the Tasks line no longer wraps; regression
+    test `help_modal_tasks_line_renders_intact_without_wrapping_d_delete` pins it. Re-reviewed
+    (`approved`) + re-verified (`verified`) at code-hash `da5b0463` (commits `5fc5021`/`54fea75`).
 
 ## Plan(s)
 
