@@ -451,7 +451,21 @@ tree-load defaulting to empty for the ~163 unscripted flows).
 all five endpoints exercised + error contract + profile/parent-scoping + cascade + OTel spans;
 TUI suite 16/16 green per ADR-0003).
 
-coverage: 71.22% (`./ok.sh coverage` in the worktree; docker + throwaway test Postgres booted
+**Post-`awaiting-merge` help-overlay re-entry (TUI-presentation-only).** Operator feedback
+surfaced the `?` help overlay's **Tasks** reference line wrapping `d delete` to an un-indented
+flush-left continuation: the line is 64 chars and overflowed the 62-col inner area of the shared
+`DIALOG_WIDTH = 64` box (the 0019 sub-task hotkeys `A add sub-task` / `x collapse/expand` pushed it
+over). Fixed by giving the help overlay **its own** `HELP_DIALOG_WIDTH = 72` — a `width: u16` field
+was added to the `Dialog` struct so only `draw_help` widens; the five other (form/confirm/timer)
+dialogs keep `DIALOG_WIDTH = 64` and render byte-identically. No `contract`/server/domain change,
+no ADR. Pinned by a regression test
+`help_modal_tasks_line_renders_intact_without_wrapping_d_delete` in `crates/tui/tests/dialogs.rs`.
+The code-changing fix voided the prior `8c500ca0…` verdicts; reviewer **re-approved** + verifier
+**re-verified**, both pinned to code-hash `da5b04634dcedc3a6df38ef65958548981d83775`
+(commit `54fea75`; server/contract diff empty ⇒ live-boot portion N/A, prior 0019 endpoint
+verification carries forward).
+
+coverage: 71.23% (`./ok.sh coverage` in the worktree; docker + throwaway test Postgres booted
 cleanly). Report-only — never a gate.
 
 [adr-0012]: ../../docs/adr/0012-subtasks-domain-exception.md
