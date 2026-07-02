@@ -137,6 +137,32 @@ and needs no amendment.
   confirms the returned array is oldest-first (and the reqwest client path/OTel span), per DoD
   clause 4. Interactive switcher render stays with the `tester` `TestBackend` suite (ADR-0003).
 
+## Summary
+
+Profiles now list **oldest-first** (ascending insertion time) in both the Profile list and the
+switcher. The deliverable is a single server-query direction flip in `list_profiles`
+(`crates/server/src/handlers/profiles.rs`): `ORDER BY created_at DESC` → `ASC`. The `.sqlx/`
+offline cache was regenerated for the changed SQL text (old `DESC` entry removed, new `ASC` entry
+committed; column set `{id,name,created_at}` unchanged). Two stale "newest-first" doc comments
+were corrected to "oldest-first" — the server handler doc line (`server-dev`) and the
+`ProfilesState.profiles` field note in `crates/tui/src/app/profiles.rs` (`tui-dev`). A new server
+integration test `list_profiles_ordered_oldest_first` (`crates/server/tests/profiles.rs`) pins the
+ordering with an insertion sequence distinct from **both** alphabetical and newest-first, so a
+regression to either fails.
+
+- **Premise correction:** the request claimed profiles were "alphabetical" today; the server was
+  actually `ORDER BY created_at DESC` (newest-first). `architect` corrected the premise from the
+  code — the deliverable (oldest-first, server-authoritative) was unambiguous either way.
+- **No `contract`/wire change (#2)** — the `Profile` DTO already carries `created_at`; **no
+  domain-structure change (#3)**; **no ADR**; **no migration**; profile-scoping (#4,
+  `WHERE user_id = $1`) and stateless-TUI (#1, no client-side sort) intact.
+- **Reviewer: `approved`** — code-tree hash `b8591d70250155b79c209d4b14b59f6b2abb00fd`
+  (commit `831634b`), no findings, no out-of-scope nits.
+- **Verifier: `verified`**, no gaps — booted the stack live; `GET /api/profiles` returned
+  `[work, zulu, alpha, mike]` (oldest-first, HTTP 200, shape unchanged), account-scoping and error
+  contract confirmed, OTel `list_profiles` span exported; full `./ok.sh test` green.
+- coverage: 72.66%
+
 ## Log / comments
 
 - [ ] 2026-07-02 [human] Filed from an operator interface-improvements request; see acceptance above.
