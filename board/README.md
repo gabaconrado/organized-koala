@@ -58,10 +58,10 @@ backlog".
 | [0018](./features/0018-notes-detail-multiline-content.md) | Notes detail view — multiline Content text area (fills the pane), Created moved above | feature | merged | medium | 0016 (merged ✓) | — (merged) |
 | [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | merged | medium | 0016 (merged ✓) | — (merged) |
 | [0020](./features/0020-tui-tasks-pane-rendering-overhaul.md) | Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap | feature | merged | medium | 0019 (merged ✓) | — (merged) |
-| [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | ready | medium | — | feature/0021-profiles-sorted-by-insertion-time |
+| [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | merged | medium | 0012 (merged ✓) | — (merged) |
 
-> **0021 — Profiles sorted oldest-first by insertion time — reviewed + verified on branch
-> (AI-terminal at `awaiting-merge`; the `main` snapshot is frozen at the `ready` claim).** A small,
+> **0021 — Profiles sorted oldest-first by insertion time — MERGED** (operator-authorised
+> ff-merge; `main` @ `8e4a761`). A small,
 > clean `feature`: a single server-query direction flip in `list_profiles`
 > (`crates/server/src/handlers/profiles.rs`) — `ORDER BY created_at DESC` → `ASC` — so the Profile
 > list and switcher render oldest-first. The `.sqlx/` cache was regenerated for the changed SQL text
