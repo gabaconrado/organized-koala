@@ -147,3 +147,6 @@ and needs no amendment.
   observable behaviour — fails the chore no-behaviour invariant). Direction: **oldest-first
   (ASC)** per the request's stated assumption. Plan is server-only ordering flip + doc-comment
   fixes + a server ordering test; no `contract-owner` slice, no ADR.
+- [x] 2026-07-02 [orchestrator] Claimed onto `feature/0021-profiles-sorted-by-insertion-time`
+  (worktree cut from main@1914d0c). **This `main` copy is frozen at the claim snapshot; the
+  branch copy is authoritative until the human's merge brings it back.**
