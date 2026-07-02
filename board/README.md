@@ -59,7 +59,21 @@ backlog".
 | [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | merged | medium | 0016 (merged ✓) | — (merged) |
 | [0020](./features/0020-tui-tasks-pane-rendering-overhaul.md) | Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap | feature | merged | medium | 0019 (merged ✓) | — (merged) |
 | [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | merged | medium | 0012 (merged ✓) | — (merged) |
+| [0022](./features/0022-verifier-hermetic-teardown.md) | Make the verifier stack boot hermetic — always tear down its own volume (`down -v` on any exit) | chore | inbox | low | — | — (unclaimed) |
 
+> **0022 — Verifier hermetic teardown — INBOX (`chore`, unclaimed).** Minted directly (no plan)
+> from operator-accepted idea [`ideas/0001`](./ideas/0001-per-worktree-compose-isolation.md),
+> **approach (1) only**: make each verifier stack boot hermetic — always `down -v` on any exit
+> (success/failure/signal, via a trap-style guarantee) so no Postgres volume / migration history
+> survives for a later boot to inherit. In the intentionally **serialized** workflow this eliminates
+> the learned-0011 cross-worktree migration-history conflict, and the self-cleanup needs **no**
+> operator authorization (it destroys only state the same run created). Idea approach (2)
+> (per-worktree `COMPOSE_PROJECT_NAME` isolation) was **declined** by the operator and is explicitly
+> out of scope. Infra/process-only — the chore invariant holds (no crate source, behaviour,
+> `contract`/wire #2, or domain #3 delta) — so it runs the lighter chore DoD (gates green + a cold
+> `reviewer` approval attesting the invariant; live verifier pass skipped). Owner on claim:
+> `platform-dev`.
+>
 > **0021 — Profiles sorted oldest-first by insertion time — MERGED** (operator-authorised
 > ff-merge; `main` @ `8e4a761`). A small,
 > clean `feature`: a single server-query direction flip in `list_profiles`

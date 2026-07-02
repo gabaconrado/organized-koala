@@ -1,12 +1,12 @@
 ---
 id: 0001
 title: Isolate each worktree's docker stack with a per-worktree COMPOSE_PROJECT_NAME
-status: open
+status: accepted
 priority: medium
 created: 2026-06-26
 source: 0011
 raised-by: eng-manager
-promoted-to: null
+promoted-to: 0022   # only approach (1), verifier hermetic teardown; approach (2) declined — see Disposition
 ---
 
 ## What
@@ -63,6 +63,18 @@ worktree gets its own project + volume. Confirm teardown (`down`/`down -v`) targ
 is the only fix that makes the failure mode *structurally* impossible under concurrent worktrees, and
 closes the hard-crash residual left by (1).
 
+> **Declined for now (operator, 2026-07-02).** Approach (2) is **not** being pursued: development is
+> intentionally **serialized** (dev/verify sessions never run in parallel) for the foreseeable future,
+> so the concurrent-worktree failure mode approach (2) closes cannot occur in practice, and its
+> isolation wiring is unnecessary complexity. Only approach (1) — hermetic verifier teardown — is
+> accepted and promoted (chore 0022). If parallel worktrees are ever adopted, revisit this idea to
+> pick (2) back up.
+
 ## Disposition
 
-- [ ] [human] decision: accept (→ promote to Board) | close (reason)
+- [x] 2026-07-02 [human] decision: **partially accept.** Approach (1) — verifier hermetic teardown
+  (`up` → verify → `down -v`, always, on any exit) — **accepted** and promoted to chore **0022**.
+  Approach (2) — per-worktree `COMPOSE_PROJECT_NAME` isolation — **declined**: the workflow is
+  serialized for the foreseeable future, so the concurrent-worktree conflict it prevents cannot arise
+  and the isolation complexity is unwarranted. Idea kept as a record; revisit (2) only if parallel
+  worktrees are ever adopted.
