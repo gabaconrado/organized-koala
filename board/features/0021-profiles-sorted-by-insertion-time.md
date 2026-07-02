@@ -2,7 +2,7 @@
 id: 0021
 title: Profiles sorted by insertion time (not alphabetically) in the Profile list
 type: feature      # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0012]  # profiles CRUD + switcher (merged)
