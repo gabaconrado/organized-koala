@@ -378,6 +378,30 @@ wire already shipped in 0019; ADR-0014 unamended). All re-enter at `working` (TU
   `clippy --lib --bins` + `./ok.sh build` green; doctests (3) pass. `--all-targets`/`./ok.sh test`
   expected-RED until tester S4 un-strands `common/mod.rs` for the `confirming_delete` type change
   (learned 0019) — NOT a clause-1/2 pass of this slice.
+- 2026-07-02 [tester] S4 re-entry done. **Un-stranded `tests/common/mod.rs`** for the S3
+  `confirming_delete: Option<DeleteTarget>` type change: imported `DeleteTarget`, updated the
+  `task_list_screen_confirming_delete()` builder to arm a `DeleteTarget::Task`. No
+  `Client`/`ClientRequest`/`Outcome` surface change this cycle (`DeleteSubtask` already existed), so
+  the fake client + worker-analogue match were untouched. **Updated the now-wrong assertions** in
+  `tests/tasks.rs`: (a) the `d`-arms-confirm test now matches `DeleteTarget::Task { task_id }` instead
+  of `confirming_delete.as_deref()`; (b) replaced `older_tasks_are_forced_collapsed_regardless_of_status`
+  (pinned the retired hard-forced-collapse) with the amended toggle behaviour; (c) rewrote the
+  today-date-header test from a bare centered-line check to the full-width in-pane separator row.
+  **Added new-behaviour pins** (all via the wall-clock `today_*` builders + `TestBackend`): item 3 —
+  older `x` toggle emits/re-hides `VisibleRow::Subtask` rows, today-group collapse + completed-last
+  unchanged, and `x` on one older task does not bleed onto another (A7); item 2 — sub-task-row `d` arms
+  `DeleteTarget::Subtask{task_id,subtask_id}`, `Enter` issues `DeleteSubtask{parent,subtask}`, a
+  task-row `d`→Enter still issues `DeleteTask` (not `DeleteSubtask`), a non-confirm key while armed
+  issues no delete, and `d` after skipping the separator arms the older task not the separator;
+  item 1 — the today date + "Older tasks" rows render as full-width `─`-filled in-pane separators
+  (inner span = a task row's inner width) and the date row carries no selection highlight (REVERSED
+  lands on the first task). dialogs.rs untouched (the `?` help overlay was not changed this cycle —
+  no re-wrap check needed). **Note on the prompt's "navigation disarms" wording:** the shipped
+  `handle_delete_confirm_event` captures input (only `Enter` confirms, `Esc` cancels; a navigation
+  key is inert and does NOT disarm), matching the notes/profiles confirm dialog — I pinned the true
+  observable behaviour (no request from a non-confirm key), not a disarm. Gates: `fmt --check`,
+  `lint` (--all-targets, GREEN) and `test` all green (tui tasks suite 30 passed; server tasks suite
+  16 passed via the throwaway test Postgres).
 
 ## Summary
 

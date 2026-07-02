@@ -36,9 +36,10 @@ use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use tui::app::{
-    AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, Dispatch,
-    EditTaskState, Event, MainState, NoteDetail, NoteForm, NotePane, NotesMode, NotesState,
-    Outcome, ProfileForm, ProfilesMode, ProfilesState, RequestId, Screen, Tab, TaskListState,
+    AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, DeleteTarget,
+    Dispatch, EditTaskState, Event, MainState, NoteDetail, NoteForm, NotePane, NotesMode,
+    NotesState, Outcome, ProfileForm, ProfilesMode, ProfilesState, RequestId, Screen, Tab,
+    TaskListState,
 };
 use tui::client::{Client, ClientError, ClientResult};
 
@@ -1340,11 +1341,15 @@ pub fn notes_screen() -> Screen {
     main_screen(Tab::Notes, empty_tasks_pane(), two_profiles_pane())
 }
 
-/// The tabbed view on the Tasks tab with the delete-confirmation dialog armed (a non-text-entry
-/// overlay that still captures input — the two-step `x`-again affordance, Assumption A5).
+/// The tabbed view on the Tasks tab with the delete-confirmation dialog armed against the selected
+/// **task** (a non-text-entry overlay that still captures input — the two-step confirm affordance,
+/// Assumption A5). The armed target is a [`DeleteTarget::Task`] (the sub-task-armed variant is
+/// exercised by the driven delete-confirm flow in `tasks.rs`).
 pub fn task_list_screen_confirming_delete() -> Screen {
     let mut tasks = one_task_pane();
-    tasks.confirming_delete = Some("00000000-0000-0000-0000-000000000001".to_owned());
+    tasks.confirming_delete = Some(DeleteTarget::Task {
+        task_id: "00000000-0000-0000-0000-000000000001".to_owned(),
+    });
     main_screen(Tab::Tasks, tasks, two_profiles_pane())
 }
 

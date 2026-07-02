@@ -15,6 +15,12 @@
 //! - delete is the 0015 confirm dialog (0016 Assumption A5, retiring the old `x`-again two-step):
 //!   `d` (`DeleteSelected`) arms the dialog and issues no request, `Enter` (`Submit`) issues
 //!   `DeleteTask` and the row is removed after the refresh, `Esc` (`Cancel`) disarms.
+//!
+//! The 0020 block at the bottom pins the tasks-pane render overhaul (completed-last, today/older
+//! split, `h`-hide, `limit=200`) and its 2026-07-02 amendment: the today date + "Older tasks"
+//! rows are full-width in-pane separators (item 1), a sub-task row's `d` arms a
+//! `DeleteTarget::Subtask` and confirms into `DeleteSubtask` (item 2 / acceptance #7), and the
+//! older group defaults collapsed but is `x`-toggleable like the today group (item 3).
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
@@ -26,7 +32,8 @@ use common::{
 };
 use contract::{Subtask, TaskStatus};
 use tui::app::{
-    App, Event, OLDER_SEPARATOR_LABEL, Screen, TASK_LIST_LIMIT, VisibleRow, current_day_number,
+    App, DeleteTarget, Event, OLDER_SEPARATOR_LABEL, Screen, TASK_LIST_LIMIT, VisibleRow,
+    current_day_number,
 };
 
 const W: u16 = 80;
@@ -292,10 +299,13 @@ fn delete_key_arms_confirm_and_issues_no_request() {
     );
 
     let list = tasks_pane(&app);
-    assert_eq!(
-        list.confirming_delete.as_deref(),
-        Some("t1"),
-        "the confirm is armed for the selected task",
+    assert!(
+        matches!(
+            list.confirming_delete,
+            Some(DeleteTarget::Task { ref task_id }) if task_id == "t1"
+        ),
+        "the confirm is armed against the selected task (DeleteTarget::Task): {:?}",
+        list.confirming_delete,
     );
     assert_eq!(list.tasks.len(), 1, "the row is still present while armed");
 
@@ -452,6 +462,25 @@ fn pos(haystack: &str, needle: &str) -> usize {
         .unwrap_or_else(|| panic!("expected {needle:?} in:\n{haystack}"))
 }
 
+/// The content of a bordered list row between its outer `│` border columns (exclusive), i.e. the
+/// pane's inner (content) cells for that row. The Tasks pane does not begin at column 0 (it sits in
+/// a layout with a leading margin), so a separator row reads e.g. ` │──── label ────│`; this returns
+/// just the `──── label ────` inner span so a test can assert it spans the full inner width.
+fn bordered_inner(row: &str) -> &str {
+    let start = row
+        .find('│')
+        .unwrap_or_else(|| panic!("no left border in row:\n{row}"));
+    let end = row
+        .rfind('│')
+        .unwrap_or_else(|| panic!("no right border in row:\n{row}"));
+    assert!(
+        end > start,
+        "a bordered row has two distinct borders:\n{row}"
+    );
+    // Slice between the border chars. `│` is 3 bytes in UTF-8; step past the left one.
+    &row[start + '│'.len_utf8()..end]
+}
+
 // ---- completed-last ordering (task level) ----
 
 #[test]
@@ -565,25 +594,142 @@ fn tasks_split_into_today_above_and_older_below_the_separator() {
 }
 
 #[test]
-fn older_tasks_are_forced_collapsed_regardless_of_status() {
-    // Acceptance #3: older-group tasks render collapsed (their sub-tasks hidden) regardless of
-    // status and independent of any per-task collapse override. An *open* older task with a
-    // sub-task shows the collapsed `+` indicator and hides the child.
-    let (_client, app) = logged_in_tree(
+fn older_task_starts_collapsed_then_x_expands_and_x_again_collapses() {
+    // Acceptance #3 (amended 2026-07-02, item 3): an older-group task with sub-tasks **defaults to
+    // collapsed on load** (sub-tasks hidden, `+` indicator), but `x` (`ToggleCollapse`) now toggles
+    // it just like a today task — `x` emits its `VisibleRow::Subtask` rows, `x` again re-collapses.
+    // (Previously the older group was hard-forced collapsed and `x` was inert; that is retired.)
+    let (_client, mut app) = logged_in_tree(
         vec![
             today_open_task("t-today", "today task", "10:00:00"),
             open_task("t-old", "older open parent", "2020-01-02T10:00:00Z"),
         ],
         vec![open_subtask("s1", "t-old", "older child")],
     );
-    let text = render(&app, W, H);
+    let today_day = current_day_number();
+
+    // On load: the older task is collapsed — no Subtask row, and the render shows `+` and hides the
+    // child.
     assert!(
-        text.contains("+ [ ] older open parent"),
-        "an open older task is forced collapsed (`+`):\n{text}",
+        !tasks_pane(&app)
+            .visible_rows(today_day)
+            .iter()
+            .any(|r| matches!(r, VisibleRow::Subtask { .. })),
+        "older task starts collapsed: no sub-task row in visible_rows",
+    );
+    let collapsed = render(&app, W, H);
+    assert!(
+        collapsed.contains("+ [ ] older open parent"),
+        "an older task starts collapsed (`+`):\n{collapsed}",
     );
     assert!(
-        !text.contains("older child"),
-        "the older task's sub-task is hidden (forced collapsed):\n{text}",
+        !collapsed.contains("older child"),
+        "the older task's sub-task is hidden while collapsed:\n{collapsed}",
+    );
+
+    // Select the older task (row after the today task + the separator), then `x` to expand it. The
+    // sub-task row now appears in visible_rows and the child renders.
+    let _ = app.handle_event(Event::Next); // today task -> (skips separator) -> older task
+    assert_eq!(
+        tasks_pane(&app).selected_row(today_day),
+        Some(VisibleRow::Task { task_idx: 1 }),
+        "selection landed on the older task (separator skipped)",
+    );
+    let _ = app.handle_event(Event::ToggleCollapse);
+    assert!(
+        tasks_pane(&app)
+            .visible_rows(today_day)
+            .iter()
+            .any(|r| matches!(r, VisibleRow::Subtask { .. })),
+        "after x the older task expands: a sub-task row appears",
+    );
+    let expanded = render(&app, W, H);
+    assert!(
+        expanded.contains("> [ ] older open parent") && expanded.contains("older child"),
+        "the older task's sub-task renders after x expands it:\n{expanded}",
+    );
+
+    // `x` again re-collapses it.
+    let _ = app.handle_event(Event::ToggleCollapse);
+    assert!(
+        !tasks_pane(&app)
+            .visible_rows(today_day)
+            .iter()
+            .any(|r| matches!(r, VisibleRow::Subtask { .. })),
+        "a second x re-collapses the older task (no sub-task row)",
+    );
+}
+
+#[test]
+fn today_group_and_completed_last_ordering_are_unchanged_by_the_older_toggle() {
+    // Item 3 confirmation: the today group's own collapse behaviour (open expanded, done collapsed)
+    // and the completed-last ordering are unaffected by the older-group amendment. A today open
+    // parent shows its sub-task expanded (`>`); a done today parent collapses; and open renders
+    // before done.
+    let (_client, app) = logged_in_tree(
+        vec![
+            today_open_task("t-open", "today open", "12:00:00"),
+            today_done_task("t-done", "today done", "10:00:00"),
+        ],
+        vec![
+            open_subtask("s-open", "t-open", "open child"),
+            open_subtask("s-done", "t-done", "done-parent child"),
+        ],
+    );
+    let text = render(&app, W, H);
+    // Completed-last: the open today task renders above the done today task.
+    assert!(
+        pos(&text, "today open") < pos(&text, "today done"),
+        "today open renders above today done (completed-last):\n{text}",
+    );
+    // The open today parent is expanded (child visible); the done today parent is collapsed.
+    assert!(
+        text.contains("> [ ] today open") && text.contains("open child"),
+        "an open today task stays expanded:\n{text}",
+    );
+    assert!(
+        text.contains("+ [x] today done") && !text.contains("done-parent child"),
+        "a done today task stays collapsed:\n{text}",
+    );
+}
+
+#[test]
+fn x_on_an_older_task_does_not_affect_another_tasks_collapse_state() {
+    // Assumption A7 (no override bleed): the older-group default is render-time-derived, not a
+    // mutation of `collapse_overrides`, so pressing `x` on one older task must not change any other
+    // task's collapse state. Two older parents each with a sub-task; expanding the first leaves the
+    // second collapsed.
+    let (_client, mut app) = logged_in_tree(
+        vec![
+            today_open_task("t-today", "today task", "12:00:00"),
+            open_task("t-old-a", "older A", "2020-01-02T10:00:00Z"),
+            open_task("t-old-b", "older B", "2020-01-01T10:00:00Z"),
+        ],
+        vec![
+            open_subtask("sa", "t-old-a", "child A"),
+            open_subtask("sb", "t-old-b", "child B"),
+        ],
+    );
+
+    // Select and expand the first older task (older A): today -> older A.
+    let _ = app.handle_event(Event::Next);
+    let today_day = current_day_number();
+    assert_eq!(
+        tasks_pane(&app).selected_row(today_day),
+        Some(VisibleRow::Task { task_idx: 1 }),
+        "selection on older A",
+    );
+    let _ = app.handle_event(Event::ToggleCollapse);
+
+    let text = render(&app, W, H);
+    // Older A expanded (child A visible); older B still collapsed (child B hidden, `+`).
+    assert!(
+        text.contains("> [ ] older A") && text.contains("child A"),
+        "older A expands on x:\n{text}",
+    );
+    assert!(
+        text.contains("+ [ ] older B") && !text.contains("child B"),
+        "older B is untouched by x on older A (no override bleed, A7):\n{text}",
     );
 }
 
@@ -662,16 +808,117 @@ fn selection_and_visible_rows_skip_the_hidden_older_rows() {
 // ---- today date header: Tasks pane only ----
 
 #[test]
-fn today_date_header_renders_in_the_tasks_pane() {
-    // Acceptance #2: a human-readable today date header (weekday, month, ordinal day, year) renders
-    // top-center in the Tasks pane. Assert the exact string the pure `today_header` seam produces
-    // for the current civil day, so the test is deterministic against the wall clock.
+fn today_date_header_renders_as_a_full_width_in_pane_separator_row() {
+    // Acceptance #2 (amended 2026-07-02, item 1): the today date renders as a full-width, `─`-padded
+    // separator row INSIDE the bordered Tasks pane (no longer a short centered line above the
+    // border). Assert (a) the header text is present, (b) the header ROW spans the pane's full inner
+    // width (bordered on both sides, `─`-filled), and (c) it is the first list row inside the border.
     let (_client, app) = logged_in(vec![today_open_task("t1", "task", "10:00:00")]);
     let header = tui::ui::today_header(current_day_number());
     let text = render(&app, W, H);
     assert!(
         text.contains(&header),
         "the today date header {header:?} renders in the Tasks pane:\n{text}",
+    );
+    // The row carrying the header is a bordered list row; its inner span (between the │ borders) is
+    // `─`-filled edge-to-edge around the centered label — the full pane inner width, not a short
+    // centered line. Its width matches a plain task row's inner width (both span the same pane).
+    let header_row = text
+        .lines()
+        .find(|l| l.contains(&header))
+        .expect("a rendered row carries the header");
+    let task_row = text
+        .lines()
+        .find(|l| l.contains("task") && !l.contains(&header))
+        .expect("a rendered task row");
+    let header_inner = bordered_inner(header_row);
+    assert!(
+        header_inner.starts_with('─') && header_inner.trim_end().ends_with('─'),
+        "the header inner span is `─`-filled edge-to-edge (full-width separator), not a short line:\n{header_inner:?}",
+    );
+    assert_eq!(
+        header_inner.chars().count(),
+        bordered_inner(task_row).chars().count(),
+        "the header separator row spans the same inner width as a task row (full pane width)",
+    );
+}
+
+#[test]
+fn today_date_header_row_is_not_a_selection_target() {
+    // Acceptance #2: the date row is non-selectable — the selection highlight (REVERSED) lands on
+    // the first task, never on the date row. The date row is prepended at draw and is not part of
+    // `visible_rows`, so `selected` (index 0) points at the first task.
+    let (_client, app) = logged_in(vec![today_open_task("t1", "first task", "10:00:00")]);
+    let header = tui::ui::today_header(current_day_number());
+    let buffer = common::render_buffer(&app, W, H);
+    let flat = render(&app, W, H);
+
+    // The reversed (selection) highlight row must be the first task's row, not the date row.
+    let header_row_idx = flat
+        .lines()
+        .position(|l| l.contains(&header))
+        .expect("header row present");
+    let task_row_idx = flat
+        .lines()
+        .position(|l| l.contains("first task"))
+        .expect("task row present");
+    assert!(
+        task_row_idx > header_row_idx,
+        "the first task row is below the date row",
+    );
+
+    // Count reversed cells on the date row vs the task row: the highlight is on the task row.
+    let reversed_on = |row_idx: usize| -> usize {
+        let y = u16::try_from(row_idx).expect("row fits u16");
+        (0..W)
+            .filter(|&x| {
+                buffer[(x, y)]
+                    .modifier
+                    .contains(ratatui::style::Modifier::REVERSED)
+            })
+            .count()
+    };
+    assert_eq!(
+        reversed_on(header_row_idx),
+        0,
+        "the date row carries no selection highlight (non-selectable)",
+    );
+    assert!(
+        reversed_on(task_row_idx) > 0,
+        "the selection highlight lands on the first task row",
+    );
+}
+
+#[test]
+fn older_tasks_separator_spans_the_full_pane_inner_width() {
+    // Acceptance #3: the "Older tasks" separator is a full-width `─`-padded row (like the date row),
+    // not the bare short `── Older tasks ──`. Assert its rendered row spans the full pane width.
+    let (_client, app) = logged_in(vec![
+        today_open_task("t-today", "fresh", "10:00:00"),
+        open_task("t-old", "stale", "2020-01-02T10:00:00Z"),
+    ]);
+    let text = render(&app, W, H);
+    let sep_row = text
+        .lines()
+        .find(|l| l.contains(OLDER_SEPARATOR_LABEL))
+        .expect("the Older tasks separator row renders");
+    let task_row = text
+        .lines()
+        .find(|l| l.contains("fresh"))
+        .expect("a rendered task row");
+    let sep_inner = bordered_inner(sep_row);
+    assert!(
+        sep_inner.starts_with('─') && sep_inner.trim_end().ends_with('─'),
+        "the Older tasks separator inner span is `─`-filled edge-to-edge (full width):\n{sep_inner:?}",
+    );
+    assert_eq!(
+        sep_inner.chars().count(),
+        bordered_inner(task_row).chars().count(),
+        "the Older tasks separator spans the same inner width as a task row (full pane width)",
+    );
+    assert!(
+        sep_inner.contains('─') && sep_inner.contains(OLDER_SEPARATOR_LABEL),
+        "the separator is `─`-filled around the centered label, not the bare short form:\n{sep_inner:?}",
     );
 }
 
@@ -733,6 +980,207 @@ fn today_header_formats_a_known_day_number() {
         "the chosen day number maps to 2026-07-02",
     );
     assert_eq!(tui::ui::today_header(day), "Thursday, July 2nd, 2026");
+}
+
+// ---- sub-task delete (acceptance #7, added 2026-07-02) ----
+
+/// The captured fields of the single `DeleteSubtask` call in `calls`, panicking if none was made.
+fn delete_subtask_call(calls: &[Call]) -> (String, String, String, String) {
+    calls
+        .iter()
+        .find_map(|c| match c {
+            Call::DeleteSubtask {
+                token,
+                profile_id,
+                task_id,
+                subtask_id,
+            } => Some((
+                token.clone(),
+                profile_id.clone(),
+                task_id.clone(),
+                subtask_id.clone(),
+            )),
+            _ => None,
+        })
+        .expect("a delete_subtask call was made")
+}
+
+/// A logged-in app on a single expanded today task with one open sub-task selected. Returns the
+/// handle + app with the selection moved onto the sub-task row.
+fn selected_subtask_app() -> (FakeClient, App) {
+    let (client, mut app) = logged_in_tree(
+        vec![today_open_task("t1", "Parent", "10:00:00")],
+        vec![open_subtask("s1", "t1", "the child")],
+    );
+    // Parent (row 0) is open → expanded, so the sub-task is row 1. Move onto it.
+    let _ = app.handle_event(Event::Next);
+    let today_day = current_day_number();
+    assert_eq!(
+        tasks_pane(&app).selected_row(today_day),
+        Some(VisibleRow::Subtask { subtask_idx: 0 }),
+        "selection landed on the sub-task row",
+    );
+    (client, app)
+}
+
+#[test]
+fn delete_on_a_subtask_row_arms_a_subtask_target() {
+    // Acceptance #7: on a sub-task row, `d` (`DeleteSelected`) arms the same two-step confirm as a
+    // task, but the armed target is the SUB-TASK (carrying its parent task id, since the delete wire
+    // is task-scoped). No request issues on the arming key.
+    let (client, mut app) = selected_subtask_app();
+    let calls_before = client.calls().len();
+
+    assert!(
+        app.handle_event(Event::DeleteSelected).is_none(),
+        "the delete key arms the confirm, dispatching nothing",
+    );
+    assert_eq!(
+        client.calls().len(),
+        calls_before,
+        "no request on the arming key: {:?}",
+        client.calls(),
+    );
+    let list = tasks_pane(&app);
+    assert!(
+        matches!(
+            list.confirming_delete,
+            Some(DeleteTarget::Subtask { ref task_id, ref subtask_id })
+                if task_id == "t1" && subtask_id == "s1"
+        ),
+        "the confirm is armed against the sub-task (DeleteTarget::Subtask): {:?}",
+        list.confirming_delete,
+    );
+}
+
+#[test]
+fn enter_confirms_a_subtask_delete_and_issues_delete_subtask() {
+    // Acceptance #7: `Enter` on the armed sub-task confirm issues `DeleteSubtask { task_id: parent,
+    // subtask_id: selected }` under the active profile, then the standard refresh chain runs.
+    let (client, mut app) = selected_subtask_app();
+    assert!(app.handle_event(Event::DeleteSelected).is_none());
+
+    // Script the delete (204) and the chained refresh (ListTasks → ListSubtasks; the child gone).
+    client.push_delete_subtask(Ok(()));
+    client.push_tasks(Ok(vec![today_open_task("t1", "Parent", "10:00:00")]));
+    client.push_list_subtasks(Ok(vec![]));
+
+    submit(&mut app, &client, Event::Submit);
+
+    let calls = client.calls();
+    assert_eq!(
+        delete_subtask_call(&calls),
+        (
+            "jwt".to_owned(),
+            "p1".to_owned(),
+            "t1".to_owned(),
+            "s1".to_owned(),
+        ),
+        "the confirmed delete issues DeleteSubtask for the parent+sub-task: {calls:?}",
+    );
+    // The standard post-mutation refresh follows (statelessness #1).
+    assert!(
+        calls.iter().any(|c| matches!(c, Call::ListTasks { .. })),
+        "a fresh list fetch follows the sub-task delete: {calls:?}",
+    );
+    // The confirm disarmed and the child is gone after the refresh.
+    let list = tasks_pane(&app);
+    assert!(list.confirming_delete.is_none(), "confirm disarmed");
+    assert!(list.subtasks.is_empty(), "the deleted sub-task is gone");
+}
+
+#[test]
+fn a_task_row_delete_still_issues_delete_task_not_delete_subtask() {
+    // Acceptance #7: a task-row `d` → `Enter` continues to issue `DeleteTask` (the sub-task path is
+    // additive, not a replacement). Confirms the row-kind branch in `arm_delete`/`confirm_delete`.
+    let (client, mut app) = logged_in(vec![today_open_task("t1", "doomed", "10:00:00")]);
+    assert!(app.handle_event(Event::DeleteSelected).is_none());
+    // The armed target is a task, not a sub-task.
+    assert!(
+        matches!(
+            tasks_pane(&app).confirming_delete,
+            Some(DeleteTarget::Task { ref task_id }) if task_id == "t1"
+        ),
+        "a task row arms a DeleteTarget::Task",
+    );
+
+    client.push_delete(Ok(()));
+    client.push_tasks(Ok(vec![]));
+    submit(&mut app, &client, Event::Submit);
+
+    let calls = client.calls();
+    assert!(
+        calls.iter().any(|c| matches!(c,
+            Call::DeleteTask { task_id, .. } if task_id == "t1")),
+        "a task-row confirm issues DeleteTask: {calls:?}",
+    );
+    assert!(
+        !calls
+            .iter()
+            .any(|c| matches!(c, Call::DeleteSubtask { .. })),
+        "no DeleteSubtask is issued for a task-row delete: {calls:?}",
+    );
+}
+
+#[test]
+fn a_non_confirm_key_between_arm_and_confirm_issues_no_delete() {
+    // Acceptance #7: the two-step confirm captures input — a navigation key (`Next`) between the
+    // arming `d` and the confirming `Enter` issues NO delete request (the dialog holds; only `Enter`
+    // confirms and `Esc` cancels, mirroring the task-delete confirm and the notes/profiles dialog).
+    let (client, mut app) = selected_subtask_app();
+    assert!(app.handle_event(Event::DeleteSelected).is_none());
+
+    // A navigation event while armed dispatches nothing and issues no request.
+    assert!(
+        app.handle_event(Event::Next).is_none(),
+        "a navigation key while armed dispatches nothing",
+    );
+    assert!(
+        !client
+            .calls()
+            .iter()
+            .any(|c| matches!(c, Call::DeleteSubtask { .. } | Call::DeleteTask { .. })),
+        "no delete crossed the wire from a non-confirm key: {:?}",
+        client.calls(),
+    );
+}
+
+#[test]
+fn delete_on_the_older_separator_row_is_a_no_op() {
+    // Acceptance #7 / #3: the "Older tasks" separator is non-selectable, so `d` never arms against
+    // it. Navigation skips the separator, so the selection can never rest on it; `arm_delete` also
+    // guards the separator explicitly. Here we assert `d` while the older group is shown arms only a
+    // real row, never the separator (confirming_delete is never armed with the selection on nothing).
+    let (client, mut app) = logged_in(vec![
+        today_open_task("t-today", "today task", "12:00:00"),
+        open_task("t-old", "older task", "2020-01-02T10:00:00Z"),
+    ]);
+    let today_day = current_day_number();
+    // Navigate: today -> older (the separator is skipped, never selected).
+    let _ = app.handle_event(Event::Next);
+    assert_eq!(
+        tasks_pane(&app).selected_row(today_day),
+        Some(VisibleRow::Task { task_idx: 1 }),
+        "navigation lands on the older task, skipping the separator",
+    );
+    // `d` arms against the older task (a real row), and issues no request.
+    assert!(app.handle_event(Event::DeleteSelected).is_none());
+    assert!(
+        matches!(
+            tasks_pane(&app).confirming_delete,
+            Some(DeleteTarget::Task { ref task_id }) if task_id == "t-old"
+        ),
+        "d arms against the older task row, never the separator: {:?}",
+        tasks_pane(&app).confirming_delete,
+    );
+    assert!(
+        !client
+            .calls()
+            .iter()
+            .any(|c| matches!(c, Call::DeleteTask { .. })),
+        "arming issues no request: {:?}",
+        client.calls(),
+    );
 }
 
 // ---- limit=200 on the ListTasks query ----
