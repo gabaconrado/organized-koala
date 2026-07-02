@@ -5,7 +5,9 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 use chrono::{DateTime, Utc};
-use contract::{CreateTaskRequest, Task, TaskStatus, UpdateTaskRequest};
+use contract::{
+    CreateTaskRequest, MAX_TASK_LIST_LIMIT, Task, TaskListQuery, TaskStatus, UpdateTaskRequest,
+};
 use serde_json::{Value, json};
 
 const TASK_ID: &str = "5f9a2c1e-0b3d-4e6f-8a1b-2c3d4e5f6a7b";
@@ -371,4 +373,78 @@ fn update_task_request_deserializes_partial_object_with_absent_fields_none() {
     // An empty object deserializes to the all-`None` default.
     let empty: UpdateTaskRequest = serde_json::from_value(json!({})).unwrap();
     assert_eq!(empty, UpdateTaskRequest::default());
+}
+
+// --- TaskListQuery: pagination-ready limit + offset query params (ADR-0014 §1/§2). ---
+
+#[test]
+fn max_task_list_limit_is_the_ceiling_constant() {
+    // The ADR-0014 ceiling the server enforces; the value is part of the wire contract.
+    assert_eq!(MAX_TASK_LIST_LIMIT, 500);
+}
+
+#[test]
+fn task_list_query_all_none_serializes_to_empty_query_string() {
+    // Both params absent: the default carries nothing, so it serializes to an EMPTY query string —
+    // an old no-param caller's request is byte-identical to before this feature (additive shape).
+    let query = TaskListQuery::default();
+    assert_eq!(serde_urlencoded::to_string(&query).unwrap(), "");
+    assert!(query.limit.is_none());
+    assert!(query.offset.is_none());
+}
+
+#[test]
+fn task_list_query_limit_only_omits_offset() {
+    // A `limit`-only query omits `offset` entirely (skip_serializing_if).
+    let query = TaskListQuery {
+        limit: Some(200),
+        offset: None,
+    };
+    assert_eq!(serde_urlencoded::to_string(&query).unwrap(), "limit=200");
+}
+
+#[test]
+fn task_list_query_offset_only_omits_limit() {
+    // Symmetric: an `offset`-only query omits `limit`.
+    let query = TaskListQuery {
+        limit: None,
+        offset: Some(40),
+    };
+    assert_eq!(serde_urlencoded::to_string(&query).unwrap(), "offset=40");
+}
+
+#[test]
+fn task_list_query_both_present_serialize_together() {
+    let query = TaskListQuery {
+        limit: Some(200),
+        offset: Some(400),
+    };
+    assert_eq!(
+        serde_urlencoded::to_string(&query).unwrap(),
+        "limit=200&offset=400"
+    );
+}
+
+#[test]
+fn task_list_query_round_trips_through_query_string() {
+    // Serialize → parse is lossless over the query-param encoding (the reqwest `.query()` path).
+    let query = TaskListQuery {
+        limit: Some(123),
+        offset: Some(7),
+    };
+    let encoded = serde_urlencoded::to_string(&query).unwrap();
+    let back: TaskListQuery = serde_urlencoded::from_str(&encoded).unwrap();
+    assert_eq!(back, query);
+}
+
+#[test]
+fn task_list_query_deserializes_from_partial_and_empty_query_strings() {
+    // An empty query string yields the all-`None` default (the server then applies its defaults).
+    let empty: TaskListQuery = serde_urlencoded::from_str("").unwrap();
+    assert_eq!(empty, TaskListQuery::default());
+
+    // A `limit`-only string leaves `offset` as `None`.
+    let limit_only: TaskListQuery = serde_urlencoded::from_str("limit=200").unwrap();
+    assert_eq!(limit_only.limit, Some(200));
+    assert!(limit_only.offset.is_none());
 }

@@ -151,6 +151,62 @@ pub struct UpdateTaskRequest {
     pub status: Option<TaskStatus>,
 }
 
+/// The ceiling the server enforces on a task-list `limit` (ADR-0014 §2).
+///
+/// A [`TaskListQuery`] whose `limit` exceeds this value is a client error
+/// (`400 validation_failed`); an absent `limit` falls back to this ceiling server-side, so an
+/// old no-param caller still receives the whole list up to it (preserving ADR-0005 §5). The TUI
+/// caller stays well under it (it hard-codes `limit = 200`, its own `tui`-local choice).
+///
+/// # Examples
+///
+/// ```
+/// use contract::MAX_TASK_LIST_LIMIT;
+///
+/// assert_eq!(MAX_TASK_LIST_LIMIT, 500);
+/// ```
+pub const MAX_TASK_LIST_LIMIT: u32 = 500;
+
+/// Query parameters for `GET /api/profiles/{profile_id}/tasks` (ADR-0014 §1).
+///
+/// Both fields are **optional** and ride the URL as query params (`?limit=200&offset=0`), so the
+/// task-list response shape is unchanged (a bare `[Task]` array) and this is additive: a caller
+/// that sends neither param behaves exactly as before this feature. `skip_serializing_if` omits
+/// each absent field, so an all-`None` query serializes to an **empty** query string.
+///
+/// The server clamps/validates `limit` against [`MAX_TASK_LIST_LIMIT`] (an over-ceiling value is
+/// `400 validation_failed`; an absent value defaults to the ceiling) and treats an absent `offset`
+/// as `0`. This is the pagination-ready request shape: real pagination is a future caller change
+/// (start sending `offset`), with no wire-shape break (ADR-0014 §3).
+///
+/// # Examples
+///
+/// ```
+/// use contract::TaskListQuery;
+///
+/// // An all-`None` query carries no params: it serializes to an empty query string.
+/// let all_none = TaskListQuery::default();
+/// assert_eq!(serde_urlencoded::to_string(&all_none).unwrap(), "");
+///
+/// // A `limit`-only query omits `offset` entirely.
+/// let limit_only = TaskListQuery { limit: Some(200), offset: None };
+/// assert_eq!(serde_urlencoded::to_string(&limit_only).unwrap(), "limit=200");
+///
+/// // Both present ride the URL together.
+/// let both = TaskListQuery { limit: Some(200), offset: Some(400) };
+/// assert_eq!(serde_urlencoded::to_string(&both).unwrap(), "limit=200&offset=400");
+/// ```
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskListQuery {
+    /// Maximum number of tasks to return; absent → the server default ([`MAX_TASK_LIST_LIMIT`]),
+    /// a value above the ceiling is `400 validation_failed`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// Number of leading tasks to skip (offset pagination); absent → `0`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u32>,
+}
+
 /// A sub-task: a deliberately-minimal child of a [`Task`], carrying **only** a title and a
 /// status (ADR-0012, ADR-0013).
 ///

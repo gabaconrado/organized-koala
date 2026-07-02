@@ -22,3 +22,6 @@ serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 serde_json = "1"
+# Query-string (de)serialization for the task-list query DTO: this is the encoding the reqwest
+# `.query()` path uses on the wire, so the doctests/tests attest the real query-param behaviour.
+serde_urlencoded = "0.7"

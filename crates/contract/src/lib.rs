@@ -12,7 +12,7 @@ pub use error::{ErrorBody, ErrorCode};
 pub use note::{CreateNoteRequest, Note, UpdateNoteRequest};
 pub use profile::{CreateProfileRequest, Profile, UpdateProfileRequest};
 pub use task::{
-    CreateSubtaskRequest, CreateTaskRequest, Subtask, Task, TaskStatus, UpdateSubtaskRequest,
-    UpdateTaskRequest,
+    CreateSubtaskRequest, CreateTaskRequest, MAX_TASK_LIST_LIMIT, Subtask, Task, TaskListQuery,
+    TaskStatus, UpdateSubtaskRequest, UpdateTaskRequest,
 };
 pub use timer::{TimerConfig, TimerSession, UpdateTimerConfigRequest};

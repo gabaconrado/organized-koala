@@ -252,3 +252,9 @@ gate.
 - [ ] 2026-07-02 [human] Filed from an operator interface-improvements request; see acceptance above.
 - 2026-07-02 [orchestrator] Claimed → `working`. Worktree cut from `main` @ b059865 (carries
   ADR-0014 + plan). Branch `feature/0020-tui-tasks-pane-rendering-overhaul`. Session drive-0020.
+- 2026-07-02 [contract-owner] S1 done. Added `MAX_TASK_LIST_LIMIT: u32 = 500` and
+  `TaskListQuery { limit, offset }` (both `Option<u32>`, `skip_serializing_if`, `Default`) to
+  `contract::task`; re-exported at the crate root. Query-param (de)serialization via
+  `serde_urlencoded` (dev-dep, already in lock via reqwest); doctests + `tests/task.rs` cover
+  all-`None`→empty, `limit`-only omits `offset`, round-trip, ceiling value. No `Task`/`Subtask`/
+  `TaskStatus`/create/update DTO touched (#3). Gates: fmt/build/lint/test all green.
