@@ -301,3 +301,54 @@ gate.
   `TestBackend` suite exists + green (ADR-0003). Teardown `./ok.sh down` (volume preserved). Pinned
   to code-tree hash `25ed4351d5beedb2d4f0cc517e3bdd867389cedc` (head `c1099b0`). Minor inferred edge
   (empty-string `?limit=` → plain-text 400, unreachable by shipped client) filed as an idea.
+
+## Summary
+
+The Tasks-pane render was overhauled across all four slices, governed by [ADR-0014][adr-0014-sum]
+(the one wire-shaping change: a pagination-ready `limit`/`offset` on the task-list request).
+What shipped, keyed to acceptance:
+
+1. **Completed-last.** A TUI-side **stable** sort of the snapshot re-orders `open` before `done`
+   at both the task and the sub-task-within-parent level, re-derived every render so a
+   complete/reopen/toggle re-orders on the next frame with **no re-fetch** (#1). The server keeps
+   `ORDER BY created_at DESC` unchanged.
+2. **Today date header.** The current date renders top-center **inside the Tasks pane only**
+   (not Notes/Profiles), human-readable weekday/month/**ordinal**-day/year (ordinal st/nd/rd/th
+   computed TUI-side, incl. 11–13 → th).
+3. **Today / older split.** Tasks group by `created_at` into created-today (above) and older
+   (below) with an **"Older tasks"** separator; the older group renders **collapsed regardless of
+   status**, a render-time forcing kept **separate** from `collapse_overrides` (per-task `x` toggle
+   semantics unchanged).
+4. **`h` hides the older group** (+ separator); default shown; ephemeral `hide_older: bool` on
+   `TaskListState` (#1, never persisted); added to the `?` help overlay's second Tasks line.
+5. **200-task cap.** `contract::task::TaskListQuery { limit, offset }` (both `Option<u32>`,
+   `skip_serializing_if`) + `MAX_TASK_LIST_LIMIT = 500`; the server clamps/validates
+   (over-ceiling → `400 validation_failed`, absent `limit` → ceiling, absent `offset` → 0) via
+   `i64::from` (no `as`); the TUI hard-codes a `tui`-local `TASK_LIST_LIMIT = 200` / offset 0
+   across all six `ListTasks` sites.
+6. **Pagination-ready (design only).** Response stays the **bare `[Task]` array**; offset
+   pagination is a future caller change + at most an additive header — no wire break (ADR-0014
+   §3). No new `ErrorCode`, no migration, no `TaskStatus`/`Task`/`Subtask` field (#3 confirmed).
+
+**ADR-0014 decisions:** offset over cursor (A1); ceiling in `contract`, value in TUI; completed-last
+as a TUI-side snapshot sort (A4, forced by #1); bare-array response preserved; no domain-structure
+change (§5).
+
+**Recorded assumption (A5/A8):** "today" is computed as the **UTC civil day** (epoch-seconds
+`div_euclid 86400`), **not** the operator's local date, because the `tui` crate carries no timezone
+dependency and adding one would be a #6/ADR event — the smallest chrono-free, deterministic-under-test
+choice. The reviewer judged this within the AFK smallest-change + recorded-assumption policy. The
+local-date refinement (and reconciling ADR-0014 §5 / plan "local date" wording, which still says
+"local") is parked for human triage as idea `0009` (on `main`); a second minor edge (empty-string
+`?limit=` returns a plain-text 400 bypassing the JSON error contract, unreachable by the shipped
+client) is idea `0010`.
+
+**Verdicts** — reviewer `REVIEW-STATUS: approved` + verifier `VERIFY-STATUS: verified`, both pinned
+to code-tree hash `25ed4351d5beedb2d4f0cc517e3bdd867389cedc`. Verifier booted the stack live: default
+list newest-first, limit caps, offset skips, `limit=500` ok, `limit=501` → `400 validation_failed`,
+cross-profile → `404` (#4); drove the shipped reqwest `HttpClient` end-to-end; OTel `list_tasks`
+spans present; TUI `TestBackend` suite green (ADR-0003).
+
+coverage: 72.26%
+
+[adr-0014-sum]: ../../docs/adr/0014-task-list-pagination-ready-limit.md
