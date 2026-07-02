@@ -2,12 +2,12 @@
 id: 0020
 title: Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap
 type: feature      # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0019]  # builds on the task + sub-task list/collapse rendering (merged)
-branch: null
-worktree: null
+branch: feature/0020-tui-tasks-pane-rendering-overhaul
+worktree: .claude/worktrees/0020-tui-tasks-pane-rendering-overhaul
 created: 2026-07-02
 updated: 2026-07-02
 ---
@@ -250,6 +250,5 @@ gate.
 ## Log / comments
 
 - [ ] 2026-07-02 [human] Filed from an operator interface-improvements request; see acceptance above.
-- 2026-07-02 [orchestrator] Claimed onto `feature/0020-tui-tasks-pane-rendering-overhaul`; this
-  `main` copy is frozen at the claim snapshot. The branch copy is authoritative until the human's
-  merge brings the finished item back to `main`.
+- 2026-07-02 [orchestrator] Claimed → `working`. Worktree cut from `main` @ b059865 (carries
+  ADR-0014 + plan). Branch `feature/0020-tui-tasks-pane-rendering-overhaul`. Session drive-0020.
