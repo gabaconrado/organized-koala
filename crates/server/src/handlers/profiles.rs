@@ -53,8 +53,8 @@ fn map_name_conflict(error: sqlx::Error) -> ApiError {
     }
 }
 
-/// `GET /api/profiles` → `200` array of the authenticated user's profiles, newest-first.
-/// Scoped to the caller: only profiles they own are returned.
+/// `GET /api/profiles` → `200` array of the authenticated user's profiles, oldest-first
+/// (ascending insertion order). Scoped to the caller: only profiles they own are returned.
 #[tracing::instrument(skip_all, fields(user_id = %user.user_id))]
 pub async fn list_profiles(
     State(state): State<AppState>,
@@ -62,7 +62,7 @@ pub async fn list_profiles(
 ) -> ApiResult<Json<Vec<Profile>>> {
     let rows = sqlx::query_as!(
         ProfileRow,
-        "SELECT id, name, created_at FROM profiles WHERE user_id = $1 ORDER BY created_at DESC",
+        "SELECT id, name, created_at FROM profiles WHERE user_id = $1 ORDER BY created_at ASC",
         user.user_id,
     )
     .fetch_all(state.pool())

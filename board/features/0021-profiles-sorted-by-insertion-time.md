@@ -151,3 +151,12 @@ and needs no amendment.
   (carries the plan). Branch `feature/0021-profiles-sorted-by-insertion-time`. Session: drive
   cycle 0021. Build dispatch: server-dev (query flip + handler doc) → tui-dev (state doc-comment)
   → tester (server ordering assertion); no contract-owner slice.
+- [x] 2026-07-02 [server-dev] Slice 1 done. Flipped `list_profiles` in
+  `crates/server/src/handlers/profiles.rs` to `ORDER BY created_at ASC` (oldest-first,
+  line 65) and corrected the handler doc line (lines 56–57) from "newest-first" to
+  "oldest-first (ascending insertion order)". Column set unchanged, but the SQL text changed,
+  so the offline `.sqlx/` cache needed regeneration: ran `./ok.sh prepare` (booted the repo's
+  sanctioned throwaway test Postgres via docker compose, torn down after) — the old
+  `DESC` cache entry was deleted and a new `ASC` entry committed. Gates green in-worktree:
+  `./ok.sh build`, `./ok.sh lint`, `./ok.sh fmt --check`. No `contract`/wire, no
+  domain-structure, no profile-scoping change (`WHERE user_id = $1` untouched).
