@@ -57,12 +57,11 @@ backlog".
 | [0017](./features/0017-timer-completion-desktop-notification.md) | Desktop notification when the focus timer ends (cross-OS, Ubuntu-first) | feature | merged | medium | 0008 (merged ✓) | — (merged) |
 | [0018](./features/0018-notes-detail-multiline-content.md) | Notes detail view — multiline Content text area (fills the pane), Created moved above | feature | merged | medium | 0016 (merged ✓) | — (merged) |
 | [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | merged | medium | 0016 (merged ✓) | — (merged) |
-| [0020](./features/0020-tui-tasks-pane-rendering-overhaul.md) | Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap | feature | ready (branch: awaiting-merge pending) | medium | 0019 (merged ✓) | `feature/0020-tui-tasks-pane-rendering-overhaul` |
+| [0020](./features/0020-tui-tasks-pane-rendering-overhaul.md) | Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap | feature | merged | medium | 0019 (merged ✓) | — (merged) |
 | [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | inbox | medium | — | — |
 
-> **0020 — Tasks-pane rendering overhaul — in-flight on `feature/0020-tui-tasks-pane-rendering-overhaul`
-> (branch at `awaiting-merge` pending the orchestrator's step-7 freshen + step-8 flip and the human's
-> ff-merge; the `main` snapshot is frozen at the `ready` claim).** A four-slice `feature` reshaping
+> **0020 — Tasks-pane rendering overhaul — MERGED** (operator-authorised ff-merge; `main` @ `276b499`).
+> A four-slice `feature` reshaping
 > the TUI Tasks pane, governed by [ADR-0014](../docs/adr/0014-task-list-pagination-ready-limit.md)
 > (task-list pagination-ready `limit`/`offset` — the one wire-shaping change). `contract`
 > `TaskListQuery { limit, offset }` (both `Option<u32>`) + `MAX_TASK_LIST_LIMIT = 500`; response stays
@@ -94,7 +93,7 @@ backlog".
 > returns a plain-text 400 bypassing the `{code,message}` JSON error contract; unreachable by the
 > shipped client).
 >
-> **0020 re-entry (operator feedback) — back at `awaiting-merge` on the branch.** After 0020 reached
+> **0020 re-entry (operator feedback) — resolved, included in this merge.** After 0020 first reached
 > `awaiting-merge` the operator gave **three adjustments** (`architect` triaged **no ADR** — TUI-only,
 > no #2/#3): (1) the today date moved **INTO** the Tasks list as a full-width, non-selectable
 > **separator header row** (a shared `separator_line` helper pads both it and the "Older tasks" row

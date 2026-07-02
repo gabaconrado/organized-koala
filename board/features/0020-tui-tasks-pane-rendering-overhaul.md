@@ -2,7 +2,7 @@
 id: 0020
 title: Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap
 type: feature      # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0019]  # builds on the task + sub-task list/collapse rendering (merged)
