@@ -271,3 +271,15 @@ gate.
   top-center Tasks pane only. Gates: fmt + `clippy --lib --bins` + `./ok.sh build` green; doctests
   pass. `--all-targets` (tests) expected-RED pending tester S4 (harness stranding, learned 0019) —
   NOT a clause-1/2 pass. Assumption: today = UTC civil day (A5-note, keeps tui chrono-free).
+- 2026-07-02 [tester] S4 done. Un-stranded `tests/common/mod.rs`: fake `list_tasks(query)`,
+  worker-arm, `Call::ListTasks{limit,offset}`, `hide_older:false` initializers; added `today_at`
+  plus `today_open_task`/`today_done_task` builders so wall-clock-driven flows land tasks in the
+  today group (existing suites switched off fixed past dates). New tui tasks.rs coverage:
+  completed-last (task + sub-task levels; re-sorts after a toggle with no extra fetch), today/older
+  split + separator, older forced-collapsed regardless of status, `h` toggle + `visible_rows`/
+  selection skip, today header present in Tasks / absent in Notes+Profiles, ordinal_suffix (incl
+  11-13→th) + today_header formatting, `limit=200`/offset 0 on the wire. dialogs.rs: 2nd Tasks
+  help line pins `h hide older` against flush-left re-wrap (learned 0015/0019). Server tasks.rs
+  (live throwaway Postgres, docker confirmed): default whole-list newest-first, limit caps, offset
+  skips, limit+offset window, over-ceiling→400 validation_failed, at-ceiling ok, profile-scoping
+  under limit. Gates: `./ok.sh fmt --check` + `lint` (--all-targets, now GREEN) + `test` all green.
