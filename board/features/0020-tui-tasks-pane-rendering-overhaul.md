@@ -403,6 +403,16 @@ wire already shipped in 0019; ADR-0014 unamended). All re-enter at `working` (TU
   observable behaviour (no request from a non-confirm key), not a disarm. Gates: `fmt --check`,
   `lint` (--all-targets, GREEN) and `test` all green (tui tasks suite 30 passed; server tasks suite
   16 passed via the throwaway test Postgres).
+- 2026-07-02 [reviewer] Cold re-review of the feedback re-entry delta → `REVIEW-STATUS: approved`.
+  Gates re-run independently green (fmt/lint `--all-targets`/test — harness un-stranding proven
+  real by the full `--all-targets` pass, not `--lib --bins`-only). Delta touches only
+  `crates/tui/src/{app/mod.rs,app/task_list.rs,ui/mod.rs}` + `tests/{common/mod.rs,tasks.rs}` — **no
+  `contract`/`server`/wire/DTO change** (item 2 reuses the shipped `DeleteSubtask`). All three
+  adjustments verified against amended acceptance #2/#3/#7; A7 preserved (older default render-time,
+  no override bleed); modal-confirm coherent (non-confirm key issues no delete, directly pinned).
+  Hard constraints #1–#4 hold. Pinned to code-tree hash
+  `a5713a7d95780e1e61b4130ccc7556789f44aa45` (head `e21d82d`). One out-of-scope nit flagged (stale
+  `confirming_delete` field doc-comment, `task_list.rs:116`, predates this cycle) → idea candidate.
 
 ## Summary
 
