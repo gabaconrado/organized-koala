@@ -17,6 +17,7 @@ One row per ADR. Newest at the bottom.
 | [0011][adr-0011] | Multiline Content editing in the note detail view — context-dependent commit keymap | Accepted | 2026-06-28 |
 | [0012][adr-0012] | Sub-tasks — bounded exception to the flat-domain constraint (#3) | Accepted | 2026-06-29 |
 | [0013][adr-0013] | Sub-tasks wire contract — DTO, profile-scoped endpoints, FK-cascade persistence | Accepted | 2026-06-29 |
+| [0014][adr-0014] | Task-list pagination-ready limit — additive `limit`+`offset`, bare-array response preserved | Accepted | 2026-07-02 |
 
 [adr-0001]: ./adr/0001-foundational-architecture.md
 [adr-0002]: ./adr/0002-pomodoro-timer-authority.md
@@ -31,3 +32,4 @@ One row per ADR. Newest at the bottom.
 [adr-0011]: ./adr/0011-multiline-content-editing-keymap.md
 [adr-0012]: ./adr/0012-subtasks-domain-exception.md
 [adr-0013]: ./adr/0013-subtasks-wire-contract.md
+[adr-0014]: ./adr/0014-task-list-pagination-ready-limit.md
