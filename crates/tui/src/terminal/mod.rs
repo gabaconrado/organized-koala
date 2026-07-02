@@ -119,9 +119,10 @@ fn detail_view_open(screen: &Screen) -> bool {
 /// - `F2` (auth screen) → [`Event::ToggleAuthMode`].
 /// - In a text-entry context, a printable key → [`Event::Char`].
 /// - On the Tasks tab (idle, no overlay): `a` → [`Event::BeginAddTask`], `A` (Shift+a) →
-///   [`Event::BeginAddSubtask`], `x` → [`Event::ToggleCollapse`], `e` → [`Event::BeginEditTask`],
-///   `Space` → [`Event::ToggleDone`], `d` → [`Event::DeleteSelected`]. `e`/`Space` route to the
-///   selected sub-task when a sub-task row is selected, to the task otherwise.
+///   [`Event::BeginAddSubtask`], `x` → [`Event::ToggleCollapse`], `h` →
+///   [`Event::ToggleHideOlder`], `e` → [`Event::BeginEditTask`], `Space` → [`Event::ToggleDone`],
+///   `d` → [`Event::DeleteSelected`]. `e`/`Space` route to the selected sub-task when a sub-task
+///   row is selected, to the task otherwise.
 /// - On the Notes tab (idle, no overlay): `a` → [`Event::BeginAddNote`], `e` →
 ///   [`Event::BeginEditNote`], `d` → [`Event::BeginDeleteNote`], `Enter` opens the selected note.
 /// - On the Profiles tab (idle, no overlay): `Enter` picks the selected profile (mapped to
@@ -224,6 +225,9 @@ pub fn map_key(
         // remapped delete to `d`). Both Tasks-tab/idle only.
         KeyCode::Char('A') if on_tasks && globals_live => Some(Event::BeginAddSubtask),
         KeyCode::Char('x') if on_tasks && globals_live => Some(Event::ToggleCollapse),
+        // `h` hides / shows the created-before-today ("older") task group + its separator
+        // (ADR-0014 §5). Tasks-tab/idle only; a new, non-colliding binding (Assumption A6).
+        KeyCode::Char('h') if on_tasks && globals_live => Some(Event::ToggleHideOlder),
         KeyCode::Char('e') if on_tasks && globals_live => Some(Event::BeginEditTask),
         KeyCode::Char(' ') if on_tasks && globals_live => Some(Event::ToggleDone),
         KeyCode::Char('d') if on_tasks && globals_live => Some(Event::DeleteSelected),

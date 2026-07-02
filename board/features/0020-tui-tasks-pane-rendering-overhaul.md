@@ -262,3 +262,12 @@ gate.
   ceiling, `offset`→0, over-ceiling `limit`→`400 validation_failed` (no clamp); `LIMIT $2 OFFSET
   $3` bound via `i64::from` (no `as`). Response unchanged; no migration; no status ORDER BY.
   `.sqlx/` regenerated via `./ok.sh prepare` (docker DB up). Gates: fmt/build/lint/test green.
+- 2026-07-02 [tui-dev] S3 done. `TASK_LIST_LIMIT=200` (tui-local); threaded `TaskListQuery` onto
+  `ClientRequest::ListTasks` + `Client::list_tasks` + reqwest `.query()` + worker; all 6 `ListTasks`
+  sites send limit=200/offset=0. Completed-last stable sort (open<done) at both levels; today/older
+  split by UTC day (`day_number`, epoch-secs — no chrono dep, A8) with "Older tasks" separator;
+  older forced-collapsed render-time (not `collapse_overrides`); `h`→`ToggleHideOlder` + map_key +
+  help 2nd Tasks line (66≤70 inner, no re-wrap); today date header (weekday/month/ordinal/year)
+  top-center Tasks pane only. Gates: fmt + `clippy --lib --bins` + `./ok.sh build` green; doctests
+  pass. `--all-targets` (tests) expected-RED pending tester S4 (harness stranding, learned 0019) —
+  NOT a clause-1/2 pass. Assumption: today = UTC civil day (A5-note, keeps tui chrono-free).

@@ -23,9 +23,11 @@ use super::task_add::{AddSubtaskState, AddTaskState, EditSubtaskState, EditTaskS
 use super::task_detail::{TaskDetail, TaskPane};
 use crate::app::Event;
 
-/// A row in the rendered task list: either a top-level task or one of its sub-tasks. Selection
-/// traverses **only visible rows** (sub-tasks under a collapsed parent are absent here), so the
-/// cursor never lands on a hidden row (ADR-0013 Risk R2).
+/// A row in the rendered task list: a top-level task, one of its sub-tasks, or the non-selectable
+/// "Older tasks" separator between the created-today and created-before-today groups (ADR-0014 §5).
+/// The row list is the shared source of truth for both the render and the selection cursor, so the
+/// two never diverge; selection **skips** the separator and never lands on a hidden row (ADR-0013
+/// Risk R2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VisibleRow {
     /// A top-level task at this index in `tasks`.
@@ -38,6 +40,26 @@ pub enum VisibleRow {
         /// Index into [`TaskListState::subtasks`].
         subtask_idx: usize,
     },
+    /// The "Older tasks" separator row between the today and older groups. Rendered but never
+    /// selectable (navigation skips it); present only when the older group is shown and non-empty.
+    OlderSeparator,
+}
+
+/// The label rendered on the [`VisibleRow::OlderSeparator`] row (acceptance #3).
+pub const OLDER_SEPARATOR_LABEL: &str = "── Older tasks ──";
+
+/// Seconds in a day, for the epoch-seconds → civil-day-number derivation (ADR-0014 §4 today/older
+/// split). Kept in epoch seconds — like the timer countdown — so the `tui` crate stays free of a
+/// direct `chrono` dependency (hard-constraint A8): the caller derives seconds from the DTO's
+/// `DateTime` via `timestamp()`, and grouping compares whole-day numbers.
+const SECS_PER_DAY: i64 = 86_400;
+
+/// The whole-day number (days since the Unix epoch) of a UTC timestamp in epoch **seconds**. Two
+/// timestamps map to the same day iff they share this number. Pure integer math (no `chrono`), so
+/// the today/older split is unit-testable with injected day numbers.
+#[must_use]
+pub fn day_number(epoch_secs: i64) -> i64 {
+    epoch_secs.div_euclid(SECS_PER_DAY)
 }
 
 /// State of the task-list screen for the active profile.
@@ -75,6 +97,10 @@ pub struct TaskListState {
     /// The in-flight request id while a list/create/update/delete call is outstanding; `None` when
     /// idle. Transient process-lifetime UI state (hard-constraint #1).
     pub pending: Option<RequestId>,
+    /// Whether the created-before-today ("older") group and its "Older tasks" separator are hidden
+    /// (the `h` toggle, acceptance #4). Default `false` (older shown). Ephemeral process-lifetime
+    /// view state, never persisted (#1).
+    pub hide_older: bool,
 }
 
 impl TaskListState {
@@ -93,6 +119,7 @@ impl TaskListState {
             confirming_delete: None,
             message: None,
             pending: None,
+            hide_older: false,
         }
     }
 
@@ -144,74 +171,152 @@ impl TaskListState {
         self.subtasks.iter().any(|s| s.task_id == task.id)
     }
 
-    /// The list of **visible rows**, in render order: each task followed by its sub-tasks (in
-    /// `subtasks` order, i.e. creation order from the server) **unless** the task is collapsed. A
-    /// sub-task whose parent task is absent from `tasks` is silently dropped (Risk R3) — it never
-    /// appears as a row.
+    /// Whether `task` belongs to the created-before-today ("older") group for `today_day`. Older
+    /// tasks are forced collapsed at render regardless of status or per-task override (ADR-0014 §5);
+    /// this lets the render show the collapsed `+` indicator without consulting `collapse_overrides`.
     #[must_use]
-    pub fn visible_rows(&self) -> Vec<VisibleRow> {
+    pub fn is_older(&self, task: &Task, today_day: i64) -> bool {
+        !Self::is_today(today_day, task.created_at.timestamp())
+    }
+
+    /// Whether `epoch_secs` (a task's `created_at` timestamp) falls on the `today_day` civil day.
+    fn is_today(today_day: i64, epoch_secs: i64) -> bool {
+        day_number(epoch_secs) == today_day
+    }
+
+    /// The `tasks` indices, partitioned into (created-today, created-before-today), each **stably
+    /// sorted completed-last** (open before done). The partition preserves the server's
+    /// `created_at DESC` order within each status group (a stable sort keyed only on status;
+    /// ADR-0014 §4). Re-derived per call so a state change re-orders on the next render (#1).
+    fn grouped_task_indices(&self, today_day: i64) -> (Vec<usize>, Vec<usize>) {
+        let (mut today, mut older): (Vec<usize>, Vec<usize>) = (Vec::new(), Vec::new());
+        for (idx, task) in self.tasks.iter().enumerate() {
+            if Self::is_today(today_day, task.created_at.timestamp()) {
+                today.push(idx);
+            } else {
+                older.push(idx);
+            }
+        }
+        let done_last = |group: &mut Vec<usize>| {
+            group.sort_by_key(|&i| {
+                matches!(self.tasks.get(i).map(|t| t.status), Some(TaskStatus::Done))
+            });
+        };
+        done_last(&mut today);
+        done_last(&mut older);
+        (today, older)
+    }
+
+    /// The `subtasks` indices belonging to `task_id`, **stably sorted completed-last** (open before
+    /// done), preserving the server's creation order within each status group (ADR-0014 §4).
+    fn sorted_subtask_indices(&self, task_id: &str) -> Vec<usize> {
+        let mut idxs: Vec<usize> = self
+            .subtasks
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.task_id == task_id)
+            .map(|(i, _)| i)
+            .collect();
+        idxs.sort_by_key(|&i| {
+            matches!(
+                self.subtasks.get(i).map(|s| s.status),
+                Some(TaskStatus::Done)
+            )
+        });
+        idxs
+    }
+
+    /// The list of **visible rows**, in render order, for the given `today_day` civil day. The
+    /// created-today group renders first (completed-last), each task followed by its sub-tasks
+    /// (completed-last) unless collapsed; then — when the older group is non-empty and not hidden
+    /// (`hide_older`) — the "Older tasks" separator, then the created-before-today tasks. Older
+    /// tasks render **collapsed regardless of status** and independent of `collapse_overrides` (a
+    /// render-time forcing, not a mutation of the collapse map; ADR-0014 §5). A sub-task whose
+    /// parent task is absent is silently dropped (Risk R3). This row list is the single source of
+    /// truth shared by the render and the selection cursor.
+    #[must_use]
+    pub fn visible_rows(&self, today_day: i64) -> Vec<VisibleRow> {
+        let (today, older) = self.grouped_task_indices(today_day);
         let mut rows = Vec::new();
-        for (task_idx, task) in self.tasks.iter().enumerate() {
+        for &task_idx in &today {
             rows.push(VisibleRow::Task { task_idx });
+            let Some(task) = self.tasks.get(task_idx) else {
+                continue;
+            };
             if self.is_collapsed(task) {
                 continue;
             }
-            for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
-                if subtask.task_id == task.id {
-                    rows.push(VisibleRow::Subtask { subtask_idx });
-                }
+            for subtask_idx in self.sorted_subtask_indices(&task.id) {
+                rows.push(VisibleRow::Subtask { subtask_idx });
+            }
+        }
+        if !older.is_empty() && !self.hide_older {
+            rows.push(VisibleRow::OlderSeparator);
+            // Older tasks are forced collapsed regardless of status or per-task override.
+            for &task_idx in &older {
+                rows.push(VisibleRow::Task { task_idx });
             }
         }
         rows
     }
 
-    /// The currently-selected visible row, if any.
+    /// The currently-selected visible row, if any, for `today_day`.
     #[must_use]
-    pub fn selected_row(&self) -> Option<VisibleRow> {
-        let rows = self.visible_rows();
+    pub fn selected_row(&self, today_day: i64) -> Option<VisibleRow> {
+        let rows = self.visible_rows(today_day);
         self.selected.and_then(|i| rows.get(i).copied())
     }
 
     /// The selected task, if a task row is selected.
-    fn selected_task(&self) -> Option<&Task> {
-        match self.selected_row()? {
+    fn selected_task(&self, today_day: i64) -> Option<&Task> {
+        match self.selected_row(today_day)? {
             VisibleRow::Task { task_idx } => self.tasks.get(task_idx),
-            VisibleRow::Subtask { .. } => None,
+            VisibleRow::Subtask { .. } | VisibleRow::OlderSeparator => None,
         }
     }
 
     /// The selected sub-task, if a sub-task row is selected.
-    fn selected_subtask(&self) -> Option<&Subtask> {
-        match self.selected_row()? {
+    fn selected_subtask(&self, today_day: i64) -> Option<&Subtask> {
+        match self.selected_row(today_day)? {
             VisibleRow::Subtask { subtask_idx } => self.subtasks.get(subtask_idx),
-            VisibleRow::Task { .. } => None,
+            VisibleRow::Task { .. } | VisibleRow::OlderSeparator => None,
         }
     }
 
     /// The id of the parent task of the current selection: the selected task itself, or the
     /// selected sub-task's parent. `A` always adds a sub-task to this task. `None` when nothing is
-    /// selected.
-    fn parent_task_id_of_selection(&self) -> Option<String> {
-        match self.selected_row()? {
+    /// selected (or the separator is somehow selected).
+    fn parent_task_id_of_selection(&self, today_day: i64) -> Option<String> {
+        match self.selected_row(today_day)? {
             VisibleRow::Task { task_idx } => self.tasks.get(task_idx).map(|t| t.id.clone()),
             VisibleRow::Subtask { subtask_idx } => {
                 self.subtasks.get(subtask_idx).map(|s| s.task_id.clone())
             }
+            VisibleRow::OlderSeparator => None,
         }
     }
 
-    fn move_selection(&mut self, forward: bool) {
-        let len = self.visible_rows().len();
+    /// Move the selection to the next/previous **selectable** row, skipping the non-selectable
+    /// "Older tasks" separator so the cursor never rests on it.
+    fn move_selection(&mut self, today_day: i64, forward: bool) {
+        let rows = self.visible_rows(today_day);
+        let len = rows.len();
         if len == 0 {
             self.selected = None;
             return;
         }
-        let current = self.selected.unwrap_or(0);
-        let next = if forward {
-            (current + 1) % len
-        } else {
-            (current + len - 1) % len
-        };
+        let mut next = self.selected.unwrap_or(0).min(len - 1);
+        // Step at least once, then keep stepping while landing on a separator (bounded by `len`).
+        for _ in 0..len {
+            next = if forward {
+                (next + 1) % len
+            } else {
+                (next + len - 1) % len
+            };
+            if !matches!(rows.get(next), Some(VisibleRow::OlderSeparator)) {
+                break;
+            }
+        }
         self.selected = Some(next);
     }
 
@@ -219,11 +324,13 @@ impl TaskListState {
     /// event produces (add submit, edit submit, toggle-done, delete-confirm, refresh), or `None`
     /// for a local edit or any event while a request is outstanding. `Cancel`/`Quit` are handled
     /// by the caller before reaching here. The `session` supplies the token + profile namespace
-    /// for the request payloads.
+    /// for the request payloads; `today_day` (the current local civil day, [`day_number`]) resolves
+    /// the today/older row layout the selection navigates.
     pub(crate) fn handle_event(
         &mut self,
         event: Event,
         session: Option<&Session>,
+        today_day: i64,
     ) -> Option<ClientRequest> {
         if self.is_pending() {
             // One request in flight: ignore request-triggering and edit events alike.
@@ -250,40 +357,69 @@ impl TaskListState {
             return self.handle_delete_confirm_event(event, session);
         }
         match event {
-            Event::Next => self.move_selection(true),
-            Event::Prev => self.move_selection(false),
+            Event::Next => self.move_selection(today_day, true),
+            Event::Prev => self.move_selection(today_day, false),
             Event::BeginAddTask => {
                 self.message = None;
                 self.adding = Some(AddTaskState::new());
             }
-            Event::BeginAddSubtask => self.begin_add_subtask(),
+            Event::BeginAddSubtask => self.begin_add_subtask(today_day),
             // `e` edits the selected sub-task's title when a sub-task row is selected, else the
             // selected task (the existing task edit sub-flow).
             Event::BeginEditTask => {
-                if self.selected_subtask().is_some() {
-                    self.begin_edit_subtask();
+                if self.selected_subtask(today_day).is_some() {
+                    self.begin_edit_subtask(today_day);
                 } else {
-                    self.begin_edit();
+                    self.begin_edit(today_day);
                 }
             }
             // `Space` toggles the selected sub-task when a sub-task row is selected, else the task.
             Event::ToggleDone => {
-                if self.selected_subtask().is_some() {
-                    return self.toggle_subtask_done(session);
+                if self.selected_subtask(today_day).is_some() {
+                    return self.toggle_subtask_done(session, today_day);
                 }
-                return self.toggle_done(session);
+                return self.toggle_done(session, today_day);
             }
             // `x` toggles collapse for the parent task of the current selection (ADR-0012 §5).
-            Event::ToggleCollapse => self.toggle_collapse(),
+            Event::ToggleCollapse => self.toggle_collapse(today_day),
+            // `h` hides / shows the created-before-today ("older") group and its separator
+            // (acceptance #4); re-clamps the selection so it never points past the new row count.
+            Event::ToggleHideOlder => self.toggle_hide_older(today_day),
             // `Enter` on a task row opens its detail view (chaining a per-task sub-task load for
             // the "Sub-tasks" section); on a sub-task row it is inert (a sub-task has no detail
             // view, ADR-0012 §1 / A8).
-            Event::Submit => return self.open_detail(session),
-            Event::DeleteSelected => self.arm_delete(),
+            Event::Submit => return self.open_detail(session, today_day),
+            Event::DeleteSelected => self.arm_delete(today_day),
             Event::Refresh => return self.refresh(session),
             _ => {}
         }
         None
+    }
+
+    /// Toggle whether the older group + separator are shown (`h`, acceptance #4). Hiding rows can
+    /// leave the selection index past the shortened row list, so re-clamp it (and skip onto a
+    /// selectable row) afterwards.
+    fn toggle_hide_older(&mut self, today_day: i64) {
+        self.hide_older = !self.hide_older;
+        self.clamp_selection(today_day);
+    }
+
+    /// Re-clamp the selection into the current row list, moving off the separator onto a selectable
+    /// row if it lands there. Used after a row-count change (the `h` toggle).
+    fn clamp_selection(&mut self, today_day: i64) {
+        let rows = self.visible_rows(today_day);
+        match rows.len() {
+            0 => self.selected = None,
+            len => {
+                let mut i = self.selected.unwrap_or(0).min(len - 1);
+                if matches!(rows.get(i), Some(VisibleRow::OlderSeparator)) {
+                    // The separator is the last row only when the older group is shown; stepping
+                    // back lands on the final today row (or wraps to a selectable row).
+                    i = i.saturating_sub(1);
+                }
+                self.selected = Some(i);
+            }
+        }
     }
 
     /// Open the per-field detail view for the selected **task** (a no-op on a sub-task row — a
@@ -291,8 +427,8 @@ impl TaskListState {
     /// opens from the already-loaded in-memory snapshot (Assumption A3); commits re-derive it from
     /// a fresh list refresh (#1). Chains a per-task `ListTaskSubtasks` so the detail's read-only
     /// "Sub-tasks" section reflects a server response (A6). A no-op with nothing selected.
-    fn open_detail(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
-        let task = self.selected_task()?.clone();
+    fn open_detail(&mut self, session: Option<&Session>, today_day: i64) -> Option<ClientRequest> {
+        let task = self.selected_task(today_day)?.clone();
         self.message = None;
         self.detail = Some(TaskDetail::new(task.clone()));
         let session = session?;
@@ -305,16 +441,16 @@ impl TaskListState {
 
     /// Begin the add-sub-task sub-flow for the parent task of the current selection (the selected
     /// task, or the selected sub-task's parent). A no-op with nothing selected.
-    fn begin_add_subtask(&mut self) {
-        if let Some(task_id) = self.parent_task_id_of_selection() {
+    fn begin_add_subtask(&mut self, today_day: i64) {
+        if let Some(task_id) = self.parent_task_id_of_selection(today_day) {
             self.message = None;
             self.adding_subtask = Some(AddSubtaskState::new(task_id));
         }
     }
 
     /// Begin editing the selected sub-task's title, pre-filled from its current value.
-    fn begin_edit_subtask(&mut self) {
-        let Some(state) = self.selected_subtask().map(EditSubtaskState::new) else {
+    fn begin_edit_subtask(&mut self, today_day: i64) {
+        let Some(state) = self.selected_subtask(today_day).map(EditSubtaskState::new) else {
             return;
         };
         self.message = None;
@@ -324,8 +460,8 @@ impl TaskListState {
     /// Toggle collapse/expand for the parent task of the current selection: records an in-session
     /// override that is the inverse of the current resolved collapse state (ADR-0012 §5, A4). A
     /// no-op with nothing selected.
-    fn toggle_collapse(&mut self) {
-        let Some(task_id) = self.parent_task_id_of_selection() else {
+    fn toggle_collapse(&mut self, today_day: i64) {
+        let Some(task_id) = self.parent_task_id_of_selection(today_day) else {
             return;
         };
         let Some(task) = self.tasks.iter().find(|t| t.id == task_id) else {
@@ -338,8 +474,8 @@ impl TaskListState {
     /// Arm the delete confirmation for the selected **task** (the first `d`), opening the confirm
     /// dialog (ADR-0010 §4, Assumption A5). The second key (`Enter`) confirms via
     /// [`Self::handle_delete_confirm_event`]. A no-op on a sub-task row or with nothing selected.
-    fn arm_delete(&mut self) {
-        let Some(task_id) = self.selected_task().map(|t| t.id.clone()) else {
+    fn arm_delete(&mut self, today_day: i64) {
+        let Some(task_id) = self.selected_task(today_day).map(|t| t.id.clone()) else {
             return;
         };
         self.message = None;
@@ -566,8 +702,8 @@ impl TaskListState {
     }
 
     /// Open the edit sub-flow for the selected task, pre-filled from its current values.
-    fn begin_edit(&mut self) {
-        let Some(state) = self.selected_task().map(EditTaskState::new) else {
+    fn begin_edit(&mut self, today_day: i64) {
+        let Some(state) = self.selected_task(today_day).map(EditTaskState::new) else {
             return;
         };
         self.message = None;
@@ -599,9 +735,9 @@ impl TaskListState {
 
     /// Toggle the selected task's status: a done task is reopened (`status: open`, clears
     /// `closed_at` server-side), an open task is marked done (`status: done`).
-    fn toggle_done(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
+    fn toggle_done(&mut self, session: Option<&Session>, today_day: i64) -> Option<ClientRequest> {
         let session = session?;
-        let task = self.selected_task()?;
+        let task = self.selected_task(today_day)?;
         let next = match task.status {
             TaskStatus::Open => TaskStatus::Done,
             TaskStatus::Done => TaskStatus::Open,
@@ -621,9 +757,13 @@ impl TaskListState {
 
     /// Toggle the selected sub-task's status: a done sub-task is reopened, an open one is marked
     /// done (a plain status flip — a sub-task has no `closed_at`).
-    fn toggle_subtask_done(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
+    fn toggle_subtask_done(
+        &mut self,
+        session: Option<&Session>,
+        today_day: i64,
+    ) -> Option<ClientRequest> {
         let session = session?;
-        let subtask = self.selected_subtask()?;
+        let subtask = self.selected_subtask(today_day)?;
         let next = match subtask.status {
             TaskStatus::Open => TaskStatus::Done,
             TaskStatus::Done => TaskStatus::Open,
@@ -658,6 +798,7 @@ impl TaskListState {
         Some(ClientRequest::ListTasks {
             token: session.token.clone(),
             profile_id: session.profile_id.clone(),
+            query: super::task_list_query(),
         })
     }
 }

@@ -127,8 +127,15 @@ pub trait Client {
     /// [`ClientError::Api`]; an unowned/missing profile is `not_found`.
     fn delete_profile(&self, token: &str, profile_id: &str) -> ClientResult<()>;
 
-    /// `GET /api/profiles/{profile_id}/tasks` — the profile's tasks, newest-first.
-    fn list_tasks(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Task>>;
+    /// `GET /api/profiles/{profile_id}/tasks` — the profile's tasks, newest-first, bounded by the
+    /// `query`'s `limit`/`offset` (serialized as query params; ADR-0014 §1). An absent limit lets
+    /// the server default to its ceiling.
+    fn list_tasks(
+        &self,
+        token: &str,
+        profile_id: &str,
+        query: &contract::TaskListQuery,
+    ) -> ClientResult<Vec<Task>>;
 
     /// `POST /api/profiles/{profile_id}/tasks` — create a task, returning the created [`Task`].
     fn create_task(
@@ -437,10 +444,16 @@ impl Client for HttpClient {
         }
     }
 
-    fn list_tasks(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Task>> {
+    fn list_tasks(
+        &self,
+        token: &str,
+        profile_id: &str,
+        query: &contract::TaskListQuery,
+    ) -> ClientResult<Vec<Task>> {
         let resp = self
             .http
             .get(self.url(&format!("/api/profiles/{profile_id}/tasks")))
+            .query(query)
             .bearer_auth(token)
             .send()
             .map_err(offline)?;

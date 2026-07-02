@@ -64,12 +64,16 @@ pub enum ClientRequest {
         /// The profile to delete.
         profile_id: String,
     },
-    /// `GET /api/profiles/{profile_id}/tasks`.
+    /// `GET /api/profiles/{profile_id}/tasks` — the bounded task-list load (`limit`/`offset` query
+    /// params, ADR-0014).
     ListTasks {
         /// The bearer token to authenticate with.
         token: SessionToken,
         /// The profile namespace to list.
         profile_id: String,
+        /// The pagination-ready limit + offset the caller chose (the TUI hard-codes
+        /// [`TASK_LIST_LIMIT`](crate::app::TASK_LIST_LIMIT) / offset 0; ADR-0014 §2).
+        query: contract::TaskListQuery,
     },
     /// `POST /api/profiles/{profile_id}/tasks`.
     CreateTask {

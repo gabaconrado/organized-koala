@@ -37,9 +37,11 @@ fn run<C: Client>(client: &C, request: ClientRequest) -> Outcome {
         ClientRequest::DeleteProfile { token, profile_id } => {
             Outcome::DeleteProfile(client.delete_profile(token.expose(), &profile_id))
         }
-        ClientRequest::ListTasks { token, profile_id } => {
-            Outcome::ListTasks(client.list_tasks(token.expose(), &profile_id))
-        }
+        ClientRequest::ListTasks {
+            token,
+            profile_id,
+            query,
+        } => Outcome::ListTasks(client.list_tasks(token.expose(), &profile_id, &query)),
         ClientRequest::CreateTask {
             token,
             profile_id,

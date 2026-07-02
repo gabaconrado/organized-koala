@@ -33,7 +33,7 @@ pub use profiles::{ProfileForm, ProfilesMode, ProfilesState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
 pub use task_add::{AddSubtaskState, AddTaskState, EditSubtaskState, EditTaskState};
 pub use task_detail::{TaskDetail, TaskPane};
-pub use task_list::{TaskListState, VisibleRow};
+pub use task_list::{OLDER_SEPARATOR_LABEL, TaskListState, VisibleRow};
 pub use timer::{DurationEditState, Timer};
 pub use token::SessionToken;
 
@@ -75,6 +75,9 @@ pub enum Event {
     /// Toggle collapse/expand of the selected task's sub-tasks in the list, recording an in-session
     /// override over the status-derived default (task list only; `x`, ADR-0012 §5).
     ToggleCollapse,
+    /// Toggle whether the created-before-today ("older") task group and its "Older tasks" separator
+    /// are hidden (task list only; `h`, ADR-0014 §5). Default shown; ephemeral view state (#1).
+    ToggleHideOlder,
     /// Begin editing the selected task's title/description (task list only).
     BeginEditTask,
     /// Toggle the selected task between done and open (task list only): a done task is reopened,
@@ -126,6 +129,36 @@ pub struct Dispatch {
     pub id: RequestId,
     /// The work to execute.
     pub request: ClientRequest,
+}
+
+/// The number of tasks the TUI requests per task-list load. The pagination-ready `limit` capability
+/// lives on the wire (`contract::TaskListQuery`, bounded by
+/// [`MAX_TASK_LIST_LIMIT`](contract::MAX_TASK_LIST_LIMIT)); this is the **caller's** choice of it, a
+/// `tui`-local constant, not a wire constant (ADR-0014 §2). Every task-list load sends this limit
+/// and offset 0 — the TUI does not paginate.
+pub const TASK_LIST_LIMIT: u32 = 200;
+
+/// The task-list query the TUI sends on every `ListTasks`: [`TASK_LIST_LIMIT`] tasks, offset 0.
+fn task_list_query() -> contract::TaskListQuery {
+    contract::TaskListQuery {
+        limit: Some(TASK_LIST_LIMIT),
+        offset: Some(0),
+    }
+}
+
+/// The current civil day number (days since the Unix epoch, UTC) from the wall clock — the "today"
+/// reference for the task-list today/older split (ADR-0014 §4). Reading the clock is an effect, so
+/// this lives at the edge like the timer countdown's `Instant`-based derivation; the pure task-list
+/// core takes the resulting day number as data (`day_number`), keeping it deterministic under test.
+/// Day boundaries are UTC (Assumption A5-note): the `tui` crate holds no `chrono`/timezone
+/// dependency (A8), and the server stores/renders timestamps in UTC.
+#[must_use]
+pub fn current_day_number() -> i64 {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
+        .unwrap_or(0);
+    task_list::day_number(secs)
 }
 
 /// Fixed title for the focus-session completion notification (Assumption A5).
@@ -429,7 +462,10 @@ impl App {
         let request = match &mut self.screen {
             Screen::Auth(auth) => auth.handle_event(event),
             Screen::Main(main) => match main.active_tab {
-                Tab::Tasks => main.tasks.handle_event(event, self.session.as_ref()),
+                Tab::Tasks => {
+                    main.tasks
+                        .handle_event(event, self.session.as_ref(), current_day_number())
+                }
                 Tab::Notes => main.notes.handle_event(event, self.session.as_ref()),
                 Tab::Profiles => main.profiles.handle_event(event, self.session.as_ref()),
             },
@@ -474,6 +510,7 @@ impl App {
             Tab::Tasks => Some(self.dispatch_screen(ClientRequest::ListTasks {
                 token: session.token,
                 profile_id: session.profile_id,
+                query: task_list_query(),
             })),
             Tab::Notes => Some(self.dispatch_screen(ClientRequest::ListNotes {
                 token: session.token,
@@ -706,6 +743,7 @@ impl App {
                     Some(self.dispatch_screen(ClientRequest::ListTasks {
                         token: session.token,
                         profile_id: session.profile_id,
+                        query: task_list_query(),
                     }))
                 } else {
                     self.go_to_login();
@@ -784,6 +822,7 @@ impl App {
                 Some(self.dispatch_screen(ClientRequest::ListTasks {
                     token,
                     profile_id: profile.id,
+                    query: task_list_query(),
                 }))
             }
             Err(err) => {
@@ -1127,7 +1166,7 @@ impl App {
                         list.tasks.iter().map(|t| t.id.as_str()).collect();
                     list.collapse_overrides
                         .retain(|task_id, _| present.contains(task_id.as_str()));
-                    let rows = list.visible_rows().len();
+                    let rows = list.visible_rows(current_day_number()).len();
                     list.selected = match (rows, list.selected) {
                         (0, _) => None,
                         (_, Some(i)) if i >= rows => Some(rows - 1),
@@ -1159,6 +1198,7 @@ impl App {
                 Some(self.dispatch_screen(ClientRequest::ListTasks {
                     token: session.token,
                     profile_id: session.profile_id,
+                    query: task_list_query(),
                 }))
             }
             Err(err) => {
@@ -1349,6 +1389,7 @@ impl App {
         Some(self.dispatch_screen(ClientRequest::ListTasks {
             token: session.token,
             profile_id: session.profile_id,
+            query: task_list_query(),
         }))
     }
 

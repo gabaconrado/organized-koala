@@ -460,7 +460,7 @@ fn draw_help(frame: &mut Frame) {
         Line::from("  ? / Esc           close help"),
         Line::from(""),
         Line::from("Tasks    a add · A add sub-task · e edit · Space done · d delete"),
-        Line::from("         x collapse/expand sub-tasks · Enter detail"),
+        Line::from("         x collapse/expand sub-tasks · Enter detail · h hide older"),
         Line::from("Notes    a add · e edit · d delete · Enter detail"),
         Line::from("Profiles Enter switch · a add · e rename · d delete"),
         Line::from(""),
@@ -970,22 +970,44 @@ fn status_marker(status: TaskStatus) -> &'static str {
 /// Render the Tasks pane (the active profile's task list, or the open detail view) into `area`. The
 /// title, tab bar, message line, and footer are owned by [`draw_main`].
 ///
-/// The list interleaves task rows and (indented one level) sub-task rows, walking only the
-/// **visible** rows (sub-tasks under a collapsed parent are absent). A task's leading indicator is
-/// `+` when it has sub-tasks **and** they are collapsed, else `>` (the card's A8 indicator rule);
-/// the selection highlight is the reversed style on the selected visible row.
+/// A human-readable **today** date header is rendered top-center *inside this pane only* (acceptance
+/// #2). Below it the list interleaves task rows and (indented one level) sub-task rows, walking only
+/// the **visible** rows for the current day (completed-last within each group, created-today above a
+/// bold "Older tasks" separator, older tasks forced collapsed; ADR-0014 §4–5). A task's leading
+/// indicator is `+` when it has sub-tasks **and** they are collapsed, else `>`; the selection
+/// highlight is the reversed style on the selected visible row.
 fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
     if let Some(detail) = &list.detail {
         draw_task_detail(frame, area, detail);
         return;
     }
+    // A 1-row date header on top, the bordered task list filling the rest.
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .split(area);
+    let today_day = crate::app::current_day_number();
+    if let Some(slot) = rows.first() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                today_header(today_day),
+                Style::default().add_modifier(Modifier::BOLD),
+            ))
+            .alignment(Alignment::Center),
+            *slot,
+        );
+    }
+    let list_area = rows.get(1).copied().unwrap_or(area);
     let items: Vec<ListItem> = list
-        .visible_rows()
+        .visible_rows(today_day)
         .into_iter()
         .filter_map(|row| match row {
             crate::app::VisibleRow::Task { task_idx } => list.tasks.get(task_idx).map(|task| {
-                // `+` only when the task has sub-tasks AND they are collapsed; otherwise `>`.
-                let indicator = if list.has_subtasks(task) && list.is_collapsed(task) {
+                // `+` when the task has sub-tasks AND they are collapsed — either by the per-task
+                // status/override default, or because it is an older task (forced collapsed at
+                // render, ADR-0014 §5); otherwise `>`.
+                let collapsed = list.is_collapsed(task) || list.is_older(task, today_day);
+                let indicator = if list.has_subtasks(task) && collapsed {
                     '+'
                 } else {
                     '>'
@@ -1006,6 +1028,13 @@ fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
                     )))
                 })
             }
+            // The non-selectable "Older tasks" separator between the today and older groups.
+            crate::app::VisibleRow::OlderSeparator => {
+                Some(ListItem::new(Line::from(Span::styled(
+                    crate::app::OLDER_SEPARATOR_LABEL,
+                    Style::default().add_modifier(Modifier::DIM),
+                ))))
+            }
         })
         .collect();
     let widget = List::new(items)
@@ -1013,7 +1042,7 @@ fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
         .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
     let mut state = ListState::default();
     state.select(list.selected);
-    frame.render_stateful_widget(widget, area, &mut state);
+    frame.render_stateful_widget(widget, list_area, &mut state);
 }
 
 /// The message line for the Tasks pane: the timer message, or the pane's own transient message.
@@ -1146,6 +1175,92 @@ fn profile_message_line(profiles: &ProfilesState) -> String {
 /// on the contract DTO's type, exactly as the timer countdown derives epoch seconds).
 fn format_created_at(note: &Note) -> String {
     note.created_at.format("%Y-%m-%d %H:%M UTC").to_string()
+}
+
+/// The three-letter month names, index 1..=12.
+const MONTH_NAMES: [&str; 13] = [
+    "",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+/// The weekday names, index 0 = Sunday .. 6 = Saturday.
+const WEEKDAY_NAMES: [&str; 7] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+];
+
+/// The civil `(year, month, day)` for a day number (days since 1970-01-01), via Howard Hinnant's
+/// `civil_from_days`. Pure integer math so the today-header formatting is unit-testable and the
+/// `tui` crate stays free of a `chrono`/timezone dependency (A8).
+#[must_use]
+pub fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    let year = if m <= 2 { y + 1 } else { y };
+    let month = u32::try_from(m).unwrap_or(1);
+    let day = u32::try_from(d).unwrap_or(1);
+    (year, month, day)
+}
+
+/// The weekday index (0 = Sunday .. 6 = Saturday) for a day number. 1970-01-01 was a Thursday
+/// (index 4), so `(days + 4) mod 7`.
+#[must_use]
+pub fn weekday_index(days: i64) -> usize {
+    usize::try_from((days + 4).rem_euclid(7)).unwrap_or(0)
+}
+
+/// The English ordinal suffix for a day of month (`st`/`nd`/`rd`/`th`), with the 11–13 → `th`
+/// exception. Pure and unit-testable (ADR-0014 R5).
+#[must_use]
+pub fn ordinal_suffix(day: u32) -> &'static str {
+    if (11..=13).contains(&(day % 100)) {
+        "th"
+    } else {
+        match day % 10 {
+            1 => "st",
+            2 => "nd",
+            3 => "rd",
+            _ => "th",
+        }
+    }
+}
+
+/// The human-readable today date header shown top-center in the Tasks pane (acceptance #2), e.g.
+/// `Tuesday, July 2nd, 2026`: weekday, month, ordinal day, year, from the current day number.
+#[must_use]
+pub fn today_header(day_number: i64) -> String {
+    let (year, month, day) = civil_from_days(day_number);
+    let weekday = WEEKDAY_NAMES.get(weekday_index(day_number)).unwrap_or(&"");
+    let month_name = MONTH_NAMES
+        .get(usize::try_from(month).unwrap_or(0))
+        .unwrap_or(&"");
+    format!(
+        "{weekday}, {month_name} {day}{}, {year}",
+        ordinal_suffix(day)
+    )
 }
 
 /// The bottom row of a post-auth screen: the hotkey caption on the left and the persistent global
