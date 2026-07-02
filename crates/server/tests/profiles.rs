@@ -456,6 +456,58 @@ async fn delete_profile_cascades_tasks_and_notes(pool: PgPool) {
     );
 }
 
+// ---- ordering (oldest-first by insertion time) ------------------------------
+
+/// `GET /api/profiles` returns the account's profiles in **insertion-time order** (oldest-first
+/// by `created_at`), NOT alphabetically and NOT newest-first.
+///
+/// The profiles are created in an order deliberately distinct from both alphabetical and
+/// reverse-insertion so a regression to either is caught: after the default "work" (created at
+/// registration) we insert "zulu", then "alpha", then "mike".
+///   - insertion order       : work, zulu, alpha, mike   (what we assert)
+///   - alphabetical           : alpha, mike, work, zulu   (differs)
+///   - newest-first (DESC)    : mike, alpha, zulu, work   (differs)
+#[sqlx::test]
+async fn list_profiles_ordered_oldest_first(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+
+    // Insert in an order that is neither alphabetical nor its own reverse.
+    let zulu = create_profile(&app, &account, "zulu").await;
+    let alpha = create_profile(&app, &account, "alpha").await;
+    let mike = create_profile(&app, &account, "mike").await;
+
+    let profiles = list_profiles(&app, &account).await;
+
+    // The names, in the exact order the server returned them: the default "work" is oldest, then
+    // the three we created in insertion order.
+    let names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["work", "zulu", "alpha", "mike"],
+        "profiles must be returned oldest-first by insertion time, not alphabetical or newest-first"
+    );
+
+    // The ids of the three we created follow their creation order, independent of name.
+    let created_ids: Vec<&str> = profiles
+        .iter()
+        .filter(|p| p.id != account.profile_id)
+        .map(|p| p.id.as_str())
+        .collect();
+    assert_eq!(
+        created_ids,
+        vec![zulu.id.as_str(), alpha.id.as_str(), mike.id.as_str()],
+        "created profiles must appear in insertion order"
+    );
+
+    // And `created_at` is non-decreasing across the whole list — the ordering key is the timestamp.
+    let timestamps: Vec<_> = profiles.iter().map(|p| p.created_at).collect();
+    assert!(
+        timestamps.is_sorted(),
+        "created_at must be ascending (oldest-first): {timestamps:?}"
+    );
+}
+
 // ---- per-account name uniqueness --------------------------------------------
 
 /// The same profile name is allowed for two different accounts — uniqueness is per-account.

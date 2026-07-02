@@ -169,3 +169,17 @@ and needs no amendment.
   Gates green in-worktree: `./ok.sh build`, `./ok.sh lint --lib --bins`, `./ok.sh fmt --check`.
   No `Client`/`ClientRequest`/`Outcome`/state-field surface touched, so the tester-owned
   `crates/tui/tests/` harness is not stranded by this slice.
+- [x] 2026-07-02 [tester] Slice 3 done. Added `list_profiles_ordered_oldest_first` to
+  `crates/server/tests/profiles.rs` (new `// ---- ordering` section, ~50 lines before the
+  per-account-uniqueness section). It reuses the existing `create_profile`/`list_profiles`
+  helpers: after the default "work" it inserts "zulu" → "alpha" → "mike" — an insertion order
+  distinct from BOTH alphabetical (`alpha, mike, work, zulu`) and newest-first/DESC (`mike,
+  alpha, zulu, work`) — and asserts the returned names are `["work","zulu","alpha","mike"]`,
+  the created ids follow insertion order, and `created_at` is non-decreasing (`is_sorted`), so
+  a regression to either alphabetical or `DESC` fails. Gates green in-worktree: `./ok.sh test`
+  (profiles suite 20→21, whole workspace 0 failed), `./ok.sh lint` clean (rewrote the
+  monotonic check off `windows()[..]` to `timestamps.is_sorted()` to satisfy
+  `clippy::indexing_slicing`), `./ok.sh fmt --check` clean. Confirmed the existing `tui`
+  profile suite (`login_flow_fetches_profiles_and_enters_task_list`,
+  `profiles_tab_list_command_keys`) stays green untouched — acceptance #2 needs no `tui`
+  change. Test-only change: no source touched.
