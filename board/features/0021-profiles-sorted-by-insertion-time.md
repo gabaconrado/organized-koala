@@ -183,3 +183,10 @@ and needs no amendment.
   profile suite (`login_flow_fetches_profiles_and_enters_task_list`,
   `profiles_tab_list_command_keys`) stays green untouched — acceptance #2 needs no `tui`
   change. Test-only change: no source touched.
+- [x] 2026-07-02 [reviewer] **REVIEW-STATUS: approved** — code-tree hash
+  `b8591d70250155b79c209d4b14b59f6b2abb00fd` (code commit `831634b`). All gates green
+  (build/test/lint/fmt); query flip to `ORDER BY created_at ASC` correct; `.sqlx/` cache
+  regenerated (old DESC removed, new ASC added, hash-consistent); ordering test catches
+  regression to both alphabetical and newest-first (three mutually-distinct orderings). No
+  `contract`/wire (#2), no domain-structure (#3), stateless-TUI (#1) and profile-scoping (#4)
+  intact; no ADR required; no migration needed. No findings, no out-of-scope nits.
