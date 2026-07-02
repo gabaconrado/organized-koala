@@ -2,7 +2,7 @@
 id: 0020
 title: Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap
 type: feature      # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0019]  # builds on the task + sub-task list/collapse rendering (merged)
@@ -307,6 +307,13 @@ gate.
   `25ed4351d5beedb2d4f0cc517e3bdd867389cedc` — code byte-identical, so the `approved`+`verified`
   verdicts carry forward untouched (no relabel). Gates re-run green on the rebased tree
   (fmt/lint/test). → `awaiting-merge`.
+- [ ] 2026-07-02 [human] Adjustment 1 (render): show the today date as a **full-width separator
+  row inside** the Tasks pane (like the "Older tasks" one), not a short left-aligned line above
+  it — and make the separators span the whole pane width (currently left-aligned and short).
+- [ ] 2026-07-02 [human] Adjustment 2 (bug): `d` does nothing on a sub-task row — pressing it
+  should delete the selected sub-task (the `DeleteSubtask` wire path already exists).
+- [ ] 2026-07-02 [human] Adjustment 3 (behaviour): `x` does not expand/collapse tasks in the
+  "Older" group — it should toggle there too (amends acceptance #3's forced-collapse).
 
 ## Summary
 
