@@ -413,6 +413,18 @@ wire already shipped in 0019; ADR-0014 unamended). All re-enter at `working` (TU
   Hard constraints #1–#4 hold. Pinned to code-tree hash
   `a5713a7d95780e1e61b4130ccc7556789f44aa45` (head `e21d82d`). One out-of-scope nit flagged (stale
   `confirming_delete` field doc-comment, `task_list.rs:116`, predates this cycle) → idea candidate.
+- 2026-07-02 [verifier] Live clause-4 pass on the re-entry → `VERIFY-STATUS: verified`. Booted the
+  stack (`./ok.sh up`; migrate one-shot clean, no new migration). **Live sub-task delete** (item 2's
+  newly-reachable server path): owner `DELETE …/subtasks/{id}` → `204` no body, sub-task gone from a
+  follow-up list; **profile-scoping (#4)** cross-profile AND cross-user delete → `404
+  {"code":"not_found"}` with the sub-task surviving both; second delete → `404` (error contract
+  shape correct). Drove the shipped reqwest `HttpClient::delete_subtask` end-to-end (`Ok(())` on 204;
+  `ClientError::Api { code: Some(NotFound) }` decoded on the gone path). OTel `delete_subtask` spans
+  emitted (`server::handlers::subtasks`, `subtask_id`/`user_id`/`profile_id`/`task_id`). Items 1 & 3
+  (render/interaction) confirmed via the green TUI `TestBackend` suite (ADR-0003), not live boot.
+  `./ok.sh test` exited 0 (`--all-targets`, 37 suites, tui `tasks` 30 passed). Teardown `./ok.sh
+  down` (volume preserved). Pinned to code-tree hash
+  `a5713a7d95780e1e61b4130ccc7556789f44aa45` (head `e21d82d`).
 
 ## Summary
 
