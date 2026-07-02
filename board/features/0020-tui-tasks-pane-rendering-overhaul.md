@@ -2,7 +2,7 @@
 id: 0020
 title: Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap
 type: feature      # feature | chore
-status: review  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0019]  # builds on the task + sub-task list/collapse rendering (merged)
@@ -432,6 +432,12 @@ wire already shipped in 0019; ADR-0014 unamended). All re-enter at `working` (TU
   `./ok.sh test` exited 0 (`--all-targets`, 37 suites, tui `tasks` 30 passed). Teardown `./ok.sh
   down` (volume preserved). Pinned to code-tree hash
   `a5713a7d95780e1e61b4130ccc7556789f44aa45` (head `e21d82d`).
+- 2026-07-02 [orchestrator] Step-7 freshen (re-entry): rebased onto `main` @ 37b6db5 (docs/
+  `.claude`/board only — eng-manager re-entry learnings + handoff + idea 0011 + dashboard). No
+  Board-file conflict this pass. `./ok.sh code-hash` **unchanged** at
+  `a5713a7d95780e1e61b4130ccc7556789f44aa45` — code byte-identical, so the re-entry
+  `approved`+`verified` verdicts carry forward untouched (no relabel). Gates re-run green on the
+  rebased tree (fmt/lint `--all-targets`/test, all suites 0 failed). → `awaiting-merge`.
 
 ## Summary
 
