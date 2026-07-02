@@ -292,3 +292,12 @@ gate.
   `25ed4351d5beedb2d4f0cc517e3bdd867389cedc` (head `ec79791`). Two out-of-scope ideas filed on
   `main` for human triage (local-date grouping + ADR/plan doc-consistency; standing secret-Debug
   note).
+- 2026-07-02 [verifier] Live clause-4 pass → `VERIFY-STATUS: verified`. Booted the stack
+  (`./ok.sh up`); migrate one-shot a no-op (0020 adds no migration; no history conflict). Live API:
+  default list newest-first, `limit` caps, `offset` skips, window works, `limit=500` ok, `limit=501`
+  → `400 {"code":"validation_failed"}`, cross-profile → `404` (scoping #4 holds). Drove the shipped
+  reqwest `HttpClient` end-to-end (`list_tasks(200,0)` ok; `limit=501` decodes to
+  `ErrorCode::ValidationFailed`). OTel `list_tasks` spans emitted with user_id/profile_id. TUI
+  `TestBackend` suite exists + green (ADR-0003). Teardown `./ok.sh down` (volume preserved). Pinned
+  to code-tree hash `25ed4351d5beedb2d4f0cc517e3bdd867389cedc` (head `c1099b0`). Minor inferred edge
+  (empty-string `?limit=` → plain-text 400, unreachable by shipped client) filed as an idea.
