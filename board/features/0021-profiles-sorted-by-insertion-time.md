@@ -190,3 +190,12 @@ and needs no amendment.
   regression to both alphabetical and newest-first (three mutually-distinct orderings). No
   `contract`/wire (#2), no domain-structure (#3), stateless-TUI (#1) and profile-scoping (#4)
   intact; no ADR required; no migration needed. No findings, no out-of-scope nits.
+- [x] 2026-07-02 [verifier] **VERDICT: verified** — code-tree hash
+  `b8591d70250155b79c209d4b14b59f6b2abb00fd` (code commit `831634b`). Booted the stack
+  (`./ok.sh up`) live; `GET /api/profiles` returned `[work, zulu, alpha, mike]` = oldest-first
+  by `created_at` (NOT alphabetical, NOT newest-first), HTTP 200, shape `{id,name,created_at}`
+  unchanged. Account-scoping (#4) confirmed (account B sees only its own). Error contract
+  intact (401 `{code:"unauthenticated",…}` on missing/garbage token). OTel `list_profiles`
+  span exported. Full `./ok.sh test` green (37 ok lines, 0 fail), incl.
+  `list_profiles_ordered_oldest_first` and the `tui` `TestBackend` switcher suite (ADR-0003).
+  No gaps. Torn down with `./ok.sh down` (no `-v`; shared volume preserved).
