@@ -250,3 +250,6 @@ gate.
 ## Log / comments
 
 - [ ] 2026-07-02 [human] Filed from an operator interface-improvements request; see acceptance above.
+- 2026-07-02 [orchestrator] Claimed onto `feature/0020-tui-tasks-pane-rendering-overhaul`; this
+  `main` copy is frozen at the claim snapshot. The branch copy is authoritative until the human's
+  merge brings the finished item back to `main`.
