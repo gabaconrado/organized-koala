@@ -33,7 +33,7 @@ pub use profiles::{ProfileForm, ProfilesMode, ProfilesState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
 pub use task_add::{AddSubtaskState, AddTaskState, EditSubtaskState, EditTaskState};
 pub use task_detail::{TaskDetail, TaskPane};
-pub use task_list::{OLDER_SEPARATOR_LABEL, TaskListState, VisibleRow};
+pub use task_list::{DeleteTarget, OLDER_SEPARATOR_LABEL, TaskListState, VisibleRow};
 pub use timer::{DurationEditState, Timer};
 pub use token::SessionToken;
 

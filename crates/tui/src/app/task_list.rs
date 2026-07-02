@@ -5,10 +5,11 @@
 //! The list interleaves task rows and (indented) sub-task rows. A parent's sub-tasks are grouped
 //! under it by `task_id` (defensively — an orphan sub-task whose parent is absent is ignored,
 //! never panics; ADR-0013 Risk R3) and are shown expanded or collapsed. **Collapse is derived,
-//! transient presentation state** (#1 / ADR-0012 §5): the initial state derives from the parent
-//! task's status *each render* (open → expanded, done → collapsed); the user's `x` toggle records
-//! an in-session, process-lifetime override keyed by task id, never persisted, dropped on a fresh
-//! load for a task no longer present.
+//! transient presentation state** (#1 / ADR-0012 §5): the default derives *each render* from the
+//! task's group — a **today** task follows its status (open → expanded, done → collapsed), an
+//! **older** task defaults collapsed regardless of status (acceptance #3); the user's `x` toggle
+//! records an in-session, process-lifetime override keyed by task id (applying to either group),
+//! never persisted, dropped on a fresh load for a task no longer present.
 
 use std::collections::HashMap;
 
@@ -45,8 +46,29 @@ pub enum VisibleRow {
     OlderSeparator,
 }
 
-/// The label rendered on the [`VisibleRow::OlderSeparator`] row (acceptance #3).
-pub const OLDER_SEPARATOR_LABEL: &str = "── Older tasks ──";
+/// The label rendered on the [`VisibleRow::OlderSeparator`] row (acceptance #3), before it is
+/// padded to the full pane inner width at draw time.
+pub const OLDER_SEPARATOR_LABEL: &str = "Older tasks";
+
+/// What a two-step delete confirmation is armed against: the selected **task** or the selected
+/// **sub-task** (which carries its parent task id, since the delete wire is task-scoped). Resolving
+/// the armed target on `arm_delete` lets `confirm_delete` dispatch the matching
+/// [`ClientRequest::DeleteTask`] / [`ClientRequest::DeleteSubtask`] without re-reading the selection.
+#[derive(Debug, Clone)]
+pub enum DeleteTarget {
+    /// A top-level task, deleted via [`ClientRequest::DeleteTask`].
+    Task {
+        /// The task to delete.
+        task_id: String,
+    },
+    /// A sub-task, deleted via [`ClientRequest::DeleteSubtask`] (task-scoped by its parent).
+    Subtask {
+        /// The parent task owning the sub-task.
+        task_id: String,
+        /// The sub-task to delete.
+        subtask_id: String,
+    },
+}
 
 /// Seconds in a day, for the epoch-seconds → civil-day-number derivation (ADR-0014 §4 today/older
 /// split). Kept in epoch seconds — like the timer countdown — so the `tui` crate stays free of a
@@ -89,9 +111,10 @@ pub struct TaskListState {
     /// The open per-field detail view, if any (ADR-0010 §4). Transient process-lifetime UI state
     /// (#1); the snapshot re-derives from the server after every commit.
     pub detail: Option<TaskDetail>,
-    /// Id of the task awaiting a delete confirmation (the two-step delete affordance): set on the
-    /// first delete key, cleared on confirm or on any other navigation. `None` when not armed.
-    pub confirming_delete: Option<String>,
+    /// The target awaiting a delete confirmation (the two-step delete affordance): set on the
+    /// first delete key by the selected **row kind** (task or sub-task), cleared on confirm or on
+    /// any other navigation. `None` when not armed.
+    pub confirming_delete: Option<DeleteTarget>,
     /// A transient status/error message shown to the user, if any.
     pub message: Option<String>,
     /// The in-flight request id while a list/create/update/delete call is outstanding; `None` when
@@ -154,15 +177,21 @@ impl TaskListState {
         self.adding_subtask.is_some() || self.editing_subtask.is_some()
     }
 
-    /// Whether collapse for `task` resolves to collapsed: the in-session override if present, else
-    /// the status-derived default (a **done** parent collapses, an **open** parent expands;
-    /// ADR-0012 §5).
+    /// Whether collapse for `task` resolves to collapsed for `today_day`: the in-session override if
+    /// present, else the group-derived default. In the **today** group the default follows status (a
+    /// **done** parent collapses, an **open** parent expands; ADR-0012 §5); in the **older** group the
+    /// default is collapsed regardless of status (acceptance #3, amended: default collapsed but the
+    /// `x` override still applies). This is the single collapse resolution consulted by both the row
+    /// assembly and the render indicator, so the two never diverge; it never mutates
+    /// `collapse_overrides` (A7 — the older default stays render-time-derived).
     #[must_use]
-    pub fn is_collapsed(&self, task: &Task) -> bool {
+    pub fn resolve_collapsed(&self, task: &Task, today_day: i64) -> bool {
         self.collapse_overrides
             .get(&task.id)
             .copied()
-            .unwrap_or(matches!(task.status, TaskStatus::Done))
+            .unwrap_or_else(|| {
+                self.is_older(task, today_day) || matches!(task.status, TaskStatus::Done)
+            })
     }
 
     /// Whether `task` has at least one sub-task in the loaded set (groups defensively by `task_id`).
@@ -226,35 +255,42 @@ impl TaskListState {
         idxs
     }
 
+    /// Push a task row and — unless it resolves collapsed for `today_day` ([`Self::resolve_collapsed`])
+    /// — its sub-task rows (completed-last), into `rows`. Shared by both the today and older groups so
+    /// collapse resolution is identical either side of the separator.
+    fn push_task_rows(&self, rows: &mut Vec<VisibleRow>, task_idx: usize, today_day: i64) {
+        rows.push(VisibleRow::Task { task_idx });
+        let Some(task) = self.tasks.get(task_idx) else {
+            return;
+        };
+        if self.resolve_collapsed(task, today_day) {
+            return;
+        }
+        for subtask_idx in self.sorted_subtask_indices(&task.id) {
+            rows.push(VisibleRow::Subtask { subtask_idx });
+        }
+    }
+
     /// The list of **visible rows**, in render order, for the given `today_day` civil day. The
     /// created-today group renders first (completed-last), each task followed by its sub-tasks
     /// (completed-last) unless collapsed; then — when the older group is non-empty and not hidden
     /// (`hide_older`) — the "Older tasks" separator, then the created-before-today tasks. Older
-    /// tasks render **collapsed regardless of status** and independent of `collapse_overrides` (a
-    /// render-time forcing, not a mutation of the collapse map; ADR-0014 §5). A sub-task whose
-    /// parent task is absent is silently dropped (Risk R3). This row list is the single source of
-    /// truth shared by the render and the selection cursor.
+    /// tasks default to **collapsed regardless of status** but honor the per-task `x` override like
+    /// the today group ([`Self::resolve_collapsed`], acceptance #3 amended): the older default is a
+    /// render-time forcing, never a mutation of `collapse_overrides` (A7). A sub-task whose parent
+    /// task is absent is silently dropped (Risk R3). This row list is the single source of truth
+    /// shared by the render and the selection cursor.
     #[must_use]
     pub fn visible_rows(&self, today_day: i64) -> Vec<VisibleRow> {
         let (today, older) = self.grouped_task_indices(today_day);
         let mut rows = Vec::new();
         for &task_idx in &today {
-            rows.push(VisibleRow::Task { task_idx });
-            let Some(task) = self.tasks.get(task_idx) else {
-                continue;
-            };
-            if self.is_collapsed(task) {
-                continue;
-            }
-            for subtask_idx in self.sorted_subtask_indices(&task.id) {
-                rows.push(VisibleRow::Subtask { subtask_idx });
-            }
+            self.push_task_rows(&mut rows, task_idx, today_day);
         }
         if !older.is_empty() && !self.hide_older {
             rows.push(VisibleRow::OlderSeparator);
-            // Older tasks are forced collapsed regardless of status or per-task override.
             for &task_idx in &older {
-                rows.push(VisibleRow::Task { task_idx });
+                self.push_task_rows(&mut rows, task_idx, today_day);
             }
         }
         rows
@@ -464,22 +500,42 @@ impl TaskListState {
         let Some(task_id) = self.parent_task_id_of_selection(today_day) else {
             return;
         };
-        let Some(task) = self.tasks.iter().find(|t| t.id == task_id) else {
+        let Some(task) = self.tasks.iter().find(|t| t.id == task_id).cloned() else {
             return;
         };
-        let next = !self.is_collapsed(task);
+        // Flip against the group-aware resolved state so `x` on an older task toggles against its
+        // `true` (collapsed) default just like an open today task toggles against `false`.
+        let next = !self.resolve_collapsed(&task, today_day);
         let _ = self.collapse_overrides.insert(task_id, next);
     }
 
-    /// Arm the delete confirmation for the selected **task** (the first `d`), opening the confirm
-    /// dialog (ADR-0010 §4, Assumption A5). The second key (`Enter`) confirms via
-    /// [`Self::handle_delete_confirm_event`]. A no-op on a sub-task row or with nothing selected.
+    /// Arm the delete confirmation for the current selection by its **row kind** (the first `d`),
+    /// opening the confirm dialog (ADR-0010 §4, Assumption A5): a task row arms a
+    /// [`DeleteTarget::Task`], a sub-task row a [`DeleteTarget::Subtask`] (carrying its parent). The
+    /// second key (`Enter`) confirms via [`Self::handle_delete_confirm_event`]. A no-op on the
+    /// separator or with nothing selected.
     fn arm_delete(&mut self, today_day: i64) {
-        let Some(task_id) = self.selected_task(today_day).map(|t| t.id.clone()) else {
+        let target = match self.selected_row(today_day) {
+            Some(VisibleRow::Task { task_idx }) => {
+                self.tasks.get(task_idx).map(|t| DeleteTarget::Task {
+                    task_id: t.id.clone(),
+                })
+            }
+            Some(VisibleRow::Subtask { subtask_idx }) => {
+                self.subtasks
+                    .get(subtask_idx)
+                    .map(|s| DeleteTarget::Subtask {
+                        task_id: s.task_id.clone(),
+                        subtask_id: s.id.clone(),
+                    })
+            }
+            Some(VisibleRow::OlderSeparator) | None => None,
+        };
+        let Some(target) = target else {
             return;
         };
         self.message = None;
-        self.confirming_delete = Some(task_id);
+        self.confirming_delete = Some(target);
     }
 
     /// Handle a key while the delete-confirm dialog is armed: `Submit` (Enter) confirms the delete;
@@ -781,16 +837,27 @@ impl TaskListState {
         })
     }
 
-    /// Issue the delete for the armed task id (the confirm dialog's `Enter`). A no-op if nothing is
-    /// armed or the session is gone.
+    /// Issue the delete for the armed target (the confirm dialog's `Enter`): a
+    /// [`ClientRequest::DeleteTask`] for a task, a [`ClientRequest::DeleteSubtask`] for a sub-task.
+    /// A no-op if nothing is armed or the session is gone.
     fn confirm_delete(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
         let session = session?;
-        let task_id = self.confirming_delete.clone()?;
-        Some(ClientRequest::DeleteTask {
-            token: session.token.clone(),
-            profile_id: session.profile_id.clone(),
-            task_id,
-        })
+        match self.confirming_delete.clone()? {
+            DeleteTarget::Task { task_id } => Some(ClientRequest::DeleteTask {
+                token: session.token.clone(),
+                profile_id: session.profile_id.clone(),
+                task_id,
+            }),
+            DeleteTarget::Subtask {
+                task_id,
+                subtask_id,
+            } => Some(ClientRequest::DeleteSubtask {
+                token: session.token.clone(),
+                profile_id: session.profile_id.clone(),
+                task_id,
+                subtask_id,
+            }),
+        }
     }
 
     fn refresh(&mut self, session: Option<&Session>) -> Option<ClientRequest> {

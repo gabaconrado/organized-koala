@@ -970,48 +970,39 @@ fn status_marker(status: TaskStatus) -> &'static str {
 /// Render the Tasks pane (the active profile's task list, or the open detail view) into `area`. The
 /// title, tab bar, message line, and footer are owned by [`draw_main`].
 ///
-/// A human-readable **today** date header is rendered top-center *inside this pane only* (acceptance
-/// #2). Below it the list interleaves task rows and (indented one level) sub-task rows, walking only
-/// the **visible** rows for the current day (completed-last within each group, created-today above a
-/// bold "Older tasks" separator, older tasks forced collapsed; ADR-0014 §4–5). A task's leading
-/// indicator is `+` when it has sub-tasks **and** they are collapsed, else `>`; the selection
-/// highlight is the reversed style on the selected visible row.
+/// A human-readable **today** date renders as the first list row: a full-width, non-selectable bold
+/// separator inside this pane only (acceptance #2, amended). Below it the list interleaves task rows
+/// and (indented one level) sub-task rows, walking only the **visible** rows for the current day
+/// (completed-last within each group, created-today above a full-width "Older tasks" separator, older
+/// tasks defaulting collapsed; ADR-0014 §4–5). A task's leading indicator is `+` when it has
+/// sub-tasks **and** they are collapsed, else `>`; the selection highlight is the reversed style on
+/// the selected visible row.
 fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
     if let Some(detail) = &list.detail {
         draw_task_detail(frame, area, detail);
         return;
     }
-    // A 1-row date header on top, the bordered task list filling the rest.
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .split(area);
     let today_day = crate::app::current_day_number();
-    if let Some(slot) = rows.first() {
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                today_header(today_day),
-                Style::default().add_modifier(Modifier::BOLD),
-            ))
-            .alignment(Alignment::Center),
-            *slot,
-        );
-    }
-    let list_area = rows.get(1).copied().unwrap_or(area);
-    let items: Vec<ListItem> = list
-        .visible_rows(today_day)
-        .into_iter()
-        .filter_map(|row| match row {
+    let block = Block::default().borders(Borders::ALL).title("Tasks");
+    // The list's inner (content) width, inside the two border columns; both separator rows span it.
+    let inner_width = usize::from(block.inner(area).width);
+    // The date row is prepended at draw and is NOT part of `visible_rows`; a bold, non-selectable
+    // full-width separator carrying today's date.
+    let mut items: Vec<ListItem> = vec![ListItem::new(Line::from(Span::styled(
+        separator_line(&today_header(today_day), inner_width),
+        Style::default().add_modifier(Modifier::BOLD),
+    )))];
+    items.extend(list.visible_rows(today_day).into_iter().filter_map(|row| {
+        match row {
             crate::app::VisibleRow::Task { task_idx } => list.tasks.get(task_idx).map(|task| {
-                // `+` when the task has sub-tasks AND they are collapsed — either by the per-task
-                // status/override default, or because it is an older task (forced collapsed at
-                // render, ADR-0014 §5); otherwise `>`.
-                let collapsed = list.is_collapsed(task) || list.is_older(task, today_day);
-                let indicator = if list.has_subtasks(task) && collapsed {
-                    '+'
-                } else {
-                    '>'
-                };
+                // `+` when the task has sub-tasks AND they resolve collapsed for this day (the
+                // group-aware resolution matching `visible_rows`, ADR-0014 §5); otherwise `>`.
+                let indicator =
+                    if list.has_subtasks(task) && list.resolve_collapsed(task, today_day) {
+                        '+'
+                    } else {
+                        '>'
+                    };
                 ListItem::new(Line::from(format!(
                     "{indicator} {} {}",
                     status_marker(task.status),
@@ -1028,21 +1019,40 @@ fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
                     )))
                 })
             }
-            // The non-selectable "Older tasks" separator between the today and older groups.
+            // The non-selectable full-width "Older tasks" separator between the two groups.
             crate::app::VisibleRow::OlderSeparator => {
                 Some(ListItem::new(Line::from(Span::styled(
-                    crate::app::OLDER_SEPARATOR_LABEL,
+                    separator_line(crate::app::OLDER_SEPARATOR_LABEL, inner_width),
                     Style::default().add_modifier(Modifier::DIM),
                 ))))
             }
-        })
-        .collect();
+        }
+    }));
     let widget = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title("Tasks"))
+        .block(block)
         .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+    // The date row is prepended (index 0) and is not in `visible_rows`, so offset the selection by
+    // one: `list.selected` indexes the rows after it, keeping selection/`visible_rows` untouched and
+    // the date row unselectable.
     let mut state = ListState::default();
-    state.select(list.selected);
-    frame.render_stateful_widget(widget, list_area, &mut state);
+    state.select(list.selected.map(|i| i + 1));
+    frame.render_stateful_widget(widget, area, &mut state);
+}
+
+/// Center `label` on a `─`-filled line of exactly `inner_width` display columns, e.g.
+/// `── … Tuesday, July 2nd, 2026 … ──`. Used for both the today date row and the "Older tasks"
+/// separator so each spans the full pane inner width. A label at least as wide as `inner_width` is
+/// returned unpadded (it already fills or overflows the row).
+fn separator_line(label: &str, inner_width: usize) -> String {
+    let label_width = label.chars().count();
+    if label_width + 2 > inner_width {
+        return label.to_owned();
+    }
+    // One space of breathing room each side of the label, the rest filled with `─`.
+    let fill = inner_width - label_width - 2;
+    let left = fill / 2;
+    let right = fill - left;
+    format!("{} {label} {}", "─".repeat(left), "─".repeat(right))
 }
 
 /// The message line for the Tasks pane: the timer message, or the pane's own transient message.

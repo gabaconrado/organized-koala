@@ -357,6 +357,27 @@ wire already shipped in 0019; ADR-0014 unamended). All re-enter at `working` (TU
   (older defaults collapsed but `x`-toggleable), and added #7 (`d` deletes sub-task). Slice plan
   S3-a/b/c + S4 recorded under `## Plan(s)` → Amendment. Verdicts from the prior `awaiting-merge`
   are void (code will change); item re-enters review + verify after the build.
+- 2026-07-02 [tui-dev] S3 re-entry done (TUI-only, `task_list.rs` + `ui/mod.rs`; no
+  contract/wire/DTO touched). **Item 2 (`d` deletes sub-task):** added `enum DeleteTarget { Task |
+  Subtask }`, changed `confirming_delete` to `Option<DeleteTarget>`; `arm_delete` now arms by
+  selected-row kind (task → `DeleteTarget::Task`, sub-task → `DeleteTarget::Subtask{parent,
+  subtask}`, separator → no-op); `confirm_delete` dispatches `DeleteTask`/`DeleteSubtask` (both
+  pre-wired). Exported `DeleteTarget`; `app/mod.rs` `.is_some()`/`= None` sites unchanged.
+  **Item 3 (`x` toggles older group):** replaced `is_collapsed` with a group-aware
+  `resolve_collapsed(task, today_day)` (`override.unwrap_or(is_older || Done)` — today default
+  status-derived, older default `true`, both `x`-overridable); factored a `push_task_rows` helper so
+  both today/older loops emit sub-task rows when expanded; `toggle_collapse` and the `+`/`>` render
+  indicator both use `resolve_collapsed`, so rows + render never diverge. Older path never writes
+  `collapse_overrides` (A7 preserved). **Item 1 (full-width date separator row):** dropped the
+  above-border `Length(1)` `Paragraph` header, gave the whole area to the bordered list, prepended
+  the today date as a bold non-selectable first `ListItem` spanning the block inner width, offset the
+  `ListState` selection by +1 (keeps `visible_rows`/selection untouched). Added a shared
+  `separator_line(label, inner_width)` (centers label, `─`-fills to inner width) used for BOTH the
+  date row and the "Older tasks" separator (`OLDER_SEPARATOR_LABEL` now the bare `"Older tasks"`,
+  padded at draw). No new hotkey → help overlay untouched. Gates: `./ok.sh fmt --check` +
+  `clippy --lib --bins` + `./ok.sh build` green; doctests (3) pass. `--all-targets`/`./ok.sh test`
+  expected-RED until tester S4 un-strands `common/mod.rs` for the `confirming_delete` type change
+  (learned 0019) — NOT a clause-1/2 pass of this slice.
 
 ## Summary
 
