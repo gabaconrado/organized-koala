@@ -139,6 +139,255 @@ async fn list_tasks_empty(pool: PgPool) {
     assert!(tasks.is_empty());
 }
 
+// ---- 0020 / ADR-0014: task-list limit + offset query params ----
+
+/// `limit=N` caps the returned count to the N newest tasks (ADR-0014 §1–2). With five tasks and
+/// `limit=2`, only the two newest come back, still newest-first.
+#[sqlx::test]
+async fn list_tasks_limit_caps_the_count(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    for title in ["one", "two", "three", "four", "five"] {
+        let res = send(
+            &app,
+            post_json_auth(
+                &path,
+                &account.token,
+                &json!({ "title": title, "description": "" }),
+            ),
+        )
+        .await;
+        assert_eq!(res.status, StatusCode::CREATED);
+    }
+
+    let res = send(&app, get_auth(&format!("{path}?limit=2"), &account.token)).await;
+    assert_eq!(res.status, StatusCode::OK);
+    let tasks: Vec<Task> = res.parse();
+    let titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["five", "four"],
+        "limit=2 returns the two newest, newest-first",
+    );
+}
+
+/// `offset=K` skips the K newest tasks (offset pagination, ADR-0014 §1). With five tasks and
+/// `offset=2`, the leading two newest are skipped and the remainder returned newest-first.
+#[sqlx::test]
+async fn list_tasks_offset_skips_the_leading_tasks(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    for title in ["one", "two", "three", "four", "five"] {
+        let res = send(
+            &app,
+            post_json_auth(
+                &path,
+                &account.token,
+                &json!({ "title": title, "description": "" }),
+            ),
+        )
+        .await;
+        assert_eq!(res.status, StatusCode::CREATED);
+    }
+
+    let res = send(&app, get_auth(&format!("{path}?offset=2"), &account.token)).await;
+    assert_eq!(res.status, StatusCode::OK);
+    let tasks: Vec<Task> = res.parse();
+    let titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["three", "two", "one"],
+        "offset=2 skips the two newest, returning the rest newest-first",
+    );
+}
+
+/// `limit` + `offset` combine to page a window (offset pagination). `limit=2&offset=1` returns the
+/// second-and-third-newest tasks.
+#[sqlx::test]
+async fn list_tasks_limit_and_offset_page_a_window(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    for title in ["one", "two", "three", "four", "five"] {
+        let res = send(
+            &app,
+            post_json_auth(
+                &path,
+                &account.token,
+                &json!({ "title": title, "description": "" }),
+            ),
+        )
+        .await;
+        assert_eq!(res.status, StatusCode::CREATED);
+    }
+
+    let res = send(
+        &app,
+        get_auth(&format!("{path}?limit=2&offset=1"), &account.token),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK);
+    let tasks: Vec<Task> = res.parse();
+    let titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["four", "three"],
+        "limit=2&offset=1 returns the second and third newest",
+    );
+}
+
+/// A `limit` strictly above `MAX_TASK_LIST_LIMIT` → `400 validation_failed` (no silent clamp,
+/// ADR-0014 §2 / A3).
+#[sqlx::test]
+async fn list_tasks_limit_above_ceiling_is_400_validation_failed(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let over = contract::MAX_TASK_LIST_LIMIT + 1;
+    let res = send(
+        &app,
+        get_auth(&format!("{path}?limit={over}"), &account.token),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::BAD_REQUEST);
+    res.expect_error(ErrorCode::ValidationFailed);
+}
+
+/// A `limit` exactly at the ceiling is accepted (the boundary is inclusive).
+#[sqlx::test]
+async fn list_tasks_limit_at_ceiling_is_ok(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let res = send(
+        &app,
+        get_auth(
+            &format!("{path}?limit={}", contract::MAX_TASK_LIST_LIMIT),
+            &account.token,
+        ),
+    )
+    .await;
+    assert_eq!(
+        res.status,
+        StatusCode::OK,
+        "a limit equal to the ceiling is accepted",
+    );
+    let tasks: Vec<Task> = res.parse();
+    assert!(tasks.is_empty(), "empty profile still lists nothing");
+}
+
+/// The default (no query params) still returns the whole list newest-first — an old no-param
+/// caller is unaffected (ADR-0014 §2: absent limit → server ceiling default).
+#[sqlx::test]
+async fn list_tasks_default_no_params_returns_whole_list_newest_first(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    for title in ["first", "second", "third"] {
+        let res = send(
+            &app,
+            post_json_auth(
+                &path,
+                &account.token,
+                &json!({ "title": title, "description": "" }),
+            ),
+        )
+        .await;
+        assert_eq!(res.status, StatusCode::CREATED);
+    }
+
+    let res = send(&app, get_auth(&path, &account.token)).await;
+    assert_eq!(res.status, StatusCode::OK);
+    let tasks: Vec<Task> = res.parse();
+    let titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["third", "second", "first"],
+        "no params: the whole list, newest-first",
+    );
+}
+
+/// Profile-scoping holds under a limit/offset query: a limited list never crosses profiles (#4).
+/// Two profiles each own tasks; a limited list on profile A returns only A's tasks, never B's.
+#[sqlx::test]
+async fn list_tasks_with_limit_stays_profile_scoped(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+
+    // A second profile for the same account.
+    let res = send(
+        &app,
+        post_json_auth(
+            "/api/profiles",
+            &account.token,
+            &json!({ "name": "personal" }),
+        ),
+    )
+    .await;
+    assert_eq!(
+        res.status,
+        StatusCode::CREATED,
+        "create profile: {:?}",
+        res.body
+    );
+    let other: contract::Profile = res.parse();
+
+    let path_a = format!("/api/profiles/{}/tasks", account.profile_id);
+    let path_b = format!("/api/profiles/{}/tasks", other.id);
+
+    // Profile A owns two tasks; profile B owns one with a recognizable title.
+    for title in ["a-one", "a-two"] {
+        let res = send(
+            &app,
+            post_json_auth(
+                &path_a,
+                &account.token,
+                &json!({ "title": title, "description": "" }),
+            ),
+        )
+        .await;
+        assert_eq!(res.status, StatusCode::CREATED);
+    }
+    let res = send(
+        &app,
+        post_json_auth(
+            &path_b,
+            &account.token,
+            &json!({ "title": "b-secret", "description": "" }),
+        ),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::CREATED);
+
+    // A generously-limited list on A must return ONLY A's tasks — never B's, even though the limit
+    // exceeds A's count (the LIMIT/OFFSET never widens the profile scope).
+    let res = send(
+        &app,
+        get_auth(&format!("{path_a}?limit=100"), &account.token),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK);
+    let tasks: Vec<Task> = res.parse();
+    let titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["a-two", "a-one"],
+        "only profile A's tasks, newest-first"
+    );
+    assert!(
+        !titles.contains(&"b-secret"),
+        "a limited list never leaks the other profile's task: {titles:?}",
+    );
+}
+
 /// Create a task in `account`'s default profile and return it. Asserts the create→201.
 async fn create_task(app: &axum::Router, account: &common::Account, title: &str) -> Task {
     let path = format!("/api/profiles/{}/tasks", account.profile_id);

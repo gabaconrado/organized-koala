@@ -14,7 +14,10 @@
 
 mod common;
 
-use common::{FakeClient, api_err, offline_err, open_task, profile, session, submit, tasks_pane};
+use common::{
+    FakeClient, api_err, offline_err, open_task, profile, session, submit, tasks_pane,
+    today_open_task,
+};
 use contract::ErrorCode;
 use tui::app::{App, Event, Screen};
 
@@ -119,7 +122,7 @@ fn unauthenticated_on_refresh_returns_to_login_and_drops_session() {
 
 #[test]
 fn unauthenticated_on_toggle_done_returns_to_login() {
-    let (client, mut app) = logged_in(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in(vec![today_open_task("t1", "task", "10:00:00")]);
     client.push_update(Err(api_err(ErrorCode::Unauthenticated, "token expired")));
 
     submit(&mut app, &client, Event::ToggleDone);

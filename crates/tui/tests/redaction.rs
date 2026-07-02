@@ -59,6 +59,7 @@ fn client_request_debug_redacts_token() {
     let request = ClientRequest::ListTasks {
         token: SessionToken::new(FAKE_TOKEN.to_owned()),
         profile_id: "p1".to_owned(),
+        query: contract::TaskListQuery::default(),
     };
 
     let rendered = format!("{request:?}");

@@ -128,11 +128,7 @@ fn add_task_renders_a_centred_dialog_not_message_band_text() {
 
 #[test]
 fn edit_task_renders_a_centred_dialog() {
-    let (_client, mut app) = logged_in(vec![common::open_task(
-        "t1",
-        "buy milk",
-        "2026-06-18T10:00:00Z",
-    )]);
+    let (_client, mut app) = logged_in(vec![common::today_open_task("t1", "buy milk", "10:00:00")]);
     let _ = app.handle_event(Event::BeginEditTask);
     let text = render(&app, W, H);
     assert!(text.contains("Edit task"), "edit dialog title:\n{text}");
@@ -141,11 +137,7 @@ fn edit_task_renders_a_centred_dialog() {
 
 #[test]
 fn task_delete_renders_a_confirmation_dialog_when_armed() {
-    let (_client, mut app) = logged_in(vec![common::open_task(
-        "t1",
-        "doomed",
-        "2026-06-18T10:00:00Z",
-    )]);
+    let (_client, mut app) = logged_in(vec![common::today_open_task("t1", "doomed", "10:00:00")]);
     // First `x` arms the confirmation (no dispatch); it renders as a dialog.
     assert!(app.handle_event(Event::DeleteSelected).is_none());
     let text = render(&app, W, H);
@@ -306,11 +298,7 @@ fn esc_on_an_idle_post_auth_screen_still_quits() {
 #[test]
 fn esc_with_a_request_in_flight_cancels_the_request() {
     // Begin a toggle-done but hold the dispatch (do NOT drive it): the task pane is in flight.
-    let (_client, mut app) = logged_in(vec![common::open_task(
-        "t1",
-        "task",
-        "2026-06-18T10:00:00Z",
-    )]);
+    let (_client, mut app) = logged_in(vec![common::today_open_task("t1", "task", "10:00:00")]);
     let _dispatch = app
         .handle_event(Event::ToggleDone)
         .expect("toggle-done dispatches");
@@ -470,6 +458,45 @@ fn help_modal_tasks_line_renders_intact_without_wrapping_d_delete() {
 }
 
 #[test]
+fn help_modal_tasks_second_line_keeps_h_hide_older_without_wrapping() {
+    // 0020 (learned 0015, recurred 0019): the new `h hide older` hotkey was placed on the SECOND
+    // Tasks reference line (`x collapse/expand sub-tasks · Enter detail · h hide older`) to avoid
+    // lengthening the already-tight first Tasks line. Adding it can still overflow the fixed-width
+    // help box (HELP_DIALOG_WIDTH=72, inner ~70) and reflow the trailing `h hide older` to a
+    // flush-left, un-indented continuation row — a pure-geometry bug the build/clippy never catch.
+    //
+    // This pins the second Tasks line intact: `h hide older` renders on the SAME row as
+    // `x collapse/expand`, and NO row is a stranded flush-left `h hide older` continuation.
+    let (client, mut app) = logged_in(vec![]);
+    press(&mut app, &client, KeyCode::Char('?'));
+    assert!(app.help_open(), "? opened the help overlay");
+    let text = render(&app, W, H);
+    let rows: Vec<&str> = text.lines().collect();
+
+    // The second Tasks line is identified by its `x collapse/expand` content (the `Enter detail`
+    // continuation row), not a column — the box border/padding indents it.
+    let tasks_second_row = rows
+        .iter()
+        .find(|r| r.contains("x collapse/expand") && r.contains("Enter detail"))
+        .unwrap_or_else(|| panic!("the second Tasks reference row in the help body:\n{text}"));
+
+    // (1) `h hide older` stays on the same rendered row as `x collapse/expand` — it did NOT wrap.
+    assert!(
+        tasks_second_row.contains("h hide older"),
+        "the second Tasks line must keep `h hide older` on the same row as `x collapse/expand` \
+         (it must not wrap):\n{tasks_second_row:?}\nfull help:\n{text}",
+    );
+
+    // (2) No row is a stranded, flush-left `h hide older` continuation (the malformed-wrap shape).
+    assert!(
+        !rows
+            .iter()
+            .any(|r| r.trim_start().starts_with("h hide older")),
+        "no row may begin with a stranded `h hide older` (the wrapped-continuation regression):\n{text}",
+    );
+}
+
+#[test]
 fn help_modal_closes_with_esc() {
     // Esc closes the help modal (the two-tiered Esc: an overlay is open, so Esc → Cancel, which the
     // app core folds into closing the help overlay) — without quitting.
@@ -589,7 +616,7 @@ fn add_task_dialog_submit_still_creates_and_chains_refresh() {
     for c in "Groceries".chars() {
         press(&mut app, &client, KeyCode::Char(c));
     }
-    let created = common::open_task("t-new", "Groceries", "2026-06-18T13:00:00Z");
+    let created = common::today_open_task("t-new", "Groceries", "13:00:00");
     client.push_create(Ok(created.clone()));
     client.push_tasks(Ok(vec![created]));
     press(&mut app, &client, KeyCode::Enter); // submit

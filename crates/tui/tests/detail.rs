@@ -28,8 +28,8 @@ use tui::app::{App, Event, NoteDetail, NotePane, NotesMode, Screen, Tab, TaskDet
 use tui::terminal::map_key;
 
 use common::{
-    Call, FakeClient, note, notes_pane, on_tab, open_task, profile, render, render_buffer,
-    row_fg_count, session, submit, tasks_pane,
+    Call, FakeClient, note, notes_pane, on_tab, profile, render, render_buffer, row_fg_count,
+    session, submit, tasks_pane, today_open_task,
 };
 
 const W: u16 = 80;
@@ -106,8 +106,7 @@ fn open_task_detail(app: &mut App, client: &FakeClient) {
 
 #[test]
 fn enter_opens_the_task_detail_view_with_per_field_panes() {
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "the title", "10:00:00")]);
 
     // `Enter` opens the per-field detail view from the in-memory snapshot (A3), and chains a
     // per-task `ListTaskSubtasks` to populate the read-only "Sub-tasks" section from a server
@@ -157,12 +156,8 @@ fn enter_opens_the_task_detail_view_with_per_field_panes() {
 
 #[test]
 fn done_task_detail_includes_the_closed_pane() {
-    let (client, mut app) = logged_in_tasks(vec![common::done_task(
-        "t1",
-        "shipped",
-        "2026-06-18T10:00:00Z",
-        "2026-06-18T14:00:00Z",
-    )]);
+    let (client, mut app) =
+        logged_in_tasks(vec![common::today_done_task("t1", "shipped", "10:00:00")]);
     open_task_detail(&mut app, &client);
 
     let detail = tasks_pane(&app).detail.as_ref().expect("detail open");
@@ -223,8 +218,7 @@ fn enter_opens_the_note_detail_view_deriving_from_a_getnote_response() {
 
 #[test]
 fn tab_cycles_panes_inside_the_task_detail_and_does_not_switch_tabs() {
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "the title", "10:00:00")]);
     open_task_detail(&mut app, &client);
 
     // The real keymap maps `Tab` to `Next` (NOT `NextTab`) while the detail view captures input,
@@ -302,12 +296,8 @@ fn tab_cycles_panes_inside_the_note_detail() {
 fn read_only_task_panes_are_never_focus_stops() {
     // A done task carries the longest read-only run: Status, Created, AND Closed. Cycling forward
     // and backward many times must never land focus on any of them.
-    let (client, mut app) = logged_in_tasks(vec![common::done_task(
-        "t1",
-        "shipped",
-        "2026-06-18T10:00:00Z",
-        "2026-06-18T14:00:00Z",
-    )]);
+    let (client, mut app) =
+        logged_in_tasks(vec![common::today_done_task("t1", "shipped", "10:00:00")]);
     open_task_detail(&mut app, &client);
     assert!(
         tasks_pane(&app)
@@ -376,8 +366,7 @@ fn read_only_note_pane_is_never_a_focus_stop() {
 
 #[test]
 fn task_detail_opens_focused_on_the_first_editable_pane() {
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "the title", "10:00:00")]);
     open_task_detail(&mut app, &client);
 
     let pane = tasks_pane(&app)
@@ -414,8 +403,7 @@ fn note_detail_opens_focused_on_the_first_editable_pane() {
 
 #[test]
 fn task_commit_sends_only_the_edited_title_field() {
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "old title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "old title", "10:00:00")]);
     open_task_detail(&mut app, &client);
 
     // `e` enters edit on the focused (Title) pane; the buffer seeds from the current value.
@@ -433,7 +421,7 @@ fn task_commit_sends_only_the_edited_title_field() {
     }
 
     // `Enter` commits THIS field; the success re-derives the detail and chains a list refresh.
-    let committed = open_task("t1", "new title", "2026-06-18T10:00:00Z");
+    let committed = today_open_task("t1", "new title", "10:00:00");
     client.push_update(Ok(committed.clone()));
     client.push_tasks(Ok(vec![committed]));
     submit(&mut app, &client, Event::Submit);
@@ -478,8 +466,7 @@ fn task_commit_sends_only_the_edited_title_field() {
 
 #[test]
 fn task_commit_of_description_sends_only_the_description_field() {
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "keep title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "keep title", "10:00:00")]);
     open_task_detail(&mut app, &client);
     let _ = app.handle_event(Event::Next); // focus Description
     let _ = app.handle_event(Event::BeginEditTask);
@@ -487,7 +474,7 @@ fn task_commit_of_description_sends_only_the_description_field() {
         let _ = app.handle_event(Event::Char(c));
     }
 
-    let committed = open_task("t1", "keep title", "2026-06-18T10:00:00Z");
+    let committed = today_open_task("t1", "keep title", "10:00:00");
     client.push_update(Ok(committed.clone()));
     client.push_tasks(Ok(vec![committed]));
     submit(&mut app, &client, Event::Submit);
@@ -637,12 +624,7 @@ fn note_commit_of_content_preserves_the_title_from_the_snapshot() {
 // API without the now-removed read-only cycling path.
 #[test]
 fn e_on_a_read_only_task_pane_is_inert() {
-    let task = common::done_task(
-        "t1",
-        "shipped",
-        "2026-06-18T10:00:00Z",
-        "2026-06-18T14:00:00Z",
-    );
+    let task = common::today_done_task("t1", "shipped", "10:00:00");
     // Every read-only pane present on a done task: Status, Created, Closed.
     for pane in [TaskPane::Status, TaskPane::Created, TaskPane::Closed] {
         let mut detail = TaskDetail::new(task.clone());
@@ -692,8 +674,7 @@ fn e_on_the_read_only_created_note_pane_is_inert() {
 
 #[test]
 fn esc_cancels_an_in_progress_task_edit_reverting_the_value() {
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "original", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "original", "10:00:00")]);
     open_task_detail(&mut app, &client);
     let _ = app.handle_event(Event::BeginEditTask); // edit Title
     for c in "XYZ".chars() {
@@ -722,8 +703,7 @@ fn esc_cancels_an_in_progress_task_edit_reverting_the_value() {
 
 #[test]
 fn esc_with_no_edit_exits_the_task_detail_to_the_list() {
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "the title", "10:00:00")]);
     open_task_detail(&mut app, &client);
     assert!(tasks_pane(&app).detail.is_some(), "detail open");
 
@@ -795,8 +775,7 @@ fn an_open_task_detail_suppresses_per_tab_action_keys_and_globals() {
     // the globals (`t`/`T`/`r`/`q`/tab-switch) are suppressed — none fires its action. `?` stays
     // reachable (asserted separately). Pinned through the LIVE keymap (the detail counts as
     // input-capturing via `overlay_capturing_input`, so `globals_live` is false).
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "the title", "10:00:00")]);
     open_task_detail(&mut app, &client);
     assert!(
         app.overlay_capturing_input(),
@@ -841,8 +820,7 @@ fn an_open_task_detail_suppresses_per_tab_action_keys_and_globals() {
 fn question_mark_is_reachable_over_an_idle_detail_but_captured_during_a_field_edit() {
     // A7: `?` help stays reachable while a detail view is open but NO field edit is in progress;
     // once a field edit IS in progress everything (including `?` and printable chars) is captured.
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "the title", "10:00:00")]);
     open_task_detail(&mut app, &client);
 
     // Idle detail: `?` opens help.
@@ -887,8 +865,7 @@ fn focused_editable_task_pane_carries_the_purple_focus_border() {
     // Mirrors the 0015 focus-border test: the focused EDITABLE pane's border row carries the magenta
     // focus cue; a non-focused pane's row does not. The detail box renders in the main content area
     // (no enclosing magenta dialog), so the contrast is stark.
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "the title", "10:00:00")]);
     open_task_detail(&mut app, &client);
 
     let buffer = render_buffer(&app, W, H);
@@ -904,8 +881,7 @@ fn focused_editable_task_pane_carries_the_purple_focus_border() {
 
 #[test]
 fn purple_border_follows_pane_focus_to_the_description() {
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "the title", "10:00:00")]);
     open_task_detail(&mut app, &client);
     let _ = app.handle_event(Event::Next); // focus Description
 
@@ -925,8 +901,7 @@ fn read_only_panes_carry_no_purple_border() {
     // Cycling can no longer focus a read-only pane, so the purple cue stays on an editable pane;
     // the read-only Status/Created panes carry zero magenta cells regardless of which editable pane
     // holds focus.
-    let (client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in_tasks(vec![today_open_task("t1", "the title", "10:00:00")]);
     open_task_detail(&mut app, &client);
     let _ = app.handle_event(Event::Next); // -> Description (still an editable pane)
     assert_eq!(
@@ -1325,8 +1300,7 @@ fn title_pane_still_commits_on_enter_in_the_note_detail() {
 
 #[test]
 fn help_modal_documents_the_detail_view_bindings() {
-    let (_client, mut app) =
-        logged_in_tasks(vec![open_task("t1", "the title", "2026-06-18T10:00:00Z")]);
+    let (_client, mut app) = logged_in_tasks(vec![today_open_task("t1", "the title", "10:00:00")]);
     // Open help from the idle list (the help body is screen-independent).
     let _ = app.handle_event(Event::ToggleHelp);
     assert!(app.help_open(), "? opened the help overlay");

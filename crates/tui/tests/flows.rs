@@ -16,6 +16,7 @@ mod common;
 
 use common::{
     Call, FakeClient, done_task, drive, open_task, profile, render, session, submit, tasks_pane,
+    today_done_task, today_open_task,
 };
 use contract::TaskStatus;
 use tui::app::{App, AuthMode, Event, Screen};
@@ -63,7 +64,7 @@ fn login_flow_fetches_profiles_and_enters_task_list() {
         "profiles fetched with the token: {calls:?}",
     );
     assert!(
-        matches!(calls.get(2), Some(Call::ListTasks { token, profile_id })
+        matches!(calls.get(2), Some(Call::ListTasks { token, profile_id, .. })
             if token == "jwt-abc" && profile_id == "p1"),
         "tasks listed for the selected profile: {calls:?}",
     );
@@ -170,7 +171,7 @@ fn add_task_posts_request_then_refreshes_from_server() {
 
 #[test]
 fn mark_done_issues_update_status_done_and_rerenders_from_server() {
-    let open = open_task("t1", "Write tests", "2026-06-18T10:00:00Z");
+    let open = today_open_task("t1", "Write tests", "10:00:00");
     let client = FakeClient::new();
     client.push_login(Ok(session("jwt")));
     client.push_profiles(Ok(vec![profile("p1", "work")]));
@@ -187,12 +188,7 @@ fn mark_done_issues_update_status_done_and_rerenders_from_server() {
 
     // Script the update response (status done, closed_at set) and the chained refresh list — the
     // success re-fetches so the view derives from a server response (#1).
-    let closed = done_task(
-        "t1",
-        "Write tests",
-        "2026-06-18T10:00:00Z",
-        "2026-06-18T14:00:00Z",
-    );
+    let closed = today_done_task("t1", "Write tests", "10:00:00");
     client.push_update(Ok(closed.clone()));
     client.push_tasks(Ok(vec![closed]));
 

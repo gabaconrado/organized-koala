@@ -15,7 +15,7 @@
 
 mod common;
 
-use common::{FakeClient, drive, execute, open_task, profile, session, submit, tasks_pane};
+use common::{FakeClient, drive, execute, profile, session, submit, tasks_pane, today_open_task};
 use tui::app::{App, Event, Screen};
 
 /// A freshly-logged-in app on the `work` Tasks tab with the given tasks, plus the shared fake.
@@ -34,7 +34,7 @@ fn logged_in(tasks: Vec<contract::Task>) -> (FakeClient, App) {
 
 #[test]
 fn refresh_while_pending_is_a_no_op() {
-    let (client, mut app) = logged_in(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in(vec![today_open_task("t1", "task", "10:00:00")]);
 
     // First toggle-done puts the list in-flight (we hold its dispatch, never driving it).
     let first = app
@@ -61,18 +61,8 @@ fn refresh_while_pending_is_a_no_op() {
 
     // The single in-flight request still completes normally when its response arrives. The
     // update returns the now-done task; the success chains a list refresh.
-    client.push_update(Ok(common::done_task(
-        "t1",
-        "task",
-        "2026-06-18T10:00:00Z",
-        "2026-06-18T14:00:00Z",
-    )));
-    client.push_tasks(Ok(vec![common::done_task(
-        "t1",
-        "task",
-        "2026-06-18T10:00:00Z",
-        "2026-06-18T14:00:00Z",
-    )]));
+    client.push_update(Ok(common::today_done_task("t1", "task", "10:00:00")));
+    client.push_tasks(Ok(vec![common::today_done_task("t1", "task", "10:00:00")]));
     drive(&mut app, &client, first);
     assert!(!app.is_pending(), "settled after the one request completes");
 }
@@ -101,7 +91,7 @@ fn auth_submit_while_pending_is_a_no_op() {
 
 #[test]
 fn cancel_while_pending_clears_in_flight_and_restores_interactivity() {
-    let (_client, mut app) = logged_in(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
+    let (_client, mut app) = logged_in(vec![today_open_task("t1", "task", "10:00:00")]);
 
     let _dispatch = app
         .handle_event(Event::ToggleDone)
@@ -128,7 +118,7 @@ fn cancel_while_pending_clears_in_flight_and_restores_interactivity() {
 
 #[test]
 fn stale_response_after_cancel_is_dropped() {
-    let (client, mut app) = logged_in(vec![open_task("t1", "Original", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in(vec![today_open_task("t1", "Original", "10:00:00")]);
 
     // Begin a toggle-done; capture the dispatch the worker would run.
     let dispatch = app
@@ -141,12 +131,7 @@ fn stale_response_after_cancel_is_dropped() {
 
     // The abandoned request still ran on the (mocked) server and produces a response with the
     // now-stale RequestId. Applying it must be a no-op: the marker is gone, so the id mismatches.
-    client.push_update(Ok(common::done_task(
-        "t1",
-        "Original",
-        "2026-06-18T10:00:00Z",
-        "2026-06-18T14:00:00Z",
-    )));
+    client.push_update(Ok(common::today_done_task("t1", "Original", "10:00:00")));
     let stale = execute(&client, dispatch);
     let follow_up = app.apply_response(stale);
 
@@ -171,7 +156,7 @@ fn superseded_response_after_new_request_is_dropped() {
     // Cancel, then start a *new* request (so a fresh RequestId is in flight). The first request's
     // late response carries the old id and must be dropped rather than mis-applied to the new
     // in-flight slot.
-    let (client, mut app) = logged_in(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
+    let (client, mut app) = logged_in(vec![today_open_task("t1", "task", "10:00:00")]);
 
     let first = app
         .handle_event(Event::ToggleDone)
@@ -185,12 +170,7 @@ fn superseded_response_after_new_request_is_dropped() {
     assert!(app.is_pending());
 
     // The first (cancelled) request's response arrives late: dropped, the new request still awaited.
-    client.push_update(Ok(common::done_task(
-        "t1",
-        "task",
-        "2026-06-18T10:00:00Z",
-        "2026-06-18T14:00:00Z",
-    )));
+    client.push_update(Ok(common::today_done_task("t1", "task", "10:00:00")));
     let stale = execute(&client, first);
     assert!(
         app.apply_response(stale).is_none(),
@@ -202,7 +182,7 @@ fn superseded_response_after_new_request_is_dropped() {
     );
 
     // The new (refresh) request then completes normally.
-    client.push_tasks(Ok(vec![open_task("t2", "fresh", "2026-06-18T15:00:00Z")]));
+    client.push_tasks(Ok(vec![today_open_task("t2", "fresh", "15:00:00")]));
     drive(&mut app, &client, second);
     assert!(matches!(app.screen(), Screen::Main(_)), "Tasks tab");
     assert_eq!(

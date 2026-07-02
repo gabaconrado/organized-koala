@@ -12,7 +12,8 @@
 mod common;
 
 use common::{
-    FakeClient, done_task, drive, open_task, profile, render, render_at, session, submit,
+    FakeClient, drive, open_task, profile, render, render_at, session, submit, today_done_task,
+    today_open_task,
 };
 use tui::app::{App, Event};
 
@@ -88,17 +89,15 @@ fn password_is_rendered_masked() {
 
 #[test]
 fn task_list_renders_newest_first_with_markers() {
-    // The server returns tasks newest-first; the view must preserve that order. We give an
-    // already-ordered list (newest at index 0) and assert the rendered rows match.
+    // Server order is newest-first within each status group; the view applies the 0020 completed-
+    // last sort (open before done) on top, preserving created-at order inside each group (ADR-0014
+    // §4). All three tasks are created *today* so they render in the today group (no "Older tasks"
+    // separator, no forced collapse). Expected render order: the two open tasks newest-first
+    // (`t-new` then `t-old`), then the done task (`t-mid`) sunk to the bottom.
     let tasks = vec![
-        open_task("t-new", "newest open task", "2026-06-18T12:00:00Z"),
-        done_task(
-            "t-mid",
-            "older done task",
-            "2026-06-18T11:00:00Z",
-            "2026-06-18T11:30:00Z",
-        ),
-        open_task("t-old", "oldest open task", "2026-06-18T10:00:00Z"),
+        today_open_task("t-new", "newest open task", "12:00:00"),
+        today_done_task("t-mid", "middle done task", "11:00:00"),
+        today_open_task("t-old", "oldest open task", "10:00:00"),
     ];
     let app = logged_in_with(tasks);
     let text = render(&app, W, H);
@@ -112,18 +111,27 @@ fn task_list_renders_newest_first_with_markers() {
         text.contains("[ ] newest open task"),
         "open marker:\n{text}"
     );
-    assert!(text.contains("[x] older done task"), "done marker:\n{text}");
+    assert!(
+        text.contains("[x] middle done task"),
+        "done marker:\n{text}"
+    );
     assert!(
         text.contains("[ ] oldest open task"),
         "open marker:\n{text}"
     );
 
-    // Ordering: newest row appears before the older rows in the rendered buffer.
+    // Ordering: completed-last — both open tasks (newest-first) render above the done task.
     let pos_new = text.find("newest open task").expect("newest present");
-    let pos_mid = text.find("older done task").expect("mid present");
     let pos_old = text.find("oldest open task").expect("oldest present");
-    assert!(pos_new < pos_mid, "newest before mid:\n{text}");
-    assert!(pos_mid < pos_old, "mid before oldest:\n{text}");
+    let pos_done = text.find("middle done task").expect("done present");
+    assert!(
+        pos_new < pos_old,
+        "newest open before oldest open (created-at order preserved within the open group):\n{text}",
+    );
+    assert!(
+        pos_old < pos_done,
+        "the done task sinks below both open tasks (completed-last):\n{text}",
+    );
 }
 
 #[test]
@@ -252,7 +260,7 @@ fn task_list_in_flight_appends_spinner_without_replacing_the_caption() {
     // A close/refresh on the task list puts it in-flight; the command caption is KEPT and ONLY a
     // trailing spinner glyph is appended (ADR-0006 §8.3 amended — no flicker; the cancel hint lives
     // in the `?` modal now, not the footer).
-    let mut app = logged_in_with(vec![open_task("t1", "task", "2026-06-18T10:00:00Z")]);
+    let mut app = logged_in_with(vec![today_open_task("t1", "task", "10:00:00")]);
     let _dispatch = app
         .handle_event(Event::ToggleDone)
         .expect("toggle-done dispatches a request");

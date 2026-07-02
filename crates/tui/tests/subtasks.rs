@@ -22,11 +22,11 @@
 mod common;
 
 use common::{
-    Call, FakeClient, done_subtask, done_task, open_subtask, open_task, profile, render, session,
-    submit, tasks_pane,
+    Call, FakeClient, done_subtask, open_subtask, profile, render, session, submit, tasks_pane,
+    today_done_task, today_open_task,
 };
 use contract::{Subtask, TaskStatus};
-use tui::app::{App, Event, Screen, VisibleRow};
+use tui::app::{App, Event, Screen, VisibleRow, current_day_number};
 
 const W: u16 = 80;
 const H: u16 = 24;
@@ -78,7 +78,7 @@ fn update_subtask_call(calls: &[Call]) -> (String, String, Option<String>, Optio
 #[test]
 fn tree_load_renders_subtasks_indented_under_their_parent() {
     let (_client, app) = logged_in(
-        vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")],
+        vec![today_open_task("t1", "Parent", "10:00:00")],
         vec![
             open_subtask("s1", "t1", "child one"),
             done_subtask("s2", "t1", "child two"),
@@ -108,7 +108,7 @@ fn an_open_parent_with_subtasks_shows_the_caret_indicator_not_plus() {
     // `+` is reserved for a parent whose sub-tasks are collapsed; an open (expanded) parent keeps
     // the `>` caret even though it has children.
     let (_client, app) = logged_in(
-        vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")],
+        vec![today_open_task("t1", "Parent", "10:00:00")],
         vec![open_subtask("s1", "t1", "child")],
     );
     let text = render(&app, W, H);
@@ -127,12 +127,7 @@ fn a_done_parent_collapses_children_by_default_and_shows_plus() {
     // Collapse default derives from parent status each render: a DONE parent starts collapsed, so
     // its children are hidden and its indicator is `+` (has sub-tasks AND collapsed).
     let (_client, app) = logged_in(
-        vec![done_task(
-            "t1",
-            "Done parent",
-            "2026-06-18T10:00:00Z",
-            "2026-06-18T14:00:00Z",
-        )],
+        vec![today_done_task("t1", "Done parent", "10:00:00")],
         vec![open_subtask("s1", "t1", "hidden child")],
     );
     let text = render(&app, W, H);
@@ -148,10 +143,7 @@ fn a_done_parent_collapses_children_by_default_and_shows_plus() {
 
 #[test]
 fn a_task_with_no_subtasks_uses_the_caret_indicator() {
-    let (_client, app) = logged_in(
-        vec![open_task("t1", "Lonely", "2026-06-18T10:00:00Z")],
-        vec![],
-    );
+    let (_client, app) = logged_in(vec![today_open_task("t1", "Lonely", "10:00:00")], vec![]);
     let text = render(&app, W, H);
     assert!(
         text.contains("> [ ] Lonely"),
@@ -168,7 +160,7 @@ fn a_task_with_no_subtasks_uses_the_caret_indicator() {
 #[test]
 fn x_collapses_an_open_parent_and_hides_its_children() {
     let (_client, mut app) = logged_in(
-        vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")],
+        vec![today_open_task("t1", "Parent", "10:00:00")],
         vec![open_subtask("s1", "t1", "child")],
     );
     // Open parent → expanded by default; the child renders.
@@ -195,12 +187,7 @@ fn x_expands_a_done_parent_overriding_the_collapsed_default() {
     // A4: a done parent defaults collapsed, but an explicit `x` override expands it (last explicit
     // user intent wins over the status-derived default).
     let (_client, mut app) = logged_in(
-        vec![done_task(
-            "t1",
-            "Done parent",
-            "2026-06-18T10:00:00Z",
-            "2026-06-18T14:00:00Z",
-        )],
+        vec![today_done_task("t1", "Done parent", "10:00:00")],
         vec![open_subtask("s1", "t1", "revealed child")],
     );
     assert!(
@@ -224,15 +211,12 @@ fn x_expands_a_done_parent_overriding_the_collapsed_default() {
 
 #[test]
 fn capital_a_creates_a_subtask_under_the_selected_tasks_parent() {
-    let (client, mut app) = logged_in(
-        vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")],
-        vec![],
-    );
+    let (client, mut app) = logged_in(vec![today_open_task("t1", "Parent", "10:00:00")], vec![]);
 
     // Script the create response and the chained tree refresh (now showing the new sub-task).
     let created = open_subtask("s1", "t1", "new child");
     client.push_create_subtask(Ok(created.clone()));
-    client.push_tasks(Ok(vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")]));
+    client.push_tasks(Ok(vec![today_open_task("t1", "Parent", "10:00:00")]));
     client.push_list_subtasks(Ok(vec![created]));
 
     // `A` opens the add-sub-task form (a text-entry sub-flow); type a title and submit.
@@ -276,10 +260,7 @@ fn capital_a_creates_a_subtask_under_the_selected_tasks_parent() {
 
 #[test]
 fn a_blank_subtask_title_is_rejected_inline_with_no_request() {
-    let (client, mut app) = logged_in(
-        vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")],
-        vec![],
-    );
+    let (client, mut app) = logged_in(vec![today_open_task("t1", "Parent", "10:00:00")], vec![]);
     let calls_before = client.calls().len();
 
     let _ = app.handle_event(Event::BeginAddSubtask);
@@ -310,20 +291,20 @@ fn a_adds_to_the_parent_when_a_subtask_row_is_selected() {
     // `A` always adds to the *parent task* of the selection — pressed on a sub-task row, it targets
     // that sub-task's parent (R2: the selection model knows task vs. sub-task).
     let (client, mut app) = logged_in(
-        vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")],
+        vec![today_open_task("t1", "Parent", "10:00:00")],
         vec![open_subtask("s1", "t1", "existing")],
     );
     // Move selection from the parent (row 0) to its sub-task (row 1).
     let _ = app.handle_event(Event::Next);
     assert_eq!(
-        tasks_pane(&app).selected_row(),
+        tasks_pane(&app).selected_row(current_day_number()),
         Some(VisibleRow::Subtask { subtask_idx: 0 }),
         "the sub-task row is selected",
     );
 
     let created = open_subtask("s2", "t1", "added");
     client.push_create_subtask(Ok(created.clone()));
-    client.push_tasks(Ok(vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")]));
+    client.push_tasks(Ok(vec![today_open_task("t1", "Parent", "10:00:00")]));
     client.push_list_subtasks(Ok(vec![open_subtask("s1", "t1", "existing"), created]));
 
     let _ = app.handle_event(Event::BeginAddSubtask);
@@ -343,7 +324,7 @@ fn a_adds_to_the_parent_when_a_subtask_row_is_selected() {
 #[test]
 fn e_on_a_subtask_row_edits_its_title() {
     let (client, mut app) = logged_in(
-        vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")],
+        vec![today_open_task("t1", "Parent", "10:00:00")],
         vec![open_subtask("s1", "t1", "old title")],
     );
     // Select the sub-task row.
@@ -362,7 +343,7 @@ fn e_on_a_subtask_row_edits_its_title() {
     // Script the patch response + the chained tree refresh.
     let renamed = open_subtask("s1", "t1", "new title");
     client.push_update_subtask(Ok(renamed.clone()));
-    client.push_tasks(Ok(vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")]));
+    client.push_tasks(Ok(vec![today_open_task("t1", "Parent", "10:00:00")]));
     client.push_list_subtasks(Ok(vec![renamed]));
 
     // Clear "old title" (9 chars), type the new one, submit.
@@ -396,7 +377,7 @@ fn e_on_a_subtask_row_edits_its_title() {
 #[test]
 fn space_on_a_subtask_row_toggles_its_status() {
     let (client, mut app) = logged_in(
-        vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")],
+        vec![today_open_task("t1", "Parent", "10:00:00")],
         vec![open_subtask("s1", "t1", "child")],
     );
     let _ = app.handle_event(Event::Next); // select the sub-task row
@@ -408,7 +389,7 @@ fn space_on_a_subtask_row_toggles_its_status() {
     // Toggle returns the done sub-task; the chained refresh shows it done.
     let done = done_subtask("s1", "t1", "child");
     client.push_update_subtask(Ok(done.clone()));
-    client.push_tasks(Ok(vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")]));
+    client.push_tasks(Ok(vec![today_open_task("t1", "Parent", "10:00:00")]));
     client.push_list_subtasks(Ok(vec![done]));
 
     submit(&mut app, &client, Event::ToggleDone);
@@ -429,16 +410,11 @@ fn space_on_a_subtask_row_toggles_its_status() {
 fn space_on_a_task_row_still_toggles_the_task_not_a_subtask() {
     // Routing: with a TASK row selected, Space toggles the task (an UpdateTask), not a sub-task.
     let (client, mut app) = logged_in(
-        vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")],
+        vec![today_open_task("t1", "Parent", "10:00:00")],
         vec![open_subtask("s1", "t1", "child")],
     );
     // The parent task row (row 0) is selected by default.
-    let done = done_task(
-        "t1",
-        "Parent",
-        "2026-06-18T10:00:00Z",
-        "2026-06-18T14:00:00Z",
-    );
+    let done = today_done_task("t1", "Parent", "10:00:00");
     client.push_update(Ok(done.clone()));
     client.push_tasks(Ok(vec![done]));
     client.push_list_subtasks(Ok(vec![open_subtask("s1", "t1", "child")]));
@@ -467,8 +443,8 @@ fn space_on_a_task_row_still_toggles_the_task_not_a_subtask() {
 fn selection_traverses_task_and_subtask_rows_in_visible_order() {
     let (_client, mut app) = logged_in(
         vec![
-            open_task("t1", "First", "2026-06-18T12:00:00Z"),
-            open_task("t2", "Second", "2026-06-18T11:00:00Z"),
+            today_open_task("t1", "First", "12:00:00"),
+            today_open_task("t2", "Second", "11:00:00"),
         ],
         vec![
             open_subtask("s1", "t1", "first-child"),
@@ -483,25 +459,29 @@ fn selection_traverses_task_and_subtask_rows_in_visible_order() {
         VisibleRow::Subtask { subtask_idx: 1 },
     ];
     assert_eq!(
-        tasks_pane(&app).visible_rows(),
+        tasks_pane(&app).visible_rows(current_day_number()),
         expected,
         "interleaved visible rows"
     );
 
     // Down/Next walks task → its sub-task → next task → its sub-task.
     let first = expected.first().copied();
-    assert_eq!(tasks_pane(&app).selected_row(), first);
+    assert_eq!(tasks_pane(&app).selected_row(current_day_number()), first);
     for (step, want) in expected.iter().enumerate().skip(1) {
         let _ = app.handle_event(Event::Next);
         assert_eq!(
-            tasks_pane(&app).selected_row(),
+            tasks_pane(&app).selected_row(current_day_number()),
             Some(*want),
             "Next lands on visible row {step}",
         );
     }
     // Wrap back to the first row.
     let _ = app.handle_event(Event::Next);
-    assert_eq!(tasks_pane(&app).selected_row(), first, "wraps to the top");
+    assert_eq!(
+        tasks_pane(&app).selected_row(current_day_number()),
+        first,
+        "wraps to the top"
+    );
 }
 
 #[test]
@@ -510,8 +490,8 @@ fn selection_skips_the_hidden_children_of_a_collapsed_parent() {
     // from the collapsed parent to the next task, never landing on a hidden child.
     let (_client, mut app) = logged_in(
         vec![
-            open_task("t1", "First", "2026-06-18T12:00:00Z"),
-            open_task("t2", "Second", "2026-06-18T11:00:00Z"),
+            today_open_task("t1", "First", "12:00:00"),
+            today_open_task("t2", "Second", "11:00:00"),
         ],
         vec![
             open_subtask("s1", "t1", "hidden-child"),
@@ -523,7 +503,7 @@ fn selection_skips_the_hidden_children_of_a_collapsed_parent() {
 
     // Visible rows now: t1 (collapsed), t2, s2 — t1's child s1 is hidden.
     assert_eq!(
-        tasks_pane(&app).visible_rows(),
+        tasks_pane(&app).visible_rows(current_day_number()),
         vec![
             VisibleRow::Task { task_idx: 0 },
             VisibleRow::Task { task_idx: 1 },
@@ -539,14 +519,14 @@ fn selection_skips_the_hidden_children_of_a_collapsed_parent() {
     // From the collapsed parent (row 0), Next lands on the next TASK, skipping the hidden child.
     let _ = app.handle_event(Event::Next);
     assert_eq!(
-        tasks_pane(&app).selected_row(),
+        tasks_pane(&app).selected_row(current_day_number()),
         Some(VisibleRow::Task { task_idx: 1 }),
         "Next from a collapsed parent skips its hidden child to the next task",
     );
     // The next visible row after that is t2's (visible) child.
     let _ = app.handle_event(Event::Next);
     assert_eq!(
-        tasks_pane(&app).selected_row(),
+        tasks_pane(&app).selected_row(current_day_number()),
         Some(VisibleRow::Subtask { subtask_idx: 1 }),
     );
 }
@@ -556,7 +536,7 @@ fn selection_skips_the_hidden_children_of_a_collapsed_parent() {
 #[test]
 fn opening_task_detail_loads_and_renders_the_subtasks_section() {
     let (client, mut app) = logged_in(
-        vec![open_task("t1", "Parent", "2026-06-18T10:00:00Z")],
+        vec![today_open_task("t1", "Parent", "10:00:00")],
         vec![open_subtask("s1", "t1", "tree child")],
     );
     // The detail open chains a per-task ListTaskSubtasks for the read-only section (A6); script it.
@@ -597,10 +577,7 @@ fn opening_task_detail_loads_and_renders_the_subtasks_section() {
 
 #[test]
 fn a_task_with_no_subtasks_shows_an_empty_detail_section() {
-    let (client, mut app) = logged_in(
-        vec![open_task("t1", "Lonely", "2026-06-18T10:00:00Z")],
-        vec![],
-    );
+    let (client, mut app) = logged_in(vec![today_open_task("t1", "Lonely", "10:00:00")], vec![]);
     client.push_list_task_subtasks(Ok(vec![]));
 
     submit(&mut app, &client, Event::Submit);

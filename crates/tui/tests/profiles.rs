@@ -143,7 +143,7 @@ fn picking_a_profile_rescopes_the_active_id_with_no_server_switch_call() {
     assert!(
         calls
             .iter()
-            .any(|c| matches!(c, Call::ListTasks { token, profile_id }
+            .any(|c| matches!(c, Call::ListTasks { token, profile_id, .. }
             if token == "jwt" && profile_id == "p2")),
         "next scoped task read carries the picked profile id p2: {calls:?}",
     );
@@ -181,7 +181,7 @@ fn picking_the_already_active_profile_keeps_the_same_scope() {
     assert!(
         calls
             .iter()
-            .any(|c| matches!(c, Call::ListTasks { token, profile_id }
+            .any(|c| matches!(c, Call::ListTasks { token, profile_id, .. }
             if token == "jwt" && profile_id == "p1")),
         "scoped task read stays on p1: {calls:?}",
     );
@@ -537,7 +537,7 @@ fn deleting_the_active_profile_repoints_to_the_first_remaining() {
     assert!(
         calls
             .iter()
-            .any(|c| matches!(c, Call::ListTasks { token, profile_id }
+            .any(|c| matches!(c, Call::ListTasks { token, profile_id, .. }
             if token == "jwt" && profile_id == "p2")),
         "after deleting the active profile, the scoped read uses the re-pointed id p2: {calls:?}",
     );

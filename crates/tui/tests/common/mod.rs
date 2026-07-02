@@ -76,9 +76,13 @@ pub enum Call {
         token: String,
         profile_id: String,
     },
+    /// Captured `GET …/tasks` with the pagination-ready query the caller sent (the TUI hard-codes
+    /// `limit = TASK_LIST_LIMIT` / `offset = 0`; ADR-0014 §2), so a test can assert the wire query.
     ListTasks {
         token: String,
         profile_id: String,
+        limit: Option<u32>,
+        offset: Option<u32>,
     },
     CreateTask {
         token: String,
@@ -399,10 +403,17 @@ impl Client for FakeClient {
         pop(&self.inner.delete_profile, "delete_profile")
     }
 
-    fn list_tasks(&self, token: &str, profile_id: &str) -> ClientResult<Vec<Task>> {
+    fn list_tasks(
+        &self,
+        token: &str,
+        profile_id: &str,
+        query: &contract::TaskListQuery,
+    ) -> ClientResult<Vec<Task>> {
         self.inner.calls.borrow_mut().push(Call::ListTasks {
             token: token.to_owned(),
             profile_id: profile_id.to_owned(),
+            limit: query.limit,
+            offset: query.offset,
         });
         pop(&self.inner.tasks, "list_tasks")
     }
@@ -647,9 +658,11 @@ fn run_request(client: &FakeClient, request: ClientRequest) -> Outcome {
         ClientRequest::DeleteProfile { token, profile_id } => {
             Outcome::DeleteProfile(client.delete_profile(token.expose(), &profile_id))
         }
-        ClientRequest::ListTasks { token, profile_id } => {
-            Outcome::ListTasks(client.list_tasks(token.expose(), &profile_id))
-        }
+        ClientRequest::ListTasks {
+            token,
+            profile_id,
+            query,
+        } => Outcome::ListTasks(client.list_tasks(token.expose(), &profile_id, &query)),
         ClientRequest::CreateTask {
             token,
             profile_id,
@@ -807,6 +820,31 @@ pub fn profile(id: &str, name: &str) -> Profile {
         "created_at": "2026-06-18T12:00:00Z",
     });
     serde_json::from_value(json).expect("valid profile json")
+}
+
+/// A UTC ISO-8601 timestamp on **today's** civil day (the day the driven flow's
+/// [`current_day_number`](tui::app::current_day_number) reads from the wall clock), at the given
+/// `HH:MM:SS`. The task-list today/older split (ADR-0014 §4) groups by civil day against that
+/// wall-clock "today"; the pure seams take an injected `today_day`, but the `App`-driven path reads
+/// the clock, so a driven test that wants its tasks in the *today* group builds their `created_at`
+/// with this — deterministic to the day, independent of when the suite runs. The `HH:MM:SS` lets a
+/// test still pin relative newest-first order within today (larger time = newer).
+pub fn today_at(hms: &str) -> String {
+    let today = tui::app::current_day_number();
+    let (year, month, day) = tui::ui::civil_from_days(today);
+    format!("{year:04}-{month:02}-{day:02}T{hms}Z")
+}
+
+/// An open [`Task`] created **today** (see [`today_at`]) at the given `HH:MM:SS`, so a driven flow
+/// renders it in the today group (expanded, above any "Older tasks" separator).
+pub fn today_open_task(id: &str, title: &str, hms: &str) -> Task {
+    open_task(id, title, &today_at(hms))
+}
+
+/// A done [`Task`] created **today** (see [`today_at`]); `closed_at` is fixed on the same day.
+pub fn today_done_task(id: &str, title: &str, hms: &str) -> Task {
+    let created = today_at(hms);
+    done_task(id, title, &created, &created)
 }
 
 /// Build an open [`Task`] from canonical wire JSON. `created_at` is supplied so tests can pin
@@ -1125,6 +1163,7 @@ fn empty_tasks_pane() -> TaskListState {
         confirming_delete: None,
         message: None,
         pending: None,
+        hide_older: false,
     }
 }
 
@@ -1147,6 +1186,7 @@ fn one_task_pane() -> TaskListState {
         confirming_delete: None,
         message: None,
         pending: None,
+        hide_older: false,
     }
 }
 
