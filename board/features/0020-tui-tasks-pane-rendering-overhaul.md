@@ -2,7 +2,7 @@
 id: 0020
 title: Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap
 type: feature      # feature | chore
-status: working  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0019]  # builds on the task + sub-task list/collapse rendering (merged)
@@ -57,9 +57,10 @@ today/older grouping, no completed-last ordering, no date header, and no fetch c
    next-page marker). The TUI does not paginate in this feature; it just requests the first
    (and only) 200.
 7. **`d` deletes the selected sub-task.** *(added 2026-07-02 per human feedback.)* On a sub-task
-   row, `d` arms the same two-step delete confirmation as a task (`Enter` confirms, any navigation
-   disarms) and, on confirm, issues `DeleteSubtask` for the selected sub-task. On a task row `d`
-   deletes the task as before. Reuses the shipped `DeleteSubtask` wire (no contract change).
+   row, `d` arms the same two-step delete confirmation as a task (a **modal confirm**: `Enter`
+   confirms, `Esc` cancels; other keys are inert while it is up — matching the existing task-delete
+   dialog, ADR-0010 §3) and, on confirm, issues `DeleteSubtask` for the selected sub-task. On a task
+   row `d` deletes the task as before. Reuses the shipped `DeleteSubtask` wire (no contract change).
 
 ### Constraints / notes for the architect (planning starts here)
 
