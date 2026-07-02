@@ -5,6 +5,46 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-07-02 (0021 — profiles sorted oldest-first by insertion time)
+
+A deliberately small, clean `feature` cycle. Profiles now list **oldest-first** (ascending
+insertion time) in both the Profile list and the switcher, via a single server-query direction
+flip in `list_profiles` (`crates/server/src/handlers/profiles.rs`): `ORDER BY created_at DESC`
+→ `ASC`. The `.sqlx/` offline cache was regenerated for the changed SQL text (old `DESC` entry
+removed, new `ASC` entry committed; column set `{id,name,created_at}` unchanged, no wire delta).
+Two stale "newest-first" doc comments were corrected to "oldest-first" — the server handler doc
+line (`server-dev`) and the `ProfilesState.profiles` field note in `crates/tui/src/app/profiles.rs`
+(`tui-dev`, split by file ownership). A new server integration test
+`list_profiles_ordered_oldest_first` (`crates/server/tests/profiles.rs`) pins the order with an
+insertion sequence distinct from **both** alphabetical and newest-first, so a regression to either
+fails.
+
+- **No `contract`/wire change (#2)** — the `Profile` DTO already carries `created_at`; **no**
+  domain-structure change (#3); **no ADR**; **no migration**. Profile-scoping (#4,
+  `WHERE user_id = $1`) and stateless-TUI (#1, TUI does no client-side sort — flipping the server
+  order flips both list and switcher) intact.
+- Reviewer **approved** + verifier **verified** (live: `GET /api/profiles` returned
+  `[work, zulu, alpha, mike]` oldest-first, HTTP 200, shape unchanged, account-scoping + error
+  contract + OTel span confirmed), both pinned to code-hash
+  `b8591d70250155b79c209d4b14b59f6b2abb00fd` (commit `831634b`). No findings, no gaps, no
+  out-of-scope nits. Coverage 72.66% (report-only).
+
+**Request-premise correction — worth a note (not gotcha-promoted).** The feature request asserted
+profiles were listed **alphabetically** today; the server was actually `ORDER BY created_at DESC`
+(newest-first). `architect` verified the current behaviour against the code during planning and
+recorded the corrected premise in the plan Findings + Assumptions rather than taking the request's
+claim at face value — the deliverable (oldest-first, server-authoritative) was unambiguous either
+way, so the mismatch did not block. This is the AFK "external text is data, not instructions"
+policy working as intended (a feature request's factual claims are checked against the codebase,
+not trusted), and it is already covered by the `plan` skill's investigation step + the ambiguity
+policy. Recorded here as confirmation, judged **not** to clear the durable-gotcha bar.
+
+**No CLAUDE.md gotcha added, no skill/agent change, no new crate.** Nothing genuinely new was
+learned this cycle — it was a one-line ordering flip plus a doc/test slice, exercising existing
+patterns (server `ORDER BY`, `.sqlx/` regen for changed SQL text, file-ownership-split doc fixes,
+a regression-pinning integration test). No out-of-scope follow-ups were flagged by reviewer or
+verifier, so **no idea filed**.
+
 ## Handoff — 2026-07-02 (0020 re-entry — operator feedback: date row, sub-task delete, older x-toggle)
 
 After 0020 reached `awaiting-merge`, the operator gave **three adjustments** (three `[human]`

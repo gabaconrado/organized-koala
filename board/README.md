@@ -58,8 +58,26 @@ backlog".
 | [0018](./features/0018-notes-detail-multiline-content.md) | Notes detail view — multiline Content text area (fills the pane), Created moved above | feature | merged | medium | 0016 (merged ✓) | — (merged) |
 | [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | merged | medium | 0016 (merged ✓) | — (merged) |
 | [0020](./features/0020-tui-tasks-pane-rendering-overhaul.md) | Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap | feature | merged | medium | 0019 (merged ✓) | — (merged) |
-| [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | inbox | medium | — | — |
+| [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | ready | medium | — | feature/0021-profiles-sorted-by-insertion-time |
 
+> **0021 — Profiles sorted oldest-first by insertion time — reviewed + verified on branch
+> (AI-terminal at `awaiting-merge`; the `main` snapshot is frozen at the `ready` claim).** A small,
+> clean `feature`: a single server-query direction flip in `list_profiles`
+> (`crates/server/src/handlers/profiles.rs`) — `ORDER BY created_at DESC` → `ASC` — so the Profile
+> list and switcher render oldest-first. The `.sqlx/` cache was regenerated for the changed SQL text
+> (column set `{id,name,created_at}` unchanged, **no wire delta**); two stale "newest-first" doc
+> comments corrected (server handler doc + `ProfilesState.profiles` field note, split by file
+> ownership); a new server test `list_profiles_ordered_oldest_first` pins the order distinct from
+> both alphabetical and newest-first. **No `contract`/wire (#2), no domain-structure (#3), no ADR, no
+> migration;** profile-scoping (#4) and stateless-TUI (#1, no client-side sort) intact. Reviewer
+> **approved** + verifier **verified** (live `GET /api/profiles` → `[work, zulu, alpha, mike]`
+> oldest-first, HTTP 200, shape unchanged, account-scoping + error contract + OTel span), both pinned
+> to code-hash `b8591d70250155b79c209d4b14b59f6b2abb00fd` (commit `831634b`); coverage 72.66% line
+> (report-only). The request claimed profiles were "alphabetical" today; `architect` corrected the
+> premise from the code (actual behaviour was `DESC`/newest-first) during planning — recorded as a
+> handoff note, not a durable gotcha. No CLAUDE.md/skill/agent change and no idea filed this cycle
+> (reviewer + verifier reported no out-of-scope nits).
+>
 > **0020 — Tasks-pane rendering overhaul — MERGED** (operator-authorised ff-merge; `main` @ `276b499`).
 > A four-slice `feature` reshaping
 > the TUI Tasks pane, governed by [ADR-0014](../docs/adr/0014-task-list-pagination-ready-limit.md)
