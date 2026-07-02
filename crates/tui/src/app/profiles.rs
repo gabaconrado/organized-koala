@@ -76,7 +76,8 @@ pub enum ProfilesMode {
 /// State of the profile switcher for the account.
 #[derive(Debug, Clone)]
 pub struct ProfilesState {
-    /// Profiles as returned by the server, newest-first.
+    /// Profiles in the exact order the server returns them (oldest-first, ascending insertion
+    /// order); the TUI does no client-side sort (hard-constraint #1: server is authoritative).
     pub profiles: Vec<Profile>,
     /// Index of the selected profile in `profiles`, if any.
     pub selected: Option<usize>,

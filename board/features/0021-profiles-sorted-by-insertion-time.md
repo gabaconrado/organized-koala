@@ -160,3 +160,12 @@ and needs no amendment.
   `DESC` cache entry was deleted and a new `ASC` entry committed. Gates green in-worktree:
   `./ok.sh build`, `./ok.sh lint`, `./ok.sh fmt --check`. No `contract`/wire, no
   domain-structure, no profile-scoping change (`WHERE user_id = $1` untouched).
+- [x] 2026-07-02 [tui-dev] Slice 2 done (doc-comment only, no logic). Corrected the stale
+  `ProfilesState.profiles` field comment in `crates/tui/src/app/profiles.rs` (line 79) from
+  "Profiles as returned by the server, newest-first." to note the profiles render in the exact
+  order the server returns (oldest-first, ascending insertion order) and that the TUI does no
+  client-side sort (hard-constraint #1: server is authoritative). No logic change — the TUI
+  already renders server order verbatim, so `ProfilesState`/switcher behaviour is unchanged.
+  Gates green in-worktree: `./ok.sh build`, `./ok.sh lint --lib --bins`, `./ok.sh fmt --check`.
+  No `Client`/`ClientRequest`/`Outcome`/state-field surface touched, so the tester-owned
+  `crates/tui/tests/` harness is not stranded by this slice.
