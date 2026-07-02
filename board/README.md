@@ -57,7 +57,43 @@ backlog".
 | [0017](./features/0017-timer-completion-desktop-notification.md) | Desktop notification when the focus timer ends (cross-OS, Ubuntu-first) | feature | merged | medium | 0008 (merged ✓) | — (merged) |
 | [0018](./features/0018-notes-detail-multiline-content.md) | Notes detail view — multiline Content text area (fills the pane), Created moved above | feature | merged | medium | 0016 (merged ✓) | — (merged) |
 | [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | merged | medium | 0016 (merged ✓) | — (merged) |
+| [0020](./features/0020-tui-tasks-pane-rendering-overhaul.md) | Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap | feature | ready (branch: awaiting-merge pending) | medium | 0019 (merged ✓) | `feature/0020-tui-tasks-pane-rendering-overhaul` |
+| [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | inbox | medium | — | — |
 
+> **0020 — Tasks-pane rendering overhaul — in-flight on `feature/0020-tui-tasks-pane-rendering-overhaul`
+> (branch at `awaiting-merge` pending the orchestrator's step-7 freshen + step-8 flip and the human's
+> ff-merge; the `main` snapshot is frozen at the `ready` claim).** A four-slice `feature` reshaping
+> the TUI Tasks pane, governed by [ADR-0014](../docs/adr/0014-task-list-pagination-ready-limit.md)
+> (task-list pagination-ready `limit`/`offset` — the one wire-shaping change). `contract`
+> `TaskListQuery { limit, offset }` (both `Option<u32>`) + `MAX_TASK_LIST_LIMIT = 500`; response stays
+> the bare `[Task]` array (offset pagination is a future caller change + at most an additive
+> header, no wire break); no `Task`/`Subtask`/`TaskStatus` field, no migration (#3). Server
+> clamps/validates
+> (absent `limit` → ceiling, over-ceiling → `400 validation_failed`, `offset` default 0) via `i64::from`
+> (no `as`), `ORDER BY created_at DESC` unchanged. TUI: `TASK_LIST_LIMIT = 200` (tui-local) across all
+> six `ListTasks` sites; completed-last **stable** sort re-derived per render (open<done at task +
+> sub-task levels, re-orders on toggle with no re-fetch, #1); today date header (weekday/month/ordinal/
+> year) top-center Tasks pane only; today/older split + "Older tasks" separator; older group forced
+> collapsed **render-time** (separate from `collapse_overrides`); `h` toggles the older group +
+> separator (ephemeral `hide_older`, #1) and is added to the help overlay's second Tasks line. Tester
+> un-stranded `common/mod.rs` and added wall-clock-aware fixture builders. **Recorded assumption
+> (A5/A8):** "today" is the **UTC civil day** (epoch-secs `div_euclid 86400`), not the operator's local
+> date, keeping `tui` chrono-free and deterministic under test — accepted under the AFK
+> smallest-change + recorded-assumption policy. Reviewer **approved** + verifier **verified** (live
+> stack: default list newest-first, limit caps, offset skips, `limit=501` → `400 validation_failed`,
+> cross-profile `404` #4, shipped reqwest client end-to-end, OTel `list_tasks` spans, TUI `TestBackend`
+> green), both pinned to code-hash `25ed4351d5beedb2d4f0cc517e3bdd867389cedc`; coverage 72.26% line
+> (report-only). New durable learning: a render path that branches on the **wall clock** silently
+> reclassifies every fixed-date test fixture into the "older" branch — the tester added wall-clock-aware
+> builders (`today_at` / `today_open_task`); recorded as a `tester`-agent rule + a corollary on the
+> existing CLAUDE.md harness-stranding gotcha (which itself recurred exactly as predicted). Two
+> out-of-scope follow-ups filed as ideas on `main`:
+> [`ideas/0009`](./ideas/0009-local-date-today-grouping.md) (compute the operator's **local** date for
+> the grouping instead of UTC, and reconcile the ADR/plan "local date" wording) and
+> [`ideas/0010`](./ideas/0010-empty-string-query-param-error-contract.md) (an empty-string `?limit=`
+> returns a plain-text 400 bypassing the `{code,message}` JSON error contract; unreachable by the
+> shipped client).
+>
 > **0019 — Sub-tasks — `merged`** (operator-authorised ff-merge; `main` @ `540fe4e`). The
 > **first admitted structural exception to
 > the deliberately-flat domain (#3)**: a task may have **one level** of **title+status-only**

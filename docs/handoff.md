@@ -5,6 +5,67 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-07-02 (0020 Tasks-pane rendering overhaul — pagination-ready limit)
+
+A four-slice `feature` reshaping how the TUI **Tasks pane** renders, plus the one wire-shaping
+change it needed. Governed by [ADR-0014][adr-0014-h] (task-list pagination-ready `limit`/`offset`).
+What shipped:
+
+- **contract (S1)** — `TaskListQuery { limit, offset }` (both `Option<u32>`, `skip_serializing_if`,
+  `Default`) + `MAX_TASK_LIST_LIMIT = 500`. No `Task`/`Subtask`/`TaskStatus`/create-update DTO
+  touched (#3); response stays the bare `[Task]` array.
+- **server (S2)** — `list_tasks` extracts `Query(TaskListQuery)`: absent `limit` → ceiling, absent
+  `offset` → 0, over-ceiling → `400 validation_failed` (no silent clamp), bound `LIMIT`/`OFFSET`
+  via `i64::from` (no `as`). `ORDER BY created_at DESC` unchanged; no migration; `.sqlx/` refreshed.
+- **tui (S3)** — `TASK_LIST_LIMIT = 200` (tui-local) threaded through all six `ListTasks` sites;
+  completed-last **stable** sort (open<done at task + sub-task levels, re-derived per render so a
+  toggle re-orders with no re-fetch, #1); today date header (weekday/month/ordinal/year) top-center
+  Tasks pane only; today/older split with an "Older tasks" separator; older group forced collapsed
+  **render-time** (kept separate from `collapse_overrides`); `h` toggles the older group + separator
+  (ephemeral `hide_older`, #1); `h` added to the help overlay's second Tasks line (66≤70 inner, no
+  re-wrap).
+- **tester (S4)** — un-stranded `tests/common/mod.rs` (fake `list_tasks(query)`, worker arm,
+  `hide_older` initializers) and added wall-clock-aware builders; pinned completed-last, the split +
+  separator, forced-collapse, `h` toggle, the today header presence/absence, ordinal formatting,
+  `limit=200` on the wire, the help-line no-rewrap, and the server limit/offset/over-ceiling cases.
+
+**Recorded assumption (A5/A8):** "today" is the **UTC civil day** (epoch-secs `div_euclid 86400`),
+not the operator's local date, so the `tui` crate stays chrono-free (pulling a timezone dep is an
+ADR/#6 event) and deterministic under test. The reviewer accepted this under the AFK
+smallest-change + recorded-assumption policy.
+
+Reviewer **REVIEW-STATUS: approved** + verifier **VERIFY-STATUS: verified**, both pinned to code-hash
+`25ed4351d5beedb2d4f0cc517e3bdd867389cedc`. Verifier booted the stack live (default list newest-first,
+limit caps, offset skips, `limit=501` → `400 validation_failed`, cross-profile `404` #4, shipped
+reqwest client end-to-end, OTel `list_tasks` spans, TUI `TestBackend` suite green). coverage **72.26%**
+line (worktree; docker + throwaway test Postgres booted cleanly) — report-only, never a gate.
+
+**Learnings this cycle:** the learned-0019 tui harness-stranding gotcha **recurred exactly as
+predicted** (a new always-runs `ListTasks` query arg + a new `TaskListState` field re-stranded
+`common/mod.rs`) — no new gotcha for that half, it is already durably captured. The **new** wrinkle
+earned a durable note: a render path that branches on the **wall clock** (0020's today/older split)
+silently reclassifies every fixed-date test fixture into the "older" branch, so the tester added
+wall-clock-aware builders (`today_at` / `today_open_task`). Recorded as a `tester`-agent rule and a
+one-line corollary on the existing CLAUDE.md harness-stranding gotcha. The help-overlay re-wrap
+gotcha **held** (the width check + `dialogs.rs` regression pin worked as designed) — no change.
+
+**Two out-of-scope follow-ups filed as ideas on `main`:** [`ideas/0009`][idea-0009-h] (compute the
+operator's **local** date for the today/older grouping instead of UTC civil day — and reconcile
+ADR-0014 §5 / the 0020 plan "local date" wording, which does not yet match the shipped UTC behaviour;
+that reconciliation is deliberately **left to this idea's disposition**, not retro-edited here) and
+[`ideas/0010`][idea-0010-h] (an empty-string query param — `?limit=` — returns a plain-text 400 that
+bypasses the `{code,message}` JSON error contract; unreachable by the shipped reqwest client).
+
+**State:** at the AI-terminal `awaiting-merge` on `feature/0020-tui-tasks-pane-rendering-overhaul`
+pending the orchestrator's step-7 freshen + step-8 status flip and the human's ff-merge. The `main`
+snapshot stays frozen at the `ready` claim; the authoritative live status is on the branch.
+
+[adr-0014-h]: ./adr/0014-task-list-pagination-ready-limit.md
+[idea-0009-h]: ../board/ideas/0009-local-date-today-grouping.md
+[idea-0010-h]: ../board/ideas/0010-empty-string-query-param-error-contract.md
+
+---
+
 ## Handoff — 2026-06-29 (0019 re-entry — `?` help-overlay Tasks-line wrap fix)
 
 A small post-`awaiting-merge` re-entry on 0019. The operator reported a `?` help-overlay rendering

@@ -199,7 +199,15 @@ post-auth flow.** 0019's two-call tree load (`ListTasks` → chained `ListSubtas
 existing `TestBackend` flow through the new chained list call; the tester absorbed it by **default-
 ing unscripted sub-task list calls to an empty list** (the natural "no sub-tasks" state) while
 keeping the strict panic-on-empty net for the *mutating* calls — the pattern to reuse when a new
-list/refresh call is threaded into an already-large suite.
+list/refresh call is threaded into an already-large suite. **Recurred exactly as predicted on
+0020** (a new always-runs `ListTasks` query arg + a new `TaskListState.hide_older` field
+re-stranded `common/mod.rs`) — plus a new wrinkle: 0020's render now **branches on the wall clock**
+(today/older split), so pre-existing suites building fixtures with **fixed past dates** all fell
+into the forced-collapsed "older" group and would have exercised the wrong render path. The tester
+added **wall-clock-aware builders** (`today_at` / `today_open_task`) so today-group flows land their
+fixtures there. Reusable rule: when a feature makes *now* load-bearing in the render, audit which
+existing fixtures cross the new boundary and give the suite an explicit "now"-relative builder
+(captured in the `tester` agent).
 
 **Gotcha — the `?` help overlay packs key·action pairs into a fixed-width box, so a new hotkey can
 silently overflow a reference line and wrap with no indent (learned 0015, recurred 0019).** The

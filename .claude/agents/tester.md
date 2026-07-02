@@ -32,6 +32,17 @@ You are the **tester** for organized-koala.
   `Client` (the sole external-service mock) to a `ClientResponse`, feed it into `apply_response`,
   loop on chained follow-ups until the flow settles. No async runtime, no thread, no internal
   collaborator mocked. See `rust-standards`.
+- **A render path that branches on "today" (the wall clock) silently reclassifies every
+  fixed-date fixture (learned 0020).** When production groups/sorts by comparing a record's
+  timestamp to *now* — 0020's Tasks pane splits tasks into created-today vs. older, and forces
+  the older group collapsed — pre-existing suites that build fixtures with **fixed past dates**
+  all fall into the "older" (collapsed) branch, so assertions written for the ungrouped list
+  quietly exercise the wrong path. Add **wall-clock-aware builders** (0020's `today_at` +
+  `today_open_task`/`today_done_task`) so a flow that means to test the *today* group lands its
+  fixtures there, and keep fixed-date builders for the *older* group. The reusable rule: when a
+  new feature makes the current time load-bearing in the render, audit which existing fixtures
+  now cross the new boundary and give the suite an explicit "now"-relative builder rather than
+  relying on incidental dates.
 
 ## Constraints
 
