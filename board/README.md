@@ -94,6 +94,28 @@ backlog".
 > returns a plain-text 400 bypassing the `{code,message}` JSON error contract; unreachable by the
 > shipped client).
 >
+> **0020 re-entry (operator feedback) — back at `awaiting-merge` on the branch.** After 0020 reached
+> `awaiting-merge` the operator gave **three adjustments** (`architect` triaged **no ADR** — TUI-only,
+> no #2/#3): (1) the today date moved **INTO** the Tasks list as a full-width, non-selectable
+> **separator header row** (a shared `separator_line` helper pads both it and the "Older tasks" row
+> to the pane inner width; `ListState` +1 offset skips selection); (2) **`d` deletes the selected
+> sub-task** (`confirming_delete: Option<DeleteTarget>` — `Task` | `Subtask`; `arm_delete` by row
+> kind; `confirm_delete` dispatches `DeleteTask`/`DeleteSubtask`, **reusing the shipped wire, no
+> contract change**); (3) **`x` now toggles the older group** (`resolve_collapsed` = override else
+> `is_older || Done`; default collapsed, A7 preserved). Acceptance amended #2/#3 + added #7. `tui-dev`
+> `e9127ed` +
+> `tester` `e21d82d`; reviewer **approved** + verifier **verified** (live sub-task delete: 204;
+> cross-profile/cross-user → `404 not_found`, sub-task surviving, #4), both pinned to code-hash
+> `a5713a7d95780e1e61b4130ccc7556789f44aa45` (head `e21d82d`); coverage 72.66% line (report-only). #7's
+> originally-drafted "any navigation disarms" wording was corrected to the true **modal-confirm**
+> behaviour (Enter confirms, Esc cancels, other keys inert — matching ADR-0010 §3); the tester pinned
+> the real affordance. Re-validated learned-0019 (harness stranding) — this cycle re-stranded
+> `common/mod.rs` via a field **type** change (`Option<String>` → `Option<DeleteTarget>`), confirming
+> the gotcha generalizes to retypes, not just additions (noted in handoff; no CLAUDE.md edit needed).
+> One out-of-scope nit filed as [`ideas/0011`](./ideas/0011-confirming-delete-doccomment-drift.md) (the
+> stale `confirming_delete` doc-comment); [`ideas/0007`](./ideas/0007-delete-single-subtask-affordance.md)
+> is effectively delivered by adjustment 2.
+>
 > **0019 — Sub-tasks — `merged`** (operator-authorised ff-merge; `main` @ `540fe4e`). The
 > **first admitted structural exception to
 > the deliberately-flat domain (#3)**: a task may have **one level** of **title+status-only**

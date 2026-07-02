@@ -5,6 +5,71 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-07-02 (0020 re-entry — operator feedback: date row, sub-task delete, older x-toggle)
+
+After 0020 reached `awaiting-merge`, the operator gave **three adjustments** (three `[human]`
+lines in the item Log). `architect` triaged **no ADR** — all three are TUI-only, touching no wire
+(#2) or domain (#3) shape — amended acceptance #2/#3 and added #7. `tui-dev` (S3 re-entry,
+`e9127ed`) + `tester` (S4 re-entry, `e21d82d`) implemented, reviewed+verified @ code-hash
+`a5713a7d95780e1e61b4130ccc7556789f44aa45`.
+
+- **Item 1 (amended #2)** — the today date moved **INTO** the Tasks list as a full-width,
+  non-selectable **separator header row** (the above-border `Paragraph` slot dropped; whole area
+  is the bordered list). A shared `separator_line(label, inner)` helper pads **both** the date row
+  and the "Older tasks" row to the pane inner width; selection skips the date row via a `ListState`
+  selected-index +1 offset.
+- **Item 2 (added #7)** — `d` now deletes the selected **sub-task**: `confirming_delete` changed
+  `Option<String>` → `Option<DeleteTarget>` (`Task` | `Subtask`); `arm_delete` arms by row kind
+  (separator → no-op); `confirm_delete` dispatches `DeleteTask`/`DeleteSubtask` — **reuses the
+  shipped wire, no contract change**. The verifier drove the newly-reachable server delete path
+  live (204; cross-profile/cross-user → `404 not_found`, sub-task surviving; #4 holds).
+- **Item 3 (amended #3)** — older-group tasks still **default collapsed** but `x` now toggles them:
+  `resolve_collapsed` = per-task override else `is_older || Done`. A7 preserved (older path never
+  writes `collapse_overrides`).
+
+**Acceptance drift caught in the cycle.** #7 was originally drafted "any navigation disarms," but
+the shipped delete confirmation is a **modal confirm** (Enter confirms, Esc cancels, other keys
+inert — matching the notes/profiles dialog, ADR-0010 §3). The `tester` pinned the *real* affordance
+(a non-confirm key issues no delete) rather than asserting the described-but-unimplemented disarm,
+and the wording was corrected. Lesson (recorded, not gotcha-promoted): when a re-entry **amends
+acceptance**, the tester pins the true observable affordance and flags the drift rather than
+codifying prose that never matched the code.
+
+**Re-validated learned-0019 (harness stranding) — now confirmed to generalize to field *type*
+changes.** The gotcha was framed around **adding** a `Client` method / `ClientRequest`+`Outcome`
+variant / a state field. This cycle re-stranded `crates/tui/tests/common/mod.rs` with **none** of
+those — only a **field type change** (`TaskListState.confirming_delete: Option<String>` →
+`Option<DeleteTarget>`), which broke the tester's `task_list_screen_confirming_delete()` builder
+and the assertions matching `confirming_delete.as_deref()`. Same ownership boundary, same
+same-cycle un-stranding — so the durable rule is: a `tui` `src/` change to the **shape** of a
+tester-observed field (add *or retype*) strands the harness. No CLAUDE.md edit needed — the
+existing gotcha already covers "a field to a screen-state struct"; this widens it to "add or retype"
+and is noted here rather than re-worded in the (already long) gotcha.
+
+**Out-of-scope follow-up filed as an idea (home #1, `main`).** [`ideas/0011`][idea-0011-h] — the
+`confirming_delete` field doc-comment (`crates/tui/src/app/task_list.rs` ~line 116) still says
+"cleared on confirm or on any other navigation," which never matched the modal-confirm behaviour
+(only `Esc` disarms; other keys inert). Reviewer-flagged, out of scope of the interaction re-entry;
+a natural `chore` candidate. Note: [`ideas/0007`][idea-0007-h] (delete-single-subtask affordance,
+raised on 0019) is now **effectively delivered** by this cycle's item 2 — the human may want to
+close/mark it resolved at triage.
+
+**No CLAUDE.md gotcha added, no skill extension.** This re-entry mostly *re-validated* existing
+learnings (harness stranding; feedback re-entry; modal-confirm). The one mild new observation
+(acceptance-wording-vs-shipped-behaviour drift on a re-entry) is recorded above and judged not to
+clear the durable-gotcha bar — it is a one-off wording correction the tester already handled
+correctly, not a recurring trap engineering must plan around.
+
+**State:** re-entry back at the AI-terminal `awaiting-merge` on
+`feature/0020-tui-tasks-pane-rendering-overhaul`, reviewed `approved` + verified `verified` @
+`a5713a7d95780e1e61b4130ccc7556789f44aa45` (head `e21d82d`; later commits Board-only). coverage
+72.66%.
+
+[idea-0007-h]: ../board/ideas/0007-delete-single-subtask-affordance.md
+[idea-0011-h]: ../board/ideas/0011-confirming-delete-doccomment-drift.md
+
+---
+
 ## Handoff — 2026-07-02 (0020 Tasks-pane rendering overhaul — pagination-ready limit)
 
 A four-slice `feature` reshaping how the TUI **Tasks pane** renders, plus the one wire-shaping
