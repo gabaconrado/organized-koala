@@ -345,13 +345,20 @@ wire already shipped in 0019; ADR-0014 unamended). All re-enter at `working` (TU
   `25ed4351d5beedb2d4f0cc517e3bdd867389cedc` — code byte-identical, so the `approved`+`verified`
   verdicts carry forward untouched (no relabel). Gates re-run green on the rebased tree
   (fmt/lint/test). → `awaiting-merge`.
-- [ ] 2026-07-02 [human] Adjustment 1 (render): show the today date as a **full-width separator
+- [x] 2026-07-02 [human] Adjustment 1 (render): show the today date as a **full-width separator
   row inside** the Tasks pane (like the "Older tasks" one), not a short left-aligned line above
   it — and make the separators span the whole pane width (currently left-aligned and short).
-- [ ] 2026-07-02 [human] Adjustment 2 (bug): `d` does nothing on a sub-task row — pressing it
+  Resolved `e9127ed` (shared `separator_line` helper; date row full-inner-width, non-selectable,
+  `ListState` +1 offset), pinned by `tester` `e21d82d`; reviewed+verified @ `a5713a7d`.
+- [x] 2026-07-02 [human] Adjustment 2 (bug): `d` does nothing on a sub-task row — pressing it
   should delete the selected sub-task (the `DeleteSubtask` wire path already exists).
-- [ ] 2026-07-02 [human] Adjustment 3 (behaviour): `x` does not expand/collapse tasks in the
+  Resolved `e9127ed` (`confirming_delete: Option<DeleteTarget>`, `arm_delete` by row kind,
+  `confirm_delete` dispatches `DeleteSubtask`), pinned by `tester` `e21d82d`; reviewed+verified
+  (live sub-task delete path) @ `a5713a7d`.
+- [x] 2026-07-02 [human] Adjustment 3 (behaviour): `x` does not expand/collapse tasks in the
   "Older" group — it should toggle there too (amends acceptance #3's forced-collapse).
+  Resolved `e9127ed` (`resolve_collapsed` = override else `is_older || Done`; A7 preserved),
+  pinned by `tester` `e21d82d`; reviewed+verified @ `a5713a7d`.
 - 2026-07-02 [architect] Triaged the 3 adjustments → all re-enter at `working`, **no ADR** (none
   touches the wire (#2) or domain (#3): item 2 reuses the shipped `DeleteSubtask` wire; items 1/3
   are TUI render/interaction). Amended acceptance #2 (date = full-width in-pane separator row), #3
@@ -473,6 +480,39 @@ list newest-first, limit caps, offset skips, `limit=500` ok, `limit=501` → `40
 cross-profile → `404` (#4); drove the shipped reqwest `HttpClient` end-to-end; OTel `list_tasks`
 spans present; TUI `TestBackend` suite green (ADR-0003).
 
-coverage: 72.26%
+coverage: 72.66%
+
+### Re-entry 2026-07-02 (operator feedback)
+
+After 0020 reached `awaiting-merge`, the operator gave three adjustments (the three `[human]`
+lines in the Log). `architect` triaged: **no ADR** — all three are TUI-only, touching no wire
+(#2) or domain (#3) shape (item 2 reuses the shipped `DeleteSubtask` wire; ADR-0014 unamended).
+Acceptance was amended (#2/#3) and #7 added; `tui-dev` (S3 re-entry, `e9127ed`) + `tester` (S4
+re-entry, `e21d82d`) implemented:
+
+1. **Adjustment 1 — today date moved INTO the Tasks list (amended #2).** The date is now a
+   **full-width, non-selectable separator header row** at the top of the bordered list (the
+   above-border `Paragraph` slot was dropped; the whole area is the list). A shared
+   `separator_line(label, inner)` helper pads **both** the date row and the "Older tasks" row to
+   the pane inner width; selection skips the date row via a `ListState` selected-index +1 offset.
+2. **Adjustment 2 — `d` deletes the selected sub-task (added #7).** `confirming_delete` changed
+   from `Option<String>` to `Option<DeleteTarget>` (`Task { task_id }` | `Subtask { task_id,
+   subtask_id }`); `arm_delete` arms by selected-row kind (separator → no-op); `confirm_delete`
+   dispatches `DeleteTask`/`DeleteSubtask` (both already wired — no contract change). The two-step
+   affordance is the existing modal confirm (Enter confirms, Esc cancels, other keys inert).
+3. **Adjustment 3 — `x` toggles the older group (amended #3).** Older-group tasks still **default
+   collapsed** but `x` now toggles them like today's: `resolve_collapsed` = per-task override else
+   `is_older || Done`. The older path never writes `collapse_overrides` (A7 preserved).
+
+Acceptance #7's originally-drafted "any navigation disarms" wording was corrected to the true
+**modal-confirm** behaviour (Enter confirms, Esc cancels, other keys inert) — the tester pinned
+the real affordance (no request from a non-confirm key) rather than an unimplemented disarm.
+
+**Re-entry verdicts** — reviewer `REVIEW-STATUS: approved` + verifier `VERIFY-STATUS: verified`,
+both pinned to code-tree hash `a5713a7d95780e1e61b4130ccc7556789f44aa45` (head `e21d82d`; later
+commits are Board-only). The verifier booted the stack live and drove the newly-reachable
+sub-task delete path end-to-end (owner `DELETE …/subtasks/{id}` → 204; cross-profile/cross-user →
+`404 not_found` with the sub-task surviving; #4 holds), OTel `delete_subtask` spans present; items
+1 & 3 (render/interaction) confirmed via the green TUI `TestBackend` suite (ADR-0003).
 
 [adr-0014-sum]: ../../docs/adr/0014-task-list-pagination-ready-limit.md
