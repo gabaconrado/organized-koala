@@ -2,7 +2,7 @@
 id: 0020
 title: Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0019]  # builds on the task + sub-task list/collapse rendering (merged)
@@ -301,6 +301,12 @@ gate.
   `TestBackend` suite exists + green (ADR-0003). Teardown `./ok.sh down` (volume preserved). Pinned
   to code-tree hash `25ed4351d5beedb2d4f0cc517e3bdd867389cedc` (head `c1099b0`). Minor inferred edge
   (empty-string `?limit=` → plain-text 400, unreachable by shipped client) filed as an idea.
+- 2026-07-02 [orchestrator] Step-7 freshen: rebased onto `main` @ bb9e260 (docs/`.claude`/board
+  only — eng-manager learnings + dashboard + ideas 0009/0010). One expected conflict on this Board
+  file resolved in favour of the branch. `./ok.sh code-hash` **unchanged** at
+  `25ed4351d5beedb2d4f0cc517e3bdd867389cedc` — code byte-identical, so the `approved`+`verified`
+  verdicts carry forward untouched (no relabel). Gates re-run green on the rebased tree
+  (fmt/lint/test). → `awaiting-merge`.
 
 ## Summary
 
