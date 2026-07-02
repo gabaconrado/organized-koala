@@ -2,7 +2,7 @@
 id: 0020
 title: Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap
 type: feature      # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0019]  # builds on the task + sub-task list/collapse rendering (merged)
@@ -283,3 +283,12 @@ gate.
   (live throwaway Postgres, docker confirmed): default whole-list newest-first, limit caps, offset
   skips, limit+offset window, over-ceiling→400 validation_failed, at-ceiling ok, profile-scoping
   under limit. Gates: `./ok.sh fmt --check` + `lint` (--all-targets, now GREEN) + `test` all green.
+- 2026-07-02 [reviewer] Cold review → `REVIEW-STATUS: approved`. All gates verified green
+  independently (fmt/build/lint/test, --all-targets). Hard constraints #1–#4 upheld; full ADR-0014
+  conformance (additive limit/offset, bare-array response, over-ceiling→400, TUI-side stable
+  completed-last sort, `i64::from` no `as`). UTC-civil-day "today" deviation (no tui timezone dep,
+  A5/A8) judged within the AFK smallest-change + recorded-assumption policy — not a blocker. Help
+  line 66≤70 (no re-wrap); harness genuinely un-stranded. Verdict pinned to code-tree hash
+  `25ed4351d5beedb2d4f0cc517e3bdd867389cedc` (head `ec79791`). Two out-of-scope ideas filed on
+  `main` for human triage (local-date grouping + ADR/plan doc-consistency; standing secret-Debug
+  note).
