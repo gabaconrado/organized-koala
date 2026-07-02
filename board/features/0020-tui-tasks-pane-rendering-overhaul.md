@@ -30,13 +30,20 @@ today/older grouping, no completed-last ordering, no date header, and no fetch c
    **after** all non-completed tasks. The same rule applies to **sub-tasks within their parent**:
    completed sub-tasks render after non-completed sub-tasks. The ordering **re-sorts immediately
    whenever a task or sub-task changes state** (complete / reopen / toggle) — no manual refresh.
-2. **Today date header.** The current date is shown **top-center inside the Tasks pane**, in
-   human-readable form — e.g. `Tuesday, July 2nd, 2026` (weekday, month, ordinal day, year).
-   **Not** shown for the Notes or Profiles panes.
+2. **Today date header (full-width separator row).** The current date is shown as a **full-width
+   separator row at the top of the task list, inside the bordered Tasks pane** (styled like the
+   "Older tasks" separator, spanning the pane's inner width), in human-readable form — e.g.
+   `Tuesday, July 2nd, 2026` (weekday, month, ordinal day, year). It is a non-selectable header
+   row (navigation skips it). **Not** shown for the Notes or Profiles panes.
+   *(amended 2026-07-02 per human feedback — was "top-center", a short line above the pane.)*
 3. **Today / older separator.** Tasks are grouped by *created-at* into **created-today** (above)
-   and **created-before-today** (below), with a separator line labelled **"Older tasks"** between
-   them. Tasks in the older group render in the **collapsed** state **regardless of their status**
-   (their sub-tasks hidden), independent of any per-task collapse toggle.
+   and **created-before-today** (below), with a **full-width** separator line labelled **"Older
+   tasks"** (spanning the pane inner width) between them. Older-group tasks **default to collapsed**
+   (sub-tasks hidden) on load, but **`x` toggles their collapse state** like today's tasks — the
+   per-task collapse override (`x`) takes precedence over the older-group default. (The override
+   remains render-time-derived, never persisted; #1 / A7.)
+   *(amended 2026-07-02 per human feedback — was a hard forced-collapse, `x` inert in the older
+   group.)*
 4. **`h` hides the older group.** Pressing **`h`** hides all the older tasks **along with the
    separator**; pressing `h` again shows them. **Default is shown.** Add `h` to the **shortcut
    help dialog**.
@@ -49,6 +56,10 @@ today/older grouping, no completed-last ordering, no date header, and no fetch c
    (e.g. a limit + offset/cursor request shape and a response that can later carry a
    next-page marker). The TUI does not paginate in this feature; it just requests the first
    (and only) 200.
+7. **`d` deletes the selected sub-task.** *(added 2026-07-02 per human feedback.)* On a sub-task
+   row, `d` arms the same two-step delete confirmation as a task (`Enter` confirms, any navigation
+   disarms) and, on confirm, issues `DeleteSubtask` for the selected sub-task. On a task row `d`
+   deletes the task as before. Reuses the shipped `DeleteSubtask` wire (no contract change).
 
 ### Constraints / notes for the architect (planning starts here)
 
@@ -247,6 +258,32 @@ gate.
   render-time forcing, so leaving the older group (or pressing `x`) does not corrupt a task's
   in-session collapse override.
 
+### Amendment 2026-07-02 (human feedback re-entry, `working`)
+
+Three operator adjustments triaged by `architect`; **no ADR** (no #2/#3 change — `DeleteSubtask`
+wire already shipped in 0019; ADR-0014 unamended). All re-enter at `working` (TUI-only).
+
+- **S3-a (item 1 — `ui/mod.rs` only):** move the today date INTO the Tasks list as a full-width,
+  non-selectable separator **header row** (drop the above-border `Constraint::Length(1)`
+  `Paragraph` slot; give the whole area to the bordered list). Render both the date row and the
+  "Older tasks" separator via a shared full-inner-width `separator_line(label, inner)` helper
+  (border-aware inner width = pane width − 2). Selection must skip the date row — prepend-at-draw
+  with a `ListState` selected-index offset preferred (keeps `visible_rows`/selection indices
+  untouched). No new hotkey → help overlay untouched (skip the learned-0015/0019 width check).
+- **S3-b (item 3 — `task_list.rs`):** stop force-collapsing the older group in `visible_rows`;
+  emit its sub-task rows when expanded. Older rows resolve collapse as
+  `collapse_overrides.get(&id).copied().unwrap_or(true)` (default collapsed, `x`-toggleable).
+  Keep `is_older` for the `+` indicator; do **not** write `collapse_overrides` from the older
+  path (A7 preserved). Grouping / completed-last / `h`-hide unchanged.
+- **S3-c (item 2 — `task_list.rs`):** replace `confirming_delete: Option<String>` with
+  `Option<DeleteTarget>` (`Task { task_id }` | `Subtask { task_id, subtask_id }`); `arm_delete`
+  arms by selected-row kind (separator → no-op); `confirm_delete` dispatches
+  `DeleteTask`/`DeleteSubtask` (both already wired). Two-step confirm affordance unchanged.
+- **S4 (tester):** un-strand `common/mod.rs` for the `confirming_delete` type change; **update the
+  assertions that pinned the OLD forced-collapse + the above-pane centered header** (now wrong);
+  add pins for older-group `x`-toggle emitting sub-task rows, sub-task delete confirm+issue, and
+  the full-width separators. No `Client`/`ClientRequest` surface change this cycle.
+
 ## Log / comments
 
 - [ ] 2026-07-02 [human] Filed from an operator interface-improvements request; see acceptance above.
@@ -314,6 +351,12 @@ gate.
   should delete the selected sub-task (the `DeleteSubtask` wire path already exists).
 - [ ] 2026-07-02 [human] Adjustment 3 (behaviour): `x` does not expand/collapse tasks in the
   "Older" group — it should toggle there too (amends acceptance #3's forced-collapse).
+- 2026-07-02 [architect] Triaged the 3 adjustments → all re-enter at `working`, **no ADR** (none
+  touches the wire (#2) or domain (#3): item 2 reuses the shipped `DeleteSubtask` wire; items 1/3
+  are TUI render/interaction). Amended acceptance #2 (date = full-width in-pane separator row), #3
+  (older defaults collapsed but `x`-toggleable), and added #7 (`d` deletes sub-task). Slice plan
+  S3-a/b/c + S4 recorded under `## Plan(s)` → Amendment. Verdicts from the prior `awaiting-merge`
+  are void (code will change); item re-enters review + verify after the build.
 
 ## Summary
 
