@@ -2,12 +2,12 @@
 id: 0021
 title: Profiles sorted by insertion time (not alphabetically) in the Profile list
 type: feature      # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0012]  # profiles CRUD + switcher (merged)
-branch: null
-worktree: null
+branch: feature/0021-profiles-sorted-by-insertion-time
+worktree: .claude/worktrees/0021-profiles-sorted-by-insertion-time
 created: 2026-07-02
 updated: 2026-07-02
 ---
@@ -147,6 +147,7 @@ and needs no amendment.
   observable behaviour — fails the chore no-behaviour invariant). Direction: **oldest-first
   (ASC)** per the request's stated assumption. Plan is server-only ordering flip + doc-comment
   fixes + a server ordering test; no `contract-owner` slice, no ADR.
-- [x] 2026-07-02 [orchestrator] Claimed onto `feature/0021-profiles-sorted-by-insertion-time`
-  (worktree cut from main@1914d0c). **This `main` copy is frozen at the claim snapshot; the
-  branch copy is authoritative until the human's merge brings it back.**
+- [x] 2026-07-02 [orchestrator] Claimed `ready`→`working`. Worktree cut from `main` @1914d0c
+  (carries the plan). Branch `feature/0021-profiles-sorted-by-insertion-time`. Session: drive
+  cycle 0021. Build dispatch: server-dev (query flip + handler doc) → tui-dev (state doc-comment)
+  → tester (server ordering assertion); no contract-owner slice.
