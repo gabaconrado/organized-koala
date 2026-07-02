@@ -258,3 +258,7 @@ gate.
   `serde_urlencoded` (dev-dep, already in lock via reqwest); doctests + `tests/task.rs` cover
   all-`None`→empty, `limit`-only omits `offset`, round-trip, ceiling value. No `Task`/`Subtask`/
   `TaskStatus`/create/update DTO touched (#3). Gates: fmt/build/lint/test all green.
+- 2026-07-02 [server-dev] S2 done. `list_tasks` extracts `Query(TaskListQuery)`; absent `limit`→
+  ceiling, `offset`→0, over-ceiling `limit`→`400 validation_failed` (no clamp); `LIMIT $2 OFFSET
+  $3` bound via `i64::from` (no `as`). Response unchanged; no migration; no status ORDER BY.
+  `.sqlx/` regenerated via `./ok.sh prepare` (docker DB up). Gates: fmt/build/lint/test green.

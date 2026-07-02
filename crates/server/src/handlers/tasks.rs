@@ -3,10 +3,12 @@
 //! (never 403). The task domain is flat (hard-constraint #3).
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
-use contract::{CreateTaskRequest, Task, TaskStatus, UpdateTaskRequest};
+use contract::{
+    CreateTaskRequest, MAX_TASK_LIST_LIMIT, Task, TaskListQuery, TaskStatus, UpdateTaskRequest,
+};
 use uuid::Uuid;
 
 use crate::app::AppState;
@@ -61,20 +63,40 @@ async fn assert_owned(state: &AppState, user_id: Uuid, profile_id: Uuid) -> ApiR
     }
 }
 
-/// `GET /api/profiles/{pid}/tasks` → `200` bare array, newest-first. Unowned profile → 404.
+/// `GET /api/profiles/{pid}/tasks` → `200` bare array, newest-first (ADR-0014). Optional
+/// `?limit=&offset=` query params bound the window: an absent `limit` falls back to the
+/// ceiling [`MAX_TASK_LIST_LIMIT`] (preserving the whole-list default); a `limit` strictly
+/// above the ceiling is a `400 validation_failed` (an explicit over-ceiling value is a client
+/// error, never silently clamped); an absent `offset` is `0`. Completed-last ordering is a
+/// TUI-side render concern (ADR-0014 §4) — the server keeps `ORDER BY created_at DESC`.
+/// Unowned profile → 404.
 #[tracing::instrument(skip_all, fields(user_id = %user.user_id, profile_id = %profile_id))]
 pub async fn list_tasks(
     State(state): State<AppState>,
     user: AuthUser,
     Path(profile_id): Path<Uuid>,
+    Query(query): Query<TaskListQuery>,
 ) -> ApiResult<Json<Vec<Task>>> {
     assert_owned(&state, user.user_id, profile_id).await?;
+
+    let limit = match query.limit {
+        Some(limit) if limit > MAX_TASK_LIST_LIMIT => {
+            return Err(ApiError::Validation(format!(
+                "limit must not exceed {MAX_TASK_LIST_LIMIT}"
+            )));
+        }
+        Some(limit) => limit,
+        None => MAX_TASK_LIST_LIMIT,
+    };
+    let offset = query.offset.unwrap_or(0);
 
     let rows = sqlx::query_as!(
         TaskRow,
         "SELECT id, title, description, status, created_at, closed_at \
-         FROM tasks WHERE profile_id = $1 ORDER BY created_at DESC",
+         FROM tasks WHERE profile_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         profile_id,
+        i64::from(limit),
+        i64::from(offset),
     )
     .fetch_all(state.pool())
     .await?;
