@@ -2,7 +2,7 @@
 id: 0021
 title: Profiles sorted by insertion time (not alphabetically) in the Profile list
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0012]  # profiles CRUD + switcher (merged)
@@ -225,3 +225,14 @@ regression to either fails.
   span exported. Full `./ok.sh test` green (37 ok lines, 0 fail), incl.
   `list_profiles_ordered_oldest_first` and the `tui` `TestBackend` switcher suite (ADR-0003).
   No gaps. Torn down with `./ok.sh down` (no `-v`; shared volume preserved).
+- [x] 2026-07-02 [orchestrator] Step-7 freshen: rebased onto `main`@b565762 (eng-manager's
+  handoff + dashboard). Only conflict was this Board file (main's frozen-pointer note vs the
+  branch's authoritative claim log) — resolved in favour of the branch. `./ok.sh code-hash` at
+  the rebased head is **unchanged at `b8591d70250155b79c209d4b14b59f6b2abb00fd`** (main moved
+  only in `docs/`/board), so the reviewer `approved` + verifier `verified` verdicts **carry
+  forward untouched — no relabelling**. Gates re-run green on the rebased tree
+  (test/lint/fmt). Board-only commit — does not retrigger review.
+- [x] 2026-07-02 [orchestrator] `review`→`awaiting-merge`. **AI cycle terminal.** Feature DoD
+  satisfied: tests/lint/fmt green; reviewer approved + verifier verified at code-hash
+  `b8591d70…`; no ADR/migration needed (no contract/domain change); branch rebased current on
+  `main`. Awaiting the human's ff-merge (`/finalize`).
