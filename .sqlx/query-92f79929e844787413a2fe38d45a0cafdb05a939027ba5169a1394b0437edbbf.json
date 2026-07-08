@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, title, description, status, created_at, closed_at FROM tasks WHERE profile_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+  "query": "SELECT id, title, description, status, created_at, closed_at FROM tasks WHERE profile_id = $1 AND ($4::bigint IS NULL OR created_at >= to_timestamp($4::bigint)) AND ($5::bigint IS NULL OR created_at < to_timestamp($5::bigint)) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
   "describe": {
     "columns": [
       {
@@ -38,6 +38,8 @@
       "Left": [
         "Uuid",
         "Int8",
+        "Int8",
+        "Int8",
         "Int8"
       ]
     },
@@ -50,5 +52,5 @@
       true
     ]
   },
-  "hash": "67f71765bfa517a7c887e1ed91a1a13355e156147a114ca57a4b19ff2ce6ad7b"
+  "hash": "92f79929e844787413a2fe38d45a0cafdb05a939027ba5169a1394b0437edbbf"
 }

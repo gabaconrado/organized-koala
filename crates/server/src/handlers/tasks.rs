@@ -69,7 +69,15 @@ async fn assert_owned(state: &AppState, user_id: Uuid, profile_id: Uuid) -> ApiR
 /// above the ceiling is a `400 validation_failed` (an explicit over-ceiling value is a client
 /// error, never silently clamped); an absent `offset` is `0`. Completed-last ordering is a
 /// TUI-side render concern (ADR-0014 §4) — the server keeps `ORDER BY created_at DESC`.
-/// Unowned profile → 404.
+///
+/// Optional `?created_from=&created_until=` bound `created_at` by a plain `timestamptz` range
+/// (ADR-0015): when present, `created_from` is an **inclusive** lower bound and `created_until`
+/// an **exclusive** upper bound, both UTC epoch **seconds**. The bounds are independent and
+/// optional (an absent bound omits its side), so absent-both is byte-identical to the pre-window
+/// whole-list behaviour. The server does **no** civil-day arithmetic — day granularity is a TUI
+/// convention. If both bounds are present and `created_from > created_until` the window is
+/// inverted (a client bug) → `400 validation_failed`; `created_from == created_until` is a valid
+/// empty window (upper is exclusive) → `200 []`. Unowned profile → 404.
 #[tracing::instrument(skip_all, fields(user_id = %user.user_id, profile_id = %profile_id))]
 pub async fn list_tasks(
     State(state): State<AppState>,
@@ -90,13 +98,30 @@ pub async fn list_tasks(
     };
     let offset = query.offset.unwrap_or(0);
 
+    // An inverted window (from strictly after until) can only be a client bug; reject it. An
+    // equal-bounds window is valid and returns the empty list (upper bound is exclusive).
+    if let (Some(from), Some(until)) = (query.created_from, query.created_until)
+        && from > until
+    {
+        return Err(ApiError::Validation(
+            "created_from must not be after created_until".to_owned(),
+        ));
+    }
+
+    // A single static query: each bound is a NULL-guarded `to_timestamp` range predicate, so an
+    // absent bound (NULL parameter) drops out and absent-both matches the pre-window behaviour.
     let rows = sqlx::query_as!(
         TaskRow,
         "SELECT id, title, description, status, created_at, closed_at \
-         FROM tasks WHERE profile_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+         FROM tasks WHERE profile_id = $1 \
+             AND ($4::bigint IS NULL OR created_at >= to_timestamp($4::bigint)) \
+             AND ($5::bigint IS NULL OR created_at < to_timestamp($5::bigint)) \
+         ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         profile_id,
         i64::from(limit),
         i64::from(offset),
+        query.created_from,
+        query.created_until,
     )
     .fetch_all(state.pool())
     .await?;

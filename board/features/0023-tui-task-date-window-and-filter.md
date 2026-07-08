@@ -155,6 +155,27 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
   Contract crate builds (`cargo build -p contract`), 26 doctests pass, `clippy -p contract --lib`
   clean, `./ok.sh fmt --check` clean. Workspace `build`/`lint`/`test` go red only on the not-yet-
   written server/tui/tester slices (expected).
+- [x] 2026-07-08 [server-dev] Slice 2 (server) done. Applied the two ADR-0015 bounds in the
+  task-list query (`crates/server/src/handlers/tasks.rs`): a single static, sqlx-offline-checkable
+  `SELECT` gains two NULL-guarded predicates `($4::bigint IS NULL OR created_at >=
+  to_timestamp($4::bigint))` and `($5::bigint IS NULL OR created_at < to_timestamp($5::bigint))`,
+  binding `query.created_from` / `query.created_until` (`Option<i64>`). An absent bound is a NULL
+  param that drops out, so **absent-both is byte-identical to pre-0023** (whole list within
+  `limit`); `created_from` inclusive / `created_until` exclusive; the server does no civil-day
+  math. Validation added before the query: **both** bounds present and `created_from >
+  created_until` → `ApiError::Validation` = `400 {code: "validation_failed", message}` (same
+  construction as the existing `limit`/title validations); `created_from == created_until` is a
+  valid empty window (upper exclusive) → `200 []`. `created_at DESC`, profile-scoping (#4, the
+  `assert_owned` gate + `profile_id = $1`), and the `limit` clamp / `offset` semantics (ADR-0014)
+  are unchanged and compose with the filter. Refreshed `.sqlx/` via a server-scoped
+  `cargo sqlx prepare` against the sanctioned throwaway test Postgres (`./ok.sh prepare`'s
+  `--workspace` cannot complete until slice 3 lands — the not-yet-built `tui` fails to construct
+  `TaskListQuery` with the new fields; `tui` carries no SQL, so a server-scoped prepare yields
+  identical cache content): one query file replaced, no others touched. Gates: `./ok.sh fmt
+  --check` clean; server crate `cargo build -p server` + `cargo clippy -p server --all-targets`
+  clean (offline). Workspace `build`/`lint`/`test` remain red only on the not-yet-written tui +
+  tester slices (expected, 0019/0020 harness gotcha). Files: `crates/server/src/handlers/tasks.rs`,
+  `.sqlx/`.
 
 ## Summary
 
