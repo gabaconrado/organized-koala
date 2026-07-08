@@ -236,6 +236,18 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
   workspace green). No source bug found. Files: `crates/contract/tests/task.rs`,
   `crates/server/tests/tasks.rs`,
   `crates/tui/tests/{common/mod.rs,date_window.rs,dialogs.rs,tasks.rs}`.
+- [x] 2026-07-08 [reviewer] Cold review — **REVIEW-STATUS: approved**, pinned to code-hash
+  `700e3b535c587fd309e4de0a5f973867a577fc02` (last code commit `5ee5bda`; branch head `582b67e`
+  is a Board-only flip). Gates all green (`test`/`lint`/`fmt --check`). Verified: #2 contract drift
+  clean (only `created_from`/`created_until`, both `skip_serializing_if`, empty-query invariant
+  test-pinned); ADR-0015 fidelity (epoch-second bounds, server = plain `to_timestamp` range filter,
+  inclusive-from/exclusive-until, `from > until` → 400 `validation_failed`, `from == until` → 200 `[]`,
+  ordering/scoping/limit compose unchanged); #1 stateless (ephemeral view-state), #3 flat (no `Task`
+  field), #4 profile-scoping preserved; `.sqlx/` consistent (old query cache replaced, no drift,
+  builds under `SQLX_OFFLINE`); no migration needed/added; help no-wrap third Tasks line pinned by
+  regression test. No fix-now findings. One out-of-scope observation (`f` accepts calendar-impossible
+  dates → `days_from_civil` normalizes deterministically) is **explicitly by-design per ADR-0015**
+  ("no calendar validation") — no action.
 
 ## Summary
 
