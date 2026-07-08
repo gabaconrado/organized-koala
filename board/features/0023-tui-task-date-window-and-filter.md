@@ -266,6 +266,45 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
 
 ## Summary
 
-Filled at drive step 6 — coverage and notable outcomes.
+coverage: 73.20%
+
+The Tasks pane gains a **server-backed UTC-civil-day window** over `created_at` plus two
+client-only, non-persistent view knobs, per [ADR-0015][adr-0015]:
+
+- **Wire (additive, #2 via ADR-0015).** `contract::TaskListQuery` gains two optional epoch-second
+  bounds — `created_from` (inclusive lower) / `created_until` (exclusive upper) — both
+  `skip_serializing_if`, so `default()` still serializes to an empty query and **absent-both is
+  byte-identical to pre-0023** (whole list within `limit`). No `Task`/`Subtask` field (#3), no
+  migration.
+- **Server (range filter + validation).** The task-list query applies two NULL-guarded predicates
+  (`created_at >= to_timestamp($from)` / `< to_timestamp($until)`); no civil-day math server-side.
+  Both present with `created_from > created_until` → `400 {code: "validation_failed", …}`;
+  `from == until` is a valid empty window → `200 []`. `created_at DESC`, profile-scoping (#4), and
+  the ADR-0014 `limit`/`offset` semantics are unchanged and compose with the filter; `.sqlx/` cache
+  refreshed.
+- **TUI knobs (ephemeral, #1).** `F` opens a numeric dialog for the **window size X** (default 3,
+  min 1, rejects `0`/non-numeric inline, resets on restart); the "older" separator label is now the
+  dynamic `Last {X} days`. `f` opens a **`DD/MM/YYYY`** dialog seeded to today — Tab/Shift+Tab cycle
+  day↔month↔year, Up/Down adjust the focused component with wrap-in-place and **no carry** (`month
+  1 → 12`, `day 1 → 31`, `31 → 1`; year clamped ≥ 1970), no calendar validation (ADR-0015). Both
+  are `TaskListState` view-state (never persisted); selecting day D re-anchors the window to
+  `[D − X, D]`, re-titles the date header, and re-fetches. A third Tasks help line
+  (`F window size · f filter by date`) keeps every reference line inside `HELP_DIALOG_WIDTH`.
+
+**Default-behaviour shift (flagged as a Risk in the plan).** With default `X = 3` and
+`anchor = today`, the TUI now **always sends** the lower bound, so the **default Tasks list hides
+tasks created more than 3 days ago** — a visible change from pre-0023 (which showed the whole list
+up to the cap). This is intended: older tasks are reached by widening `F` or re-anchoring with `f`,
+which is the operator's stated motivation (a profile with >200 tasks could not otherwise page back
+to older ones). Absent-params wire behaviour is unchanged; only the TUI's *choice* to always send
+`created_from` differs.
+
+Reviewer **approved** + verifier **verified** live (boundary-second inclusive/exclusive demo,
+`from > until` → 400, `from == until` → 200 `[]`, profile-scoping #4, error contract, OTel
+`list_tasks` span; TUI `TestBackend` suites green), both pinned to code-hash
+`700e3b535c587fd309e4de0a5f973867a577fc02`. No `Client`/`ClientRequest`/`Outcome` change (reuses
+`ListTasks`); the expected harness re-strand (four new `TaskListState` fields + always-on window
+query args) and help-overlay overflow both recurred exactly as predicted and were absorbed by the
+tester slice.
 
 [adr-0015]: ../../docs/adr/0015-task-list-date-window-query.md
