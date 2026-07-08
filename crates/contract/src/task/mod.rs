@@ -167,17 +167,36 @@ pub struct UpdateTaskRequest {
 /// ```
 pub const MAX_TASK_LIST_LIMIT: u32 = 500;
 
-/// Query parameters for `GET /api/profiles/{profile_id}/tasks` (ADR-0014 §1).
+/// Query parameters for `GET /api/profiles/{profile_id}/tasks` (ADR-0014 §1, ADR-0015).
 ///
-/// Both fields are **optional** and ride the URL as query params (`?limit=200&offset=0`), so the
+/// All fields are **optional** and ride the URL as query params (`?limit=200&offset=0`), so the
 /// task-list response shape is unchanged (a bare `[Task]` array) and this is additive: a caller
-/// that sends neither param behaves exactly as before this feature. `skip_serializing_if` omits
+/// that sends none of them behaves exactly as before these features. `skip_serializing_if` omits
 /// each absent field, so an all-`None` query serializes to an **empty** query string.
 ///
 /// The server clamps/validates `limit` against [`MAX_TASK_LIST_LIMIT`] (an over-ceiling value is
 /// `400 validation_failed`; an absent value defaults to the ceiling) and treats an absent `offset`
 /// as `0`. This is the pagination-ready request shape: real pagination is a future caller change
 /// (start sending `offset`), with no wire-shape break (ADR-0014 §3).
+///
+/// # Date window (`created_from` / `created_until`, ADR-0015)
+///
+/// The two bounds carve a contiguous window over `created_at`, expressed as raw **UTC epoch
+/// seconds**. They are independent and optional: either may be present without the other, an
+/// absent bound imposes no limit on that side, and `skip_serializing_if` omits it.
+///
+/// - **`created_from` is inclusive; `created_until` is exclusive** — the server applies a plain
+///   `timestamptz` range filter (`created_at >= to_timestamp(created_from)` and
+///   `created_at < to_timestamp(created_until)`) with **no civil-day arithmetic server-side**. The
+///   server is a dumb range filter; **the TUI owns the civil-day math.**
+/// - **Day granularity is a TUI convention, not a wire concept.** The TUI sends **day-aligned**
+///   boundaries — `created_from = (anchor − X) · 86400` and `created_until = (anchor + 1) · 86400`,
+///   where `anchor` is the selected day (else today) as a UTC civil day-number. The exclusive
+///   upper bound at `(anchor + 1) · 86400` makes the anchor day fully inclusive.
+/// - **Empty-query invariant (load-bearing).** With both bounds absent, `TaskListQuery::default()`
+///   still serializes to an **empty** query string, so **absent-both is byte-identical to pre-0023
+///   behaviour** (the whole list within `limit`). This preserves ADR-0014's additive guarantee and
+///   the bare-`[Task]` array response.
 ///
 /// # Examples
 ///
@@ -189,12 +208,19 @@ pub const MAX_TASK_LIST_LIMIT: u32 = 500;
 /// assert_eq!(serde_urlencoded::to_string(&all_none).unwrap(), "");
 ///
 /// // A `limit`-only query omits `offset` entirely.
-/// let limit_only = TaskListQuery { limit: Some(200), offset: None };
+/// let limit_only = TaskListQuery { limit: Some(200), ..Default::default() };
 /// assert_eq!(serde_urlencoded::to_string(&limit_only).unwrap(), "limit=200");
 ///
-/// // Both present ride the URL together.
-/// let both = TaskListQuery { limit: Some(200), offset: Some(400) };
-/// assert_eq!(serde_urlencoded::to_string(&both).unwrap(), "limit=200&offset=400");
+/// // A day-aligned window carries only the bounds it sets.
+/// let window = TaskListQuery {
+///     created_from: Some(1_751_500_800),
+///     created_until: Some(1_751_760_000),
+///     ..Default::default()
+/// };
+/// assert_eq!(
+///     serde_urlencoded::to_string(&window).unwrap(),
+///     "created_from=1751500800&created_until=1751760000",
+/// );
 /// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskListQuery {
@@ -205,6 +231,17 @@ pub struct TaskListQuery {
     /// Number of leading tasks to skip (offset pagination); absent → `0`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
+    /// **Inclusive** lower bound on `created_at`, UTC epoch **seconds**; absent → no lower bound
+    /// (ADR-0015). The server applies `created_at >= to_timestamp(created_from)` with no civil-day
+    /// arithmetic; day granularity is a TUI convention — it sends `(anchor − X) · 86400`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_from: Option<i64>,
+    /// **Exclusive** upper bound on `created_at`, UTC epoch **seconds**; absent → no upper bound
+    /// (ADR-0015). The server applies `created_at < to_timestamp(created_until)` with no civil-day
+    /// arithmetic; day granularity is a TUI convention — it sends `(anchor + 1) · 86400`, making
+    /// the anchor day fully inclusive.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_until: Option<i64>,
 }
 
 /// A sub-task: a deliberately-minimal child of a [`Task`], carrying **only** a title and a

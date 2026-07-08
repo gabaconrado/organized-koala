@@ -143,6 +143,18 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
 - [x] 2026-07-08 [orchestrator] Claimed. Worktree + branch
   `feature/0023-tui-task-date-window-and-filter` cut from `main` @ f41c596 (carries ADR-0015 +
   plan). Status → working. Branch copy now authoritative; `main` copy frozen at claim snapshot.
+- [x] 2026-07-08 [contract-owner] Slice 1 (contract) done. Added two optional, additive fields
+  to `contract::TaskListQuery` in `crates/contract/src/task/mod.rs`: `created_from: Option<i64>`
+  (inclusive lower bound, UTC epoch seconds) and `created_until: Option<i64>` (exclusive upper
+  bound), both `#[serde(skip_serializing_if = "Option::is_none")]` so `TaskListQuery::default()`
+  still serializes to an empty query string (absent-both === pre-0023, ADR-0015 §2). Matches the
+  ADR-0015 Decision block shape; `limit`/`offset` unchanged. Rustdoc documents the
+  day-aligned-boundary convention (`(anchor − X)·86400` / `(anchor + 1)·86400`; server = plain
+  `timestamptz` range filter, no civil-day math), inclusive-from / exclusive-until semantics, and
+  the empty-query invariant, with a window doctest. No `Task`/`Subtask` touched (#3 preserved).
+  Contract crate builds (`cargo build -p contract`), 26 doctests pass, `clippy -p contract --lib`
+  clean, `./ok.sh fmt --check` clean. Workspace `build`/`lint`/`test` go red only on the not-yet-
+  written server/tui/tester slices (expected).
 
 ## Summary
 
