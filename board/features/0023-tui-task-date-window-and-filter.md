@@ -140,6 +140,9 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
   (date basis = keep UTC; filter semantics = anchor-on-D; locus = server-side date param).
   ADR-0015 authored. Status → ready. Planning artifacts (ADR-0015, decisions index, this item)
   committed to `main` before any worktree is cut.
+- 2026-07-08 [orchestrator] **Claimed — this `main` copy is frozen at the claim snapshot.** The
+  authoritative copy now lives on branch `feature/0023-tui-task-date-window-and-filter`; the
+  human's merge brings the finished item back to `main` atomically with the code.
 
 ## Summary
 
