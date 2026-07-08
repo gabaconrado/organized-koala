@@ -18,6 +18,7 @@ One row per ADR. Newest at the bottom.
 | [0012][adr-0012] | Sub-tasks — bounded exception to the flat-domain constraint (#3) | Accepted | 2026-06-29 |
 | [0013][adr-0013] | Sub-tasks wire contract — DTO, profile-scoped endpoints, FK-cascade persistence | Accepted | 2026-06-29 |
 | [0014][adr-0014] | Task-list pagination-ready limit — additive `limit`+`offset`, bare-array response preserved | Accepted | 2026-07-02 |
+| [0015][adr-0015] | Task-list date-window filtering — additive UTC epoch-second bounds; TUI owns civil-day math | Accepted | 2026-07-08 |
 
 [adr-0001]: ./adr/0001-foundational-architecture.md
 [adr-0002]: ./adr/0002-pomodoro-timer-authority.md
@@ -33,3 +34,4 @@ One row per ADR. Newest at the bottom.
 [adr-0012]: ./adr/0012-subtasks-domain-exception.md
 [adr-0013]: ./adr/0013-subtasks-wire-contract.md
 [adr-0014]: ./adr/0014-task-list-pagination-ready-limit.md
+[adr-0015]: ./adr/0015-task-list-date-window-query.md
