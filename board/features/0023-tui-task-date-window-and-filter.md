@@ -115,8 +115,9 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
   `hide_older` and the timer edit buffer) — non-persistent, reset on restart; #1 preserved.
 - Separator label renders the numeric value (`Last 3 days`), not the literal glyph `X`.
 - `X` minimum is `1` (a 2-day window `[anchor − 1, anchor]`); `F` rejects `0`/non-numeric with an
-  inline error like the timer dialog. (Smallest-change default; revisit if the operator wants
-  `X = 0` = today-only.)
+  inline error like the timer dialog (operator, 2026-07-08). **Today-only is not an `X = 0` mode**
+  — it is achieved with the existing `h` hide-older toggle (0020), which collapses the older group
+  and leaves only the anchor-day group visible.
 - idea 0009 is resolved keep-UTC by ADR-0015; the ADR-0014 §5 / 0020-plan "local date" wording
   reconciliation is a docs-on-`main` follow-up (eng-manager / this cycle's close).
 

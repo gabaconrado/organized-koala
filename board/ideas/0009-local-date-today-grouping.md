@@ -1,7 +1,7 @@
 ---
 id: 0009
 title: Local-date "today" grouping in the Tasks pane (currently UTC civil day)
-status: open          # open | accepted | closed   (only the human flips open → accepted/closed)
+status: closed        # open | accepted | closed   (only the human flips open → accepted/closed)
 priority: low         # high | medium | low — a triage hint, never a gate
 created: 2026-07-02    # absolute date
 source: 0020          # Board item / cycle that surfaced it, or "adhoc"
@@ -43,4 +43,10 @@ and the plan text either way.
 
 ## Disposition
 
-- [ ] <ts> [human] decision: accept (→ promote to Board) | close (reason)
+- [x] 2026-07-08 [human] decision: **close — keep UTC civil day.** During 0023 planning the
+  operator chose to retain the UTC civil-day basis rather than add a timezone capability (a #6
+  event). Settled in [ADR-0015](../../docs/adr/0015-task-list-date-window-query.md). The companion
+  doc reconciliation is done: ADR-0014 §5 wording corrected from "local date" to "UTC civil day"
+  (dated note in that ADR). The 0020 Board item's plan/A5 text is left as the frozen historical
+  record (it correctly shows plan-said-local, shipped-UTC, this idea raised from it). The residual
+  day-boundary edge near local midnight is accepted at single-user scale.

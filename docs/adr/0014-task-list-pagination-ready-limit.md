@@ -158,7 +158,12 @@ per-sub-task **field** beyond the **request-transport** params (`limit`, `offset
 - The **today / older grouping**, the **"Older tasks" separator**, the **collapse-older** state,
   and the **`h`-hide** flag are **TUI-render concepts derived from `created_at`** — ephemeral,
   per-render, process-lifetime view state (#1), never persisted, never on the wire. "Today" is
-  computed TUI-side from the current local date vs each task's `created_at`.
+  computed TUI-side from the current **UTC civil day** vs each task's `created_at`.
+
+  > **Correction (2026-07-08):** this bullet originally read "local date." The shipped 0020
+  > behaviour is the **UTC civil day** (`epoch.div_euclid(86400)`, chrono-free); the keep-UTC
+  > decision is settled in [ADR-0015](./0015-task-list-date-window-query.md), which closed the
+  > local-vs-UTC fork raised as idea 0009. Wording reconciled to match shipped behaviour.
 - The only additions are `contract::task::TaskListQuery` (a request query DTO) and
   `contract::task::MAX_TASK_LIST_LIMIT` (a bounds constant) — request/transport, not domain
   structure.
