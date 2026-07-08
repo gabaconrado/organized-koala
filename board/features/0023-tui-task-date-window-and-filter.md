@@ -2,12 +2,12 @@
 id: 0023
 title: TUI task date-window (hide older than X days) + filter-by-day
 type: feature      # feature | chore
-status: ready          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0020]  # builds on the today/older split, `h` hide toggle, and the 200-cap (merged)
-branch: null
-worktree: null
+branch: feature/0023-tui-task-date-window-and-filter
+worktree: .claude/worktrees/0023-tui-task-date-window-and-filter
 created: 2026-07-08
 updated: 2026-07-08
 ---
@@ -140,9 +140,9 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
   (date basis = keep UTC; filter semantics = anchor-on-D; locus = server-side date param).
   ADR-0015 authored. Status → ready. Planning artifacts (ADR-0015, decisions index, this item)
   committed to `main` before any worktree is cut.
-- 2026-07-08 [orchestrator] **Claimed — this `main` copy is frozen at the claim snapshot.** The
-  authoritative copy now lives on branch `feature/0023-tui-task-date-window-and-filter`; the
-  human's merge brings the finished item back to `main` atomically with the code.
+- [x] 2026-07-08 [orchestrator] Claimed. Worktree + branch
+  `feature/0023-tui-task-date-window-and-filter` cut from `main` @ f41c596 (carries ADR-0015 +
+  plan). Status → working. Branch copy now authoritative; `main` copy frozen at claim snapshot.
 
 ## Summary
 
