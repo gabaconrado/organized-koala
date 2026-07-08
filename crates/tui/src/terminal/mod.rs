@@ -57,6 +57,7 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
                     || main.tasks.editing.is_some()
                     || main.tasks.subtask_text_entry()
                     || main.tasks.detail_editing()
+                    || main.tasks.editing_window.is_some()
             }
             Tab::Notes => main.notes.is_text_entry(),
             Tab::Profiles => main.profiles.is_text_entry(),
@@ -73,6 +74,16 @@ fn is_text_entry(screen: &Screen, editing_duration: bool) -> bool {
 fn editing_note_content(screen: &Screen) -> bool {
     match screen {
         Screen::Main(main) => main.active_tab == Tab::Notes && main.notes.editing_content_pane(),
+        _ => false,
+    }
+}
+
+/// Whether the `f` date-filter editor is open on the Tasks tab. While open, `Up`/`Down` adjust the
+/// focused date component (not the list selection) and `Tab`/`Shift+Tab` cycle the components
+/// (ADR-0015).
+fn filtering_date_open(screen: &Screen) -> bool {
+    match screen {
+        Screen::Main(main) => main.active_tab == Tab::Tasks && main.tasks.filtering_date.is_some(),
         _ => false,
     }
 }
@@ -120,9 +131,11 @@ fn detail_view_open(screen: &Screen) -> bool {
 /// - In a text-entry context, a printable key → [`Event::Char`].
 /// - On the Tasks tab (idle, no overlay): `a` → [`Event::BeginAddTask`], `A` (Shift+a) →
 ///   [`Event::BeginAddSubtask`], `x` → [`Event::ToggleCollapse`], `h` →
-///   [`Event::ToggleHideOlder`], `e` → [`Event::BeginEditTask`], `Space` → [`Event::ToggleDone`],
+///   [`Event::ToggleHideOlder`], `F` (Shift+f) → [`Event::BeginEditWindow`], `f` →
+///   [`Event::BeginFilterDate`], `e` → [`Event::BeginEditTask`], `Space` → [`Event::ToggleDone`],
 ///   `d` → [`Event::DeleteSelected`]. `e`/`Space` route to the selected sub-task when a sub-task
-///   row is selected, to the task otherwise.
+///   row is selected, to the task otherwise. While the `f` editor is open `Up`/`Down` →
+///   [`Event::IncrementField`] / [`Event::DecrementField`] (adjust the focused date component).
 /// - On the Notes tab (idle, no overlay): `a` → [`Event::BeginAddNote`], `e` →
 ///   [`Event::BeginEditNote`], `d` → [`Event::BeginDeleteNote`], `Enter` opens the selected note.
 /// - On the Profiles tab (idle, no overlay): `Enter` picks the selected profile (mapped to
@@ -178,6 +191,10 @@ pub fn map_key(
     // `detail_idle` is the non-editing detail state (the edit-in-progress state is text entry).
     let detail = detail_view_open(screen);
     let detail_idle = detail && !text_entry;
+    // While the `f` date-filter editor is open, Up/Down adjust the focused date component instead of
+    // moving the list selection (ADR-0015); Tab/Shift+Tab still cycle the components via the
+    // in-overlay `Next`/`Prev` mapping below.
+    let filtering_date = filtering_date_open(screen);
     let on_tasks = active_tab == Some(Tab::Tasks);
     let on_notes = active_tab == Some(Tab::Notes);
     let on_profiles = active_tab == Some(Tab::Profiles);
@@ -206,6 +223,10 @@ pub fn map_key(
         KeyCode::BackTab if post_auth && !in_overlay => Some(Event::PrevTab),
         KeyCode::Tab => Some(Event::Next),
         KeyCode::BackTab => Some(Event::Prev),
+        // In the `f` date-filter editor, Up/Down adjust the focused component (ADR-0015); elsewhere
+        // they move the list selection.
+        KeyCode::Up if filtering_date => Some(Event::IncrementField),
+        KeyCode::Down if filtering_date => Some(Event::DecrementField),
         KeyCode::Down => Some(Event::Next),
         KeyCode::Up => Some(Event::Prev),
         KeyCode::Backspace => Some(Event::Backspace),
@@ -228,6 +249,10 @@ pub fn map_key(
         // `h` hides / shows the created-before-today ("older") task group + its separator
         // (ADR-0014 §5). Tasks-tab/idle only; a new, non-colliding binding (Assumption A6).
         KeyCode::Char('h') if on_tasks && globals_live => Some(Event::ToggleHideOlder),
+        // `F` (Shift+f) opens the window-size editor; `f` opens the date-filter editor (ADR-0015).
+        // Tasks-tab/idle only, gated like the other Tasks hotkeys.
+        KeyCode::Char('F') if on_tasks && globals_live => Some(Event::BeginEditWindow),
+        KeyCode::Char('f') if on_tasks && globals_live => Some(Event::BeginFilterDate),
         KeyCode::Char('e') if on_tasks && globals_live => Some(Event::BeginEditTask),
         KeyCode::Char(' ') if on_tasks && globals_live => Some(Event::ToggleDone),
         KeyCode::Char('d') if on_tasks && globals_live => Some(Event::DeleteSelected),

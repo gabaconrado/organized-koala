@@ -176,6 +176,37 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
   clean (offline). Workspace `build`/`lint`/`test` remain red only on the not-yet-written tui +
   tester slices (expected, 0019/0020 harness gotcha). Files: `crates/server/src/handlers/tasks.rs`,
   `.sqlx/`.
+- [x] 2026-07-08 [tui-dev] Slice 3 (TUI) done. **(a)** Added two ephemeral in-session fields to
+  `TaskListState` (`crates/tui/src/app/task_list.rs`): `hide_window_days: u32` (default
+  `DEFAULT_HIDE_WINDOW_DAYS = 3`) and `filter_date: Option<i64>` (civil day-number, default `None`),
+  plus a `pub anchor_day(today_day) = filter_date.unwrap_or(today_day)` helper; both reset on restart,
+  never persisted (#1). **(b)** New free fn `windowed_task_list_query(anchor, X)` in `app/mod.rs`
+  builds `created_from = (anchor − X)·86400` / `created_until = (anchor + 1)·86400` (SECS_PER_DAY made
+  `pub(crate)`); `App::task_list_query(&self)` reads the current tasks pane (else today + default
+  during bootstrap), threaded through all six `ListTasks` sites; `TaskListState::refresh` re-fetches
+  on any `F`/`f` change. `apply_tasks` now **preserves** `hide_window_days`/`filter_date` across the
+  reload (else the label + later fetches would revert). **(c)** Re-anchored the today/older split, the
+  date header, and the collapse indicators on `A` (render + `apply_subtasks` selection clamp); the
+  older separator label is now dynamic `Last {X} days` (`older_separator_label`). **(d)** Two dialogs
+  cloned from the timer `DurationEditState` pattern: `F` (`WindowEditState`) numeric editor — rejects
+  `0`/non-numeric inline (min X = 1; today-only stays via `h`); `f` (`DateFilterState`) three-component
+  `DD/MM/YYYY` editor seeded to today — Tab/Shift+Tab cycle day↔month↔year, Up/Down adjust the focused
+  component with **wrap-in-place, no carry** (`month 1 −1 → 12`, `day 1 −1 → 31`, `day 31 +1 → 1`;
+  year clamped ≥ 1970), no calendar validation; submit maps `(d,m,y)` → day-number via the new pure
+  `ui::days_from_civil` (Hinnant inverse of the existing `civil_from_days`), sets `filter_date`,
+  re-anchors, re-fetches. **(e)** New `Event` variants `BeginEditWindow`/`BeginFilterDate` (F/f, gated
+  `on_tasks && globals_live`) + `IncrementField`/`DecrementField` (Up/Down while the `f` editor is
+  open); `overlay_capturing_input` updated via `in_sub_flow` (both dialogs suppress globals + tab
+  switch); `is_text_entry` includes the `F` numeric editor. Help overlay: added a **third Tasks
+  reference line** `F window size · f filter by date` (41 cols) rather than lengthening the existing
+  lines (64/66 cols) — no line exceeds the ~70-col inner width, no wrap (0015/0019 gotcha).
+  **Surface for tester:** no `Client`/`ClientRequest`/`Outcome` change (reuses `ListTasks` with the
+  new `TaskListQuery` window params); the re-strand is the four new `TaskListState` fields
+  (`hide_window_days`/`filter_date`/`editing_window`/`filtering_date`) + every `ListTasks` query now
+  carrying `created_from`/`created_until`, plus the four new `Event` variants. Gates: `./ok.sh fmt
+  --check` clean; `cargo clippy --lib --bins -p tui` clean; lib+bins build. `--all-targets` is red only
+  on `crates/tui/tests/common/mod.rs` (expected 0019/0020 harness re-strand — tester slice 4). Files:
+  `crates/tui/src/app/{task_list.rs,mod.rs}`, `terminal/mod.rs`, `ui/mod.rs`.
 
 ## Summary
 

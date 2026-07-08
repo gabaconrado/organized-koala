@@ -47,8 +47,21 @@ pub enum VisibleRow {
 }
 
 /// The label rendered on the [`VisibleRow::OlderSeparator`] row (acceptance #3), before it is
-/// padded to the full pane inner width at draw time.
+/// padded to the full pane inner width at draw time. Retained as the pre-0023 default label; the
+/// live separator now renders the dynamic `Last {X} days` text (ADR-0015), see the render layer.
 pub const OLDER_SEPARATOR_LABEL: &str = "Older tasks";
+
+/// Default size of the "hide tasks older than X days" window (ADR-0015): the anchor day plus the
+/// previous `X` days. Ephemeral in-session view-state, reset to this on every restart (#1).
+pub const DEFAULT_HIDE_WINDOW_DAYS: u32 = 3;
+
+/// Minimum accepted window size for the `F` editor: `1` yields a 2-day window `[anchor − 1, anchor]`
+/// (operator, 2026-07-08). `0` is rejected inline — today-only is reached via the `h` toggle, not an
+/// `X = 0` mode.
+pub const MIN_HIDE_WINDOW_DAYS: u32 = 1;
+
+/// Lower bound on the `f` date editor's year component (ADR-0015 / feature 0023): `year ≥ 1970`.
+pub const MIN_FILTER_YEAR: i64 = 1970;
 
 /// What a two-step delete confirmation is armed against: the selected **task** or the selected
 /// **sub-task** (which carries its parent task id, since the delete wire is task-scoped). Resolving
@@ -74,7 +87,7 @@ pub enum DeleteTarget {
 /// split). Kept in epoch seconds — like the timer countdown — so the `tui` crate stays free of a
 /// direct `chrono` dependency (hard-constraint A8): the caller derives seconds from the DTO's
 /// `DateTime` via `timestamp()`, and grouping compares whole-day numbers.
-const SECS_PER_DAY: i64 = 86_400;
+pub(crate) const SECS_PER_DAY: i64 = 86_400;
 
 /// The whole-day number (days since the Unix epoch) of a UTC timestamp in epoch **seconds**. Two
 /// timestamps map to the same day iff they share this number. Pure integer math (no `chrono`), so
@@ -82,6 +95,107 @@ const SECS_PER_DAY: i64 = 86_400;
 #[must_use]
 pub fn day_number(epoch_secs: i64) -> i64 {
     epoch_secs.div_euclid(SECS_PER_DAY)
+}
+
+/// The `F` window-size editor: a single numeric input buffer for the new "hide older than X days"
+/// window. The same transient text-entry sub-flow category as [`AddTaskState`](super::AddTaskState)
+/// and the timer [`DurationEditState`](super::DurationEditState); reset on restart, never persisted
+/// (#1).
+#[derive(Debug, Clone)]
+pub struct WindowEditState {
+    /// The entered window text (digits only; parsed on submit).
+    pub buffer: String,
+    /// Inline error (a `0`/non-numeric value rejected on submit), if any.
+    pub error: Option<String>,
+}
+
+impl WindowEditState {
+    fn new(current: u32) -> Self {
+        Self {
+            buffer: current.to_string(),
+            error: None,
+        }
+    }
+
+    fn push_char(&mut self, c: char) {
+        if c.is_ascii_digit() {
+            self.buffer.push(c);
+        }
+    }
+
+    fn backspace(&mut self) {
+        let _ = self.buffer.pop();
+    }
+}
+
+/// Which component of the [`DateFilterState`] editor the focus is on. `Tab` cycles
+/// day → month → year; Up/Down adjust the focused component.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DateComponent {
+    /// The day-of-month component (bounded 1–31, wraps in place).
+    Day,
+    /// The month component (bounded 1–12, wraps in place).
+    Month,
+    /// The year component (bounded `≥ 1970`).
+    Year,
+}
+
+/// The `f` date-filter editor: a three-component `DD/MM/YYYY` selector seeded to today. Up/Down
+/// adjust the focused component with **wrap-in-place, no carry** (`month 1 −1 → 12` without touching
+/// the year; `day 1 −1 → 31`; `day 31 +1 → 1`); no calendar validation (28/30/31 not checked). On
+/// submit the `(day, month, year)` maps to a civil day-number. Transient in-session view-state (#1).
+#[derive(Debug, Clone)]
+pub struct DateFilterState {
+    /// Selected day of month, 1–31 (not calendar-validated against the month).
+    pub day: u32,
+    /// Selected month, 1–12.
+    pub month: u32,
+    /// Selected year, `≥ 1970`.
+    pub year: i64,
+    /// Which component the focus is on.
+    pub focus: DateComponent,
+}
+
+impl DateFilterState {
+    /// Seed the editor to `today_day` (a civil day-number), focus on the day component.
+    fn new(today_day: i64) -> Self {
+        let (year, month, day) = crate::ui::civil_from_days(today_day);
+        Self {
+            day,
+            month,
+            year,
+            focus: DateComponent::Day,
+        }
+    }
+
+    /// Cycle the focused component forward (`Tab`) or backward (`Shift+Tab`): day → month → year.
+    fn cycle(&mut self, forward: bool) {
+        self.focus = match (self.focus, forward) {
+            (DateComponent::Day, true) | (DateComponent::Year, false) => DateComponent::Month,
+            (DateComponent::Month, true) | (DateComponent::Day, false) => DateComponent::Year,
+            (DateComponent::Year, true) | (DateComponent::Month, false) => DateComponent::Day,
+        };
+    }
+
+    /// Increment the focused component with wrap-in-place (no carry): day 31 → 1, month 12 → 1, year
+    /// unbounded upward.
+    fn increment(&mut self) {
+        match self.focus {
+            DateComponent::Day => self.day = if self.day >= 31 { 1 } else { self.day + 1 },
+            DateComponent::Month => self.month = if self.month >= 12 { 1 } else { self.month + 1 },
+            DateComponent::Year => self.year += 1,
+        }
+    }
+
+    /// Decrement the focused component with wrap-in-place (no carry): day 1 → 31, month 1 → 12, year
+    /// clamped at [`MIN_FILTER_YEAR`].
+    fn decrement(&mut self) {
+        match self.focus {
+            DateComponent::Day => self.day = if self.day <= 1 { 31 } else { self.day - 1 },
+            DateComponent::Month => self.month = if self.month <= 1 { 12 } else { self.month - 1 },
+            DateComponent::Year => self.year = (self.year - 1).max(MIN_FILTER_YEAR),
+        }
+    }
 }
 
 /// State of the task-list screen for the active profile.
@@ -124,6 +238,18 @@ pub struct TaskListState {
     /// (the `h` toggle, acceptance #4). Default `false` (older shown). Ephemeral process-lifetime
     /// view state, never persisted (#1).
     pub hide_older: bool,
+    /// Size of the "hide tasks older than X days" window (ADR-0015): the list shows the anchor day
+    /// plus the previous `hide_window_days` days. Default [`DEFAULT_HIDE_WINDOW_DAYS`]. Ephemeral
+    /// in-session query input, reset on restart (#1); the `F` editor changes it and re-fetches.
+    pub hide_window_days: u32,
+    /// The selected filter day as a civil day-number (day granularity), or `None` to anchor on
+    /// today. Set by the `f` date editor; re-anchors the window and the today/older split on the
+    /// selected day (ADR-0015). Ephemeral in-session query input, never persisted (#1).
+    pub filter_date: Option<i64>,
+    /// Active `F` window-size editor, if open. While set, the tasks pane owns keystrokes.
+    pub editing_window: Option<WindowEditState>,
+    /// Active `f` date-filter editor, if open. While set, the tasks pane owns keystrokes.
+    pub filtering_date: Option<DateFilterState>,
 }
 
 impl TaskListState {
@@ -143,7 +269,18 @@ impl TaskListState {
             message: None,
             pending: None,
             hide_older: false,
+            hide_window_days: DEFAULT_HIDE_WINDOW_DAYS,
+            filter_date: None,
+            editing_window: None,
+            filtering_date: None,
         }
+    }
+
+    /// The anchor civil day-number the today/older split, date header, and window query are anchored
+    /// on: the selected [`Self::filter_date`] if set, else the wall-clock `today_day` (ADR-0015).
+    #[must_use]
+    pub fn anchor_day(&self, today_day: i64) -> i64 {
+        self.filter_date.unwrap_or(today_day)
     }
 
     /// Whether the task list currently has a request outstanding.
@@ -167,6 +304,8 @@ impl TaskListState {
             || self.editing.is_some()
             || self.adding_subtask.is_some()
             || self.editing_subtask.is_some()
+            || self.editing_window.is_some()
+            || self.filtering_date.is_some()
             || self.detail.is_some()
     }
 
@@ -384,6 +523,15 @@ impl TaskListState {
         if self.editing_subtask.is_some() {
             return self.handle_edit_subtask_event(event, session);
         }
+        // The `F` window-size / `f` date-filter editors own keystrokes while open, like the other
+        // sub-flows. Both re-fetch on submit (X or D changed), so they need the wall-clock
+        // `today_day` for the query's default anchor when no filter day is set (ADR-0015).
+        if self.editing_window.is_some() {
+            return self.handle_window_edit_event(event, session, today_day);
+        }
+        if self.filtering_date.is_some() {
+            return self.handle_date_filter_event(event, session, today_day);
+        }
         if self.detail.is_some() {
             return self.handle_detail_event(event, session);
         }
@@ -392,44 +540,159 @@ impl TaskListState {
         if self.confirming_delete.is_some() {
             return self.handle_delete_confirm_event(event, session);
         }
+        // The today/older split and every selection operation anchor on `A` (the selected filter
+        // day, else today; ADR-0015), not the raw wall-clock day.
+        let anchor = self.anchor_day(today_day);
         match event {
-            Event::Next => self.move_selection(today_day, true),
-            Event::Prev => self.move_selection(today_day, false),
+            Event::Next => self.move_selection(anchor, true),
+            Event::Prev => self.move_selection(anchor, false),
             Event::BeginAddTask => {
                 self.message = None;
                 self.adding = Some(AddTaskState::new());
             }
-            Event::BeginAddSubtask => self.begin_add_subtask(today_day),
+            Event::BeginAddSubtask => self.begin_add_subtask(anchor),
             // `e` edits the selected sub-task's title when a sub-task row is selected, else the
             // selected task (the existing task edit sub-flow).
             Event::BeginEditTask => {
-                if self.selected_subtask(today_day).is_some() {
-                    self.begin_edit_subtask(today_day);
+                if self.selected_subtask(anchor).is_some() {
+                    self.begin_edit_subtask(anchor);
                 } else {
-                    self.begin_edit(today_day);
+                    self.begin_edit(anchor);
                 }
             }
             // `Space` toggles the selected sub-task when a sub-task row is selected, else the task.
             Event::ToggleDone => {
-                if self.selected_subtask(today_day).is_some() {
-                    return self.toggle_subtask_done(session, today_day);
+                if self.selected_subtask(anchor).is_some() {
+                    return self.toggle_subtask_done(session, anchor);
                 }
-                return self.toggle_done(session, today_day);
+                return self.toggle_done(session, anchor);
             }
             // `x` toggles collapse for the parent task of the current selection (ADR-0012 §5).
-            Event::ToggleCollapse => self.toggle_collapse(today_day),
+            Event::ToggleCollapse => self.toggle_collapse(anchor),
             // `h` hides / shows the created-before-today ("older") group and its separator
             // (acceptance #4); re-clamps the selection so it never points past the new row count.
-            Event::ToggleHideOlder => self.toggle_hide_older(today_day),
+            Event::ToggleHideOlder => self.toggle_hide_older(anchor),
+            // `F` opens the window-size editor; `f` opens the date-filter editor seeded to today
+            // (ADR-0015). The date editor seeds to the real wall-clock day, not the anchor.
+            Event::BeginEditWindow => self.begin_edit_window(),
+            Event::BeginFilterDate => self.begin_filter_date(today_day),
             // `Enter` on a task row opens its detail view (chaining a per-task sub-task load for
             // the "Sub-tasks" section); on a sub-task row it is inert (a sub-task has no detail
             // view, ADR-0012 §1 / A8).
-            Event::Submit => return self.open_detail(session, today_day),
-            Event::DeleteSelected => self.arm_delete(today_day),
-            Event::Refresh => return self.refresh(session),
+            Event::Submit => return self.open_detail(session, anchor),
+            Event::DeleteSelected => self.arm_delete(anchor),
+            Event::Refresh => return self.refresh(session, today_day),
             _ => {}
         }
         None
+    }
+
+    /// Begin the `F` window-size editor, seeded with the current window size.
+    fn begin_edit_window(&mut self) {
+        self.message = None;
+        self.editing_window = Some(WindowEditState::new(self.hide_window_days));
+    }
+
+    /// Begin the `f` date-filter editor, seeded to `today_day` (the wall-clock day; feature 0023 /
+    /// acceptance #3 — "opens with today's date selected").
+    fn begin_filter_date(&mut self, today_day: i64) {
+        self.message = None;
+        self.filtering_date = Some(DateFilterState::new(today_day));
+    }
+
+    /// Handle a key while the `F` window-size editor is open: `Submit` parses + applies the new
+    /// window and re-fetches; `Cancel` abandons it; `Char`/`Backspace` edit the numeric buffer.
+    fn handle_window_edit_event(
+        &mut self,
+        event: Event,
+        session: Option<&Session>,
+        today_day: i64,
+    ) -> Option<ClientRequest> {
+        let Some(edit) = &mut self.editing_window else {
+            return None;
+        };
+        match event {
+            Event::Char(c) => edit.push_char(c),
+            Event::Backspace => edit.backspace(),
+            Event::Cancel => self.editing_window = None,
+            Event::Submit => return self.submit_window_edit(session, today_day),
+            _ => {}
+        }
+        None
+    }
+
+    /// Parse and apply the window-size buffer, re-fetching with the new window. A non-numeric value
+    /// or one below [`MIN_HIDE_WINDOW_DAYS`] (`0`) surfaces an inline error and issues no request —
+    /// today-only is reached with the `h` toggle, not an `X = 0` mode (operator, 2026-07-08).
+    fn submit_window_edit(
+        &mut self,
+        session: Option<&Session>,
+        today_day: i64,
+    ) -> Option<ClientRequest> {
+        let buffer = self.editing_window.as_ref()?.buffer.trim().to_owned();
+        match buffer.parse::<u32>() {
+            Ok(days) if days >= MIN_HIDE_WINDOW_DAYS => {
+                self.hide_window_days = days;
+                self.editing_window = None;
+                self.refresh(session, today_day)
+            }
+            Ok(_) => {
+                self.set_window_error("window must be at least 1 day");
+                None
+            }
+            Err(_) => {
+                self.set_window_error("window must be a whole number of days");
+                None
+            }
+        }
+    }
+
+    /// Set the inline error on the open window editor (a no-op if it closed).
+    fn set_window_error(&mut self, message: &str) {
+        if let Some(edit) = &mut self.editing_window {
+            edit.error = Some(message.to_owned());
+        }
+    }
+
+    /// Handle a key while the `f` date-filter editor is open: `Next`/`Prev` (Tab/Shift+Tab) cycle
+    /// the focused component; `IncrementField`/`DecrementField` (Up/Down) adjust it with
+    /// wrap-in-place; `Submit` applies the selected day and re-fetches; `Cancel` abandons it.
+    fn handle_date_filter_event(
+        &mut self,
+        event: Event,
+        session: Option<&Session>,
+        today_day: i64,
+    ) -> Option<ClientRequest> {
+        let Some(filter) = &mut self.filtering_date else {
+            return None;
+        };
+        match event {
+            Event::Next => filter.cycle(true),
+            Event::Prev => filter.cycle(false),
+            Event::IncrementField => filter.increment(),
+            Event::DecrementField => filter.decrement(),
+            Event::Cancel => self.filtering_date = None,
+            Event::Submit => return self.submit_date_filter(session, today_day),
+            _ => {}
+        }
+        None
+    }
+
+    /// Apply the selected `(day, month, year)` as the filter day-number, re-anchoring the window and
+    /// re-fetching (ADR-0015). No calendar validation (an out-of-range day/month still yields a
+    /// deterministic day-number via [`crate::ui::days_from_civil`]).
+    fn submit_date_filter(
+        &mut self,
+        session: Option<&Session>,
+        today_day: i64,
+    ) -> Option<ClientRequest> {
+        let day_number = {
+            let filter = self.filtering_date.as_ref()?;
+            crate::ui::days_from_civil(filter.year, filter.month, filter.day)
+        };
+        self.filter_date = Some(day_number);
+        self.filtering_date = None;
+        self.refresh(session, today_day)
     }
 
     /// Toggle whether the older group + separator are shown (`h`, acceptance #4). Hiding rows can
@@ -860,12 +1123,15 @@ impl TaskListState {
         }
     }
 
-    fn refresh(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
+    fn refresh(&mut self, session: Option<&Session>, today_day: i64) -> Option<ClientRequest> {
         let session = session?;
         Some(ClientRequest::ListTasks {
             token: session.token.clone(),
             profile_id: session.profile_id.clone(),
-            query: super::task_list_query(),
+            query: super::windowed_task_list_query(
+                self.anchor_day(today_day),
+                self.hide_window_days,
+            ),
         })
     }
 }

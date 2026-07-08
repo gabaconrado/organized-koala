@@ -33,7 +33,10 @@ pub use profiles::{ProfileForm, ProfilesMode, ProfilesState};
 pub use protocol::{ClientRequest, ClientResponse, Outcome, RequestId};
 pub use task_add::{AddSubtaskState, AddTaskState, EditSubtaskState, EditTaskState};
 pub use task_detail::{TaskDetail, TaskPane};
-pub use task_list::{DeleteTarget, OLDER_SEPARATOR_LABEL, TaskListState, VisibleRow};
+pub use task_list::{
+    DateComponent, DateFilterState, DeleteTarget, OLDER_SEPARATOR_LABEL, TaskListState, VisibleRow,
+    WindowEditState,
+};
 pub use timer::{DurationEditState, Timer};
 pub use token::SessionToken;
 
@@ -78,6 +81,18 @@ pub enum Event {
     /// Toggle whether the created-before-today ("older") task group and its "Older tasks" separator
     /// are hidden (task list only; `h`, ADR-0014 §5). Default shown; ephemeral view state (#1).
     ToggleHideOlder,
+    /// Begin the `F` window-size editor (task list only; ADR-0015): configure how many days of
+    /// older tasks the list shows (`[anchor − X, anchor]`).
+    BeginEditWindow,
+    /// Begin the `f` date-filter editor (task list only; ADR-0015): a `DD/MM/YYYY` selector seeded
+    /// to today that re-anchors the window on the chosen day.
+    BeginFilterDate,
+    /// Increment the focused component of the open date-filter editor (Up). Produced only while the
+    /// `f` editor is open (task list only; ADR-0015).
+    IncrementField,
+    /// Decrement the focused component of the open date-filter editor (Down). Produced only while
+    /// the `f` editor is open (task list only; ADR-0015).
+    DecrementField,
     /// Begin editing the selected task's title/description (task list only).
     BeginEditTask,
     /// Toggle the selected task between done and open (task list only): a done task is reopened,
@@ -138,11 +153,24 @@ pub struct Dispatch {
 /// and offset 0 — the TUI does not paginate.
 pub const TASK_LIST_LIMIT: u32 = 200;
 
-/// The task-list query the TUI sends on every `ListTasks`: [`TASK_LIST_LIMIT`] tasks, offset 0.
-fn task_list_query() -> contract::TaskListQuery {
+/// The windowed task-list query the TUI sends on every `ListTasks` (ADR-0015): [`TASK_LIST_LIMIT`]
+/// tasks, offset 0, plus a day-aligned `created_at` window anchored on `anchor_day` (a civil
+/// day-number) spanning the last `hide_window_days` days. `created_from = (anchor − X) · 86400`
+/// (inclusive) and `created_until = (anchor + 1) · 86400` (exclusive, so the anchor day is fully
+/// included). The server applies these as a plain timestamp range with no civil-day math; the
+/// day-alignment is the TUI convention.
+fn windowed_task_list_query(anchor_day: i64, hide_window_days: u32) -> contract::TaskListQuery {
+    let from = anchor_day
+        .saturating_sub(i64::from(hide_window_days))
+        .saturating_mul(task_list::SECS_PER_DAY);
+    let until = anchor_day
+        .saturating_add(1)
+        .saturating_mul(task_list::SECS_PER_DAY);
     contract::TaskListQuery {
         limit: Some(TASK_LIST_LIMIT),
         offset: Some(0),
+        created_from: Some(from),
+        created_until: Some(until),
     }
 }
 
@@ -496,6 +524,21 @@ impl App {
         }
     }
 
+    /// The windowed task-list query for the current tasks pane: anchored on its selected
+    /// `filter_date` (else today) over its `hide_window_days` window (ADR-0015). During the
+    /// post-auth bootstrap — before the tasks pane exists — it falls back to today plus the default
+    /// window, so the very first list load is already date-windowed end-to-end.
+    fn task_list_query(&self) -> contract::TaskListQuery {
+        let (anchor, window) = match &self.screen {
+            Screen::Main(main) => (
+                main.tasks.filter_date.unwrap_or_else(current_day_number),
+                main.tasks.hide_window_days,
+            ),
+            _ => (current_day_number(), task_list::DEFAULT_HIDE_WINDOW_DAYS),
+        };
+        windowed_task_list_query(anchor, window)
+    }
+
     /// Switch the tabbed view to `tab` and dispatch a fresh list load for the destination pane,
     /// preserving that pane's selected row across the reload (transient UI state). The pane data is
     /// always re-derived from a server response for the active profile (#1, #4). A no-op without a
@@ -507,11 +550,14 @@ impl App {
         };
         main.active_tab = tab;
         match tab {
-            Tab::Tasks => Some(self.dispatch_screen(ClientRequest::ListTasks {
-                token: session.token,
-                profile_id: session.profile_id,
-                query: task_list_query(),
-            })),
+            Tab::Tasks => {
+                let query = self.task_list_query();
+                Some(self.dispatch_screen(ClientRequest::ListTasks {
+                    token: session.token,
+                    profile_id: session.profile_id,
+                    query,
+                }))
+            }
             Tab::Notes => Some(self.dispatch_screen(ClientRequest::ListNotes {
                 token: session.token,
                 profile_id: session.profile_id,
@@ -740,10 +786,11 @@ impl App {
         match result {
             Ok(()) => {
                 if let Some(session) = self.session.clone() {
+                    let query = self.task_list_query();
                     Some(self.dispatch_screen(ClientRequest::ListTasks {
                         token: session.token,
                         profile_id: session.profile_id,
-                        query: task_list_query(),
+                        query,
                     }))
                 } else {
                     self.go_to_login();
@@ -818,11 +865,13 @@ impl App {
                 });
                 // The auth screen still holds the in-flight marker; carry it forward by
                 // re-dispatching the task load (the new id replaces it on the auth screen until
-                // the task list materialises in `apply_tasks`).
+                // the task list materialises in `apply_tasks`). Before the tasks pane exists the
+                // query falls back to today + the default window (ADR-0015).
+                let query = self.task_list_query();
                 Some(self.dispatch_screen(ClientRequest::ListTasks {
                     token,
                     profile_id: profile.id,
-                    query: task_list_query(),
+                    query,
                 }))
             }
             Err(err) => {
@@ -1111,6 +1160,11 @@ impl App {
                         state.subtasks = std::mem::take(&mut main.tasks.subtasks);
                         state.collapse_overrides =
                             std::mem::take(&mut main.tasks.collapse_overrides);
+                        // Carry the ephemeral date-window view-state (ADR-0015) across the reload:
+                        // a refresh triggered by an `F`/`f` change must keep the new window, or the
+                        // dynamic separator label and every later fetch would revert to the default.
+                        state.hide_window_days = main.tasks.hide_window_days;
+                        state.filter_date = main.tasks.filter_date;
                         if main.tasks.selected.is_some() && state.selected.is_some() {
                             state.selected = main.tasks.selected;
                         }
@@ -1166,7 +1220,8 @@ impl App {
                         list.tasks.iter().map(|t| t.id.as_str()).collect();
                     list.collapse_overrides
                         .retain(|task_id, _| present.contains(task_id.as_str()));
-                    let rows = list.visible_rows(current_day_number()).len();
+                    let anchor = list.anchor_day(current_day_number());
+                    let rows = list.visible_rows(anchor).len();
                     list.selected = match (rows, list.selected) {
                         (0, _) => None,
                         (_, Some(i)) if i >= rows => Some(rows - 1),
@@ -1195,10 +1250,11 @@ impl App {
                     self.go_to_login();
                     return None;
                 };
+                let query = self.task_list_query();
                 Some(self.dispatch_screen(ClientRequest::ListTasks {
                     token: session.token,
                     profile_id: session.profile_id,
-                    query: task_list_query(),
+                    query,
                 }))
             }
             Err(err) => {
@@ -1386,10 +1442,11 @@ impl App {
             self.go_to_login();
             return None;
         };
+        let query = self.task_list_query();
         Some(self.dispatch_screen(ClientRequest::ListTasks {
             token: session.token,
             profile_id: session.profile_id,
-            query: task_list_query(),
+            query,
         }))
     }
 

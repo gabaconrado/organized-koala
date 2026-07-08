@@ -17,8 +17,9 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::app::{
-    App, AuthField, AuthMode, AuthState, MainState, NoteDetail, NotePane, NotesMode, NotesState,
-    ProfilesMode, ProfilesState, Screen, Tab, TaskDetail, TaskListState, TaskPane, Timer,
+    App, AuthField, AuthMode, AuthState, DateComponent, MainState, NoteDetail, NotePane, NotesMode,
+    NotesState, ProfilesMode, ProfilesState, Screen, Tab, TaskDetail, TaskListState, TaskPane,
+    Timer,
 };
 use contract::{Note, TaskStatus, TimerSession};
 
@@ -218,8 +219,64 @@ fn draw_active_dialog(frame: &mut Frame, main: &MainState, timer: &Timer) {
     }
 }
 
-/// The task add / edit / delete-confirm dialog, if one is open.
+/// The task add / edit / delete-confirm dialog, or the `F` window-size / `f` date-filter editor, if
+/// one is open. Temporary display strings are owned locally so each [`Dialog`] can borrow them.
 fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
+    if let Some(edit) = &list.editing_window {
+        draw_dialog(
+            frame,
+            &Dialog {
+                title: "Hide tasks older than",
+                width: DIALOG_WIDTH,
+                fields: vec![DialogField {
+                    label: "Window (days)",
+                    value: &edit.buffer,
+                    focused: true,
+                    masked: false,
+                }],
+                body: Vec::new(),
+                error: edit.error.as_deref(),
+                hint: "Enter: save | Esc: cancel",
+            },
+        );
+        return;
+    }
+    if let Some(filter) = &list.filtering_date {
+        let day = filter.day.to_string();
+        let month = filter.month.to_string();
+        let year = filter.year.to_string();
+        draw_dialog(
+            frame,
+            &Dialog {
+                title: "Filter by date (DD/MM/YYYY)",
+                width: DIALOG_WIDTH,
+                fields: vec![
+                    DialogField {
+                        label: "Day",
+                        value: &day,
+                        focused: matches!(filter.focus, DateComponent::Day),
+                        masked: false,
+                    },
+                    DialogField {
+                        label: "Month",
+                        value: &month,
+                        focused: matches!(filter.focus, DateComponent::Month),
+                        masked: false,
+                    },
+                    DialogField {
+                        label: "Year",
+                        value: &year,
+                        focused: matches!(filter.focus, DateComponent::Year),
+                        masked: false,
+                    },
+                ],
+                body: Vec::new(),
+                error: None,
+                hint: "Up/Down: adjust | Tab: next field | Enter: apply | Esc: cancel",
+            },
+        );
+        return;
+    }
     if let Some(add) = &list.adding {
         draw_dialog(
             frame,
@@ -461,6 +518,7 @@ fn draw_help(frame: &mut Frame) {
         Line::from(""),
         Line::from("Tasks    a add · A add sub-task · e edit · Space done · d delete"),
         Line::from("         x collapse/expand sub-tasks · Enter detail · h hide older"),
+        Line::from("         F window size · f filter by date"),
         Line::from("Notes    a add · e edit · d delete · Enter detail"),
         Line::from("Profiles Enter switch · a add · e rename · d delete"),
         Line::from(""),
@@ -982,23 +1040,28 @@ fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
         draw_task_detail(frame, area, detail);
         return;
     }
-    let today_day = crate::app::current_day_number();
+    // The today/older split, the date header, and the collapse indicators all anchor on `A` (the
+    // selected filter day, else today; ADR-0015), so a past-day filter re-titles the header and
+    // re-groups the rows around that day.
+    let anchor_day = list.anchor_day(crate::app::current_day_number());
     let block = Block::default().borders(Borders::ALL).title("Tasks");
     // The list's inner (content) width, inside the two border columns; both separator rows span it.
     let inner_width = usize::from(block.inner(area).width);
     // The date row is prepended at draw and is NOT part of `visible_rows`; a bold, non-selectable
-    // full-width separator carrying today's date.
+    // full-width separator carrying the anchor day's date.
     let mut items: Vec<ListItem> = vec![ListItem::new(Line::from(Span::styled(
-        separator_line(&today_header(today_day), inner_width),
+        separator_line(&today_header(anchor_day), inner_width),
         Style::default().add_modifier(Modifier::BOLD),
     )))];
-    items.extend(list.visible_rows(today_day).into_iter().filter_map(|row| {
+    // The older-group separator reads `Last {X} days` (the window size, ADR-0015), computed once.
+    let older_label = older_separator_label(list.hide_window_days);
+    items.extend(list.visible_rows(anchor_day).into_iter().filter_map(|row| {
         match row {
             crate::app::VisibleRow::Task { task_idx } => list.tasks.get(task_idx).map(|task| {
                 // `+` when the task has sub-tasks AND they resolve collapsed for this day (the
                 // group-aware resolution matching `visible_rows`, ADR-0014 §5); otherwise `>`.
                 let indicator =
-                    if list.has_subtasks(task) && list.resolve_collapsed(task, today_day) {
+                    if list.has_subtasks(task) && list.resolve_collapsed(task, anchor_day) {
                         '+'
                     } else {
                         '>'
@@ -1019,10 +1082,10 @@ fn draw_task_pane(frame: &mut Frame, area: Rect, list: &TaskListState) {
                     )))
                 })
             }
-            // The non-selectable full-width "Older tasks" separator between the two groups.
+            // The non-selectable full-width `Last {X} days` separator between the two groups.
             crate::app::VisibleRow::OlderSeparator => {
                 Some(ListItem::new(Line::from(Span::styled(
-                    separator_line(crate::app::OLDER_SEPARATOR_LABEL, inner_width),
+                    separator_line(&older_label, inner_width),
                     Style::default().add_modifier(Modifier::DIM),
                 ))))
             }
@@ -1053,6 +1116,12 @@ fn separator_line(label: &str, inner_width: usize) -> String {
     let left = fill / 2;
     let right = fill - left;
     format!("{} {label} {}", "─".repeat(left), "─".repeat(right))
+}
+
+/// The dynamic older-group separator label (ADR-0015): `Last {X} days`, rendering the numeric
+/// window size (e.g. `Last 3 days`), replacing the pre-0023 static "Older tasks" text.
+fn older_separator_label(hide_window_days: u32) -> String {
+    format!("Last {hide_window_days} days")
 }
 
 /// The message line for the Tasks pane: the timer message, or the pane's own transient message.
@@ -1233,6 +1302,24 @@ pub fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let month = u32::try_from(m).unwrap_or(1);
     let day = u32::try_from(d).unwrap_or(1);
     (year, month, day)
+}
+
+/// The day number (days since 1970-01-01) for a civil `(year, month, day)`, via Howard Hinnant's
+/// `days_from_civil` — the inverse of [`civil_from_days`]. Pure integer math (no `chrono`, no
+/// timezone; A8), so the `f` date-filter submit is deterministic and unit-testable. Inputs are
+/// **not** calendar-validated (the date-filter editor bounds day 1–31 / month 1–12 / year ≥ 1970
+/// but does not check 28/30/31); an out-of-range day still yields a deterministic day number.
+#[must_use]
+pub fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
+    let m = i64::from(month);
+    let d = i64::from(day);
+    let y = if m <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400; // [0, 399]
+    let mp = if m > 2 { m - 3 } else { m + 9 }; // [0, 11]
+    let doy = (153 * mp + 2) / 5 + d - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    era * 146_097 + doe - 719_468
 }
 
 /// The weekday index (0 = Sunday .. 6 = Saturday) for a day number. 1970-01-01 was a Thursday
