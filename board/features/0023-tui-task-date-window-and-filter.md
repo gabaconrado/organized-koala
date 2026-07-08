@@ -2,7 +2,7 @@
 id: 0023
 title: TUI task date-window (hide older than X days) + filter-by-day
 type: feature      # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0020]  # builds on the today/older split, `h` hide toggle, and the 200-cap (merged)
@@ -263,6 +263,13 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
   TUI TestBackend suites green (`date_window.rs` 10, `dialogs.rs` 26, tui `tasks.rs` 30, server
   `tasks.rs` 35). Inferred only: the shipped reqwest binary's own serialization (hit server via
   curl; wire shape test-pinned identical). No blocking gaps.
+- [x] 2026-07-08 [orchestrator] Step-7 freshen — rebased onto `main` @ `9f476d5` (docs/board-only
+  advance: 0023 handoff + dashboard from eng-manager). Only conflict was this feature-local Board
+  file's claim entry (resolved in favour of the branch, dropping `main`'s frozen-pointer note).
+  `./ok.sh code-hash HEAD` is **unchanged at `700e3b535c587fd309e4de0a5f973867a577fc02`** (code
+  byte-identical), so the approved+verified verdicts carry forward untouched — no relabelling.
+  Re-ran gates on the rebased tree: `./ok.sh test | lint | fmt --check` all green. Status →
+  awaiting-merge.
 
 ## Summary
 
