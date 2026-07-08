@@ -60,7 +60,32 @@ backlog".
 | [0020](./features/0020-tui-tasks-pane-rendering-overhaul.md) | Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap | feature | merged | medium | 0019 (merged ✓) | — (merged) |
 | [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | merged | medium | 0012 (merged ✓) | — (merged) |
 | [0022](./features/0022-verifier-hermetic-teardown.md) | Make the verifier stack boot hermetic — always tear down its own volume (`down -v` on any exit) | chore | inbox | low | — | — (unclaimed) |
+| [0023](./features/0023-tui-task-date-window-and-filter.md) | TUI task date-window (hide older than X days) + filter-by-day | feature | review (branch) | medium | 0020 (merged ✓) | `feature/0023-tui-task-date-window-and-filter` |
 
+> **0023 — TUI task date-window + filter-by-day — `review`/in-flight on the branch** (a
+> full-stack `feature`; approved + verified, heading toward `awaiting-merge`). The `main` snapshot
+> is frozen at the `ready` claim; the authoritative live status is on the branch. Governed by
+> [ADR-0015](../docs/adr/0015-task-list-date-window-query.md) (the wire event; also closes the
+> idea-0009 date-basis fork as **keep-UTC**). Adds a **server-backed UTC-civil-day window** over
+> `created_at` plus two client-only, non-persistent knobs. `contract` gains two optional
+> epoch-second bounds `created_from` (inclusive) / `created_until` (exclusive) on `TaskListQuery`,
+> both `skip_serializing_if` so **absent-both is byte-identical to pre-0023**; the server applies
+> them as plain `to_timestamp` range predicates (no civil-day math server-side) with `from > until`
+> → `400 validation_failed`, `from == until` → `200 []`, composing with `created_at DESC` /
+> profile-scoping (#4) / the ADR-0014 `limit`/`offset` semantics; `.sqlx/` refreshed. No
+> `Task`/`Subtask` field (#3), no migration. TUI: `F` sets window size X (default 3, min 1; dynamic
+> `Last {X} days` separator), `f` is a `DD/MM/YYYY` editor seeded to today (Tab cycles
+> day↔month↔year, Up/Down wrap-in-place **no carry**, year ≥ 1970, no calendar validation per
+> ADR-0015) that re-anchors the window to `[D − X, D]` and re-fetches — both ephemeral
+> `TaskListState` view-state (#1). **Default-behaviour shift (intended, planned Risk):** the default
+> list now hides tasks created more than 3 days ago (the TUI always sends the lower bound); older
+> tasks are reached by widening `F` or re-anchoring with `f`. Reviewer **approved** + verifier
+> **verified** live, both pinned to code-hash `700e3b535c587fd309e4de0a5f973867a577fc02`; coverage
+> 73.20% line (report-only). Two CLAUDE.md gotchas (harness re-strand, help-overlay overflow)
+> recurred exactly as predicted — no new gotcha, no standards/agent change, no new crate, no idea
+> filed (the reviewer's one out-of-scope note — `f` accepts calendar-impossible dates, normalized
+> deterministically — is by-design per ADR-0015).
+>
 > **0022 — Verifier hermetic teardown — INBOX (`chore`, unclaimed).** Minted directly (no plan)
 > from operator-accepted idea [`ideas/0001`](./ideas/0001-per-worktree-compose-isolation.md),
 > **approach (1) only**: make each verifier stack boot hermetic — always `down -v` on any exit
