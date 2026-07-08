@@ -2,7 +2,7 @@
 id: 0023
 title: TUI task date-window (hide older than X days) + filter-by-day
 type: feature      # feature | chore
-status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: [0020]  # builds on the today/older split, `h` hide toggle, and the 200-cap (merged)
