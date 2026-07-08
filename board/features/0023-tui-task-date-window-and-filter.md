@@ -248,6 +248,21 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
   regression test. No fix-now findings. One out-of-scope observation (`f` accepts calendar-impossible
   dates → `days_from_civil` normalizes deterministically) is **explicitly by-design per ADR-0015**
   ("no calendar validation") — no action.
+- [x] 2026-07-08 [verifier] Live verify — **VERIFY-STATUS: verified**, pinned to code-hash
+  `700e3b535c587fd309e4de0a5f973867a577fc02` (HEAD `be80f5c`). `./ok.sh up` booted the stack
+  healthy (one-shot `migrate` exit 0, no migration-history conflict — query-only change, no new
+  migration); `./ok.sh down` cleaned up. RAN against the live server: register/login + profile;
+  created 3 tasks at integer second 1783540757 giving a clean boundary demo — `created_from=…757`
+  → 200 all 3 (inclusive-lower), `created_until=…757` → 200 `[]` (exclusive-upper), `…758` → all 3;
+  wide window → 3, entirely-before/after → `[]`; `from > until` → **400
+  `{code:"validation_failed", message:"created_from must not be after created_until"}`**;
+  `from == until` → **200 `[]`**; absent-both → whole list as bare `[Task]` array, `created_at DESC`
+  (ADR-0005 §5 unchanged). Profile-scoping (#4) RAN: 2nd profile's task not returned for the 1st —
+  no cross-profile leakage. Error contract `{code,message}` confirmed (also `401 unauthenticated`).
+  OTel `list_tasks` span observed live (scope `organized-koalad`, attrs `user_id`/`profile_id`).
+  TUI TestBackend suites green (`date_window.rs` 10, `dialogs.rs` 26, tui `tasks.rs` 30, server
+  `tasks.rs` 35). Inferred only: the shipped reqwest binary's own serialization (hit server via
+  curl; wire shape test-pinned identical). No blocking gaps.
 
 ## Summary
 
