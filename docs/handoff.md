@@ -5,6 +5,58 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-07-08 (0023 — TUI task date-window + filter-by-day)
+
+A full-stack `feature` giving the Tasks pane a **server-backed UTC-civil-day window** over
+`created_at` plus two client-only view knobs, governed by [ADR-0015][adr-0015-h] (the wire event;
+it also resolves the idea-0009 date-basis fork as **keep-UTC**). Four slices: `contract` added two
+optional epoch-second bounds `created_from` (inclusive) / `created_until` (exclusive) to
+`TaskListQuery`, both `skip_serializing_if`, so `default()` still serializes to an empty query and
+**absent-both is byte-identical to pre-0023**. `server` applied them as two NULL-guarded
+`to_timestamp` predicates (no civil-day math server-side) with validation — `created_from >
+created_until` → `400 validation_failed`, `from == until` → `200 []` — composing with the existing
+`created_at DESC` / profile-scoping (#4) / ADR-0014 `limit`/`offset`; `.sqlx/` refreshed. `tui`
+added ephemeral, non-persistent `TaskListState` knobs: `F` numeric **window size X** (default 3,
+min 1, `0`/non-numeric rejected inline, resets on restart; the "older" separator is now the dynamic
+`Last {X} days`), and `f` a **`DD/MM/YYYY`** editor seeded to today (Tab cycles day↔month↔year,
+Up/Down wrap-in-place with **no carry**, year ≥ 1970, no calendar validation per ADR-0015).
+Selecting day D re-anchors the window to `[D − X, D]`, re-titles the header, and re-fetches. `tester`
+un-stranded the harness and added the wire-window assertions + wall-clock-relative fixture builders.
+
+- **Default-behaviour shift (planned Risk, called out in the Summary).** With default `X = 3` and
+  `anchor = today` the TUI now **always sends** the lower bound, so the **default list hides tasks
+  created more than 3 days ago** — a visible change from pre-0023 (whole list up to the cap). It is
+  intended: it is the operator's motivation (a profile with >200 tasks could not otherwise page
+  back to older ones), and older tasks are reached by widening `F` or re-anchoring with `f`. The
+  absent-params **wire** behaviour is unchanged; only the TUI's choice to always send
+  `created_from` differs.
+- **No new gotchas — two recurred exactly as predicted (reinforcement only, no CLAUDE.md edit).**
+  The **harness re-strand** gotcha (learned 0019, recurred 0020) recurred on 0023: four new
+  `TaskListState` fields (`hide_window_days`/`filter_date`/`editing_window`/`filtering_date`) plus
+  an always-on `created_from`/`created_until` on every `ListTasks` re-stranded
+  `crates/tui/tests/common/mod.rs` under `--all-targets` while the dev's `--lib --bins` gate stayed
+  green — absorbed by the tester slice (default unscripted list calls to the natural window, the
+  wall-clock-relative builder pattern reused). The **help-overlay overflow** gotcha (learned 0015,
+  recurred 0019) recurred: the two new `F`/`f` hotkeys needed a **third** Tasks reference line
+  (`F window size · f filter by date`) rather than lengthening an existing line, pinned no-wrap in
+  `dialogs.rs`. Both CLAUDE.md gotchas already predict these; no sharper phrasing was needed.
+- **Docs reconciliation (idea 0009 close-out) was already complete on `main` before this cycle's
+  eng-manager step** (main commit `f41c596`): ADR-0014 §5 carries the dated 2026-07-08 correction
+  from "local date" → "UTC civil day" citing ADR-0015; idea 0009 is `closed` (keep-UTC) with a
+  disposition that explicitly **leaves the 0020 Board item's plan/A5 "local date" text as the
+  frozen historical record** (it correctly shows plan-said-local, shipped-UTC). No residual "local
+  date" wording conflicts with keep-UTC, so **nothing was changed on `main` for the reconciliation**
+  this cycle.
+- **No idea filed.** The reviewer's one out-of-scope observation — the `f` editor accepts
+  calendar-impossible dates (e.g. 31/02), normalized deterministically by `days_from_civil` — is
+  **explicitly by-design per ADR-0015** ("no calendar validation"), so it is not a follow-up. No
+  other out-of-scope follow-up surfaced.
+
+Reviewer **approved** + verifier **verified**, both pinned to code-hash
+`700e3b535c587fd309e4de0a5f973867a577fc02`. Coverage **73.20%** line (report-only). No new crate,
+no standards/agent change. On the branch at `review` heading toward `awaiting-merge`; awaiting the
+human's merge.
+
 ## Handoff — 2026-07-02 (0021 — profiles sorted oldest-first by insertion time)
 
 A deliberately small, clean `feature` cycle. Profiles now list **oldest-first** (ascending
@@ -2417,8 +2469,44 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   tester-owned `crates/tui/tests/` harness (`--lib --bins` green, `--all-targets` red until the
   tester slice un-strands it). One out-of-scope follow-up filed as `ideas/0007` (TUI key to delete a
   single sub-task — plumbing exists, no keymap reaches it). No new crate, no standards-skill change.
+- **The Tasks-pane rendering overhaul is MERGED on `main`** (0020, a `feature`, live-verified):
+  completed-last stable sort re-derived per render (#1), a today/older split with an "Older tasks"
+  separator, an `h` hide toggle, and the one wire-shaping change — a **200-cap** via
+  [ADR-0014][adr-0014-h] `contract::TaskListQuery { limit, offset }` (+ `MAX_TASK_LIST_LIMIT = 500`),
+  response staying the bare `[Task]` array (offset pagination is a future caller change, no wire
+  break); no `Task`/`Subtask` field, no migration (#3). Server clamps/validates (absent `limit` →
+  ceiling, over-ceiling → `400 validation_failed`); TUI hard-codes `limit = 200`. "Today" is the
+  **UTC civil day** (chrono-free). A three-adjustment operator re-entry folded in: the date row
+  moved **into** the list as a non-selectable separator, `d` deletes the selected sub-task (reusing
+  the shipped wire), and `x` toggles the older group. Reviewer **approved** + verifier **verified**,
+  final code-hash `a5713a7d95780e1e61b4130ccc7556789f44aa45`; coverage 72.66% line. Two out-of-scope
+  follow-ups filed as `ideas/0009` (local-date grouping — since **closed** keep-UTC) and `ideas/0010`
+  (empty-string query-param error contract).
+- **Profiles list oldest-first is MERGED on `main`** (0021, a small `feature`, live-verified): a
+  single `list_profiles` query flip `ORDER BY created_at DESC` → `ASC` so the Profile list and
+  switcher render oldest-first; `.sqlx/` regenerated for the changed SQL text (column set unchanged,
+  **no wire delta**), two stale doc comments corrected, one regression test pinning the order. No
+  `contract`/wire (#2), no domain (#3), no ADR, no migration; #1/#4 intact. Reviewer **approved** +
+  verifier **verified**, code-hash `b8591d70250155b79c209d4b14b59f6b2abb00fd`; coverage 72.66% line.
+- **The Tasks date-window + filter-by-day is at `review`/in-flight on
+  `feature/0023-tui-task-date-window-and-filter`** (0023, a full-stack `feature`; approved +
+  verified, heading toward `awaiting-merge`): a **server-backed UTC-civil-day window** over
+  `created_at` plus two client-only, non-persistent knobs, per [ADR-0015][adr-0015-h] (which also
+  closes the idea-0009 date-basis fork as keep-UTC). `contract` adds two optional epoch-second
+  bounds `created_from` (inclusive) / `created_until` (exclusive) to `TaskListQuery`, both
+  `skip_serializing_if` so **absent-both is byte-identical to pre-0023**; the server applies them as
+  plain `to_timestamp` range predicates with `from > until` → `400`, `from == until` → `200 []`
+  (no civil-day math server-side, ADR-0014 semantics composed). TUI: `F` sets window size X
+  (default 3, min 1; dynamic `Last {X} days` label), `f` is a `DD/MM/YYYY` editor (Tab-cycle,
+  Up/Down wrap-in-place no-carry, no calendar validation) that re-anchors the window to `[D − X, D]`.
+  **Default-behaviour shift (intended, planned Risk):** the default list now hides tasks created
+  more than 3 days ago (the TUI always sends the lower bound). Reviewer **approved** + verifier
+  **verified**, code-hash `700e3b535c587fd309e4de0a5f973867a577fc02`; coverage 73.20% line. Two
+  CLAUDE.md gotchas (harness re-strand, help-overlay overflow) recurred exactly as predicted — no
+  new gotcha, no standards/agent change, no new crate, no idea filed.
 
 [adr-0010-0014-snap]: ./adr/0010-tui-navigation-and-interaction-model.md
 [adr-0011-snap]: ./adr/0011-multiline-content-editing-keymap.md
 [adr-0012-snap]: ./adr/0012-subtasks-domain-exception.md
 [adr-0013-snap]: ./adr/0013-subtasks-wire-contract.md
+[adr-0015-h]: ./adr/0015-task-list-date-window-query.md
