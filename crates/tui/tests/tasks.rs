@@ -31,13 +31,16 @@ use common::{
     tasks_pane, today_at, today_done_task, today_open_task,
 };
 use contract::{Subtask, TaskStatus};
-use tui::app::{
-    App, DeleteTarget, Event, OLDER_SEPARATOR_LABEL, Screen, TASK_LIST_LIMIT, VisibleRow,
-    current_day_number,
-};
+use tui::app::{App, DeleteTarget, Event, Screen, TASK_LIST_LIMIT, VisibleRow, current_day_number};
 
 const W: u16 = 80;
 const H: u16 = 24;
+
+/// The older-group separator label as *rendered* with the default window size (ADR-0015): the
+/// static `DEFAULT_OLDER_SEPARATOR` ("Older tasks") is retained in the contract as the pre-0023
+/// default, but the live separator now renders the dynamic `Last {X} days` text, `X` being
+/// `DEFAULT_HIDE_WINDOW_DAYS` (3) in these default-window flows.
+const DEFAULT_OLDER_SEPARATOR: &str = "Last 3 days";
 
 /// A handle to a fake plus a freshly-logged-in app sharing it, on the `work` task list with the
 /// given tasks. The handle scripts later responses; the app starts settled on the task list.
@@ -585,7 +588,7 @@ fn tasks_split_into_today_above_and_older_below_the_separator() {
     ]);
     let text = render(&app, W, H);
     let p_today = pos(&text, "fresh task");
-    let p_sep = pos(&text, OLDER_SEPARATOR_LABEL);
+    let p_sep = pos(&text, DEFAULT_OLDER_SEPARATOR);
     let p_old = pos(&text, "stale task");
     assert!(
         p_today < p_sep && p_sep < p_old,
@@ -745,7 +748,7 @@ fn h_toggles_the_older_group_and_separator_visibility() {
     ]);
     let shown = render(&app, W, H);
     assert!(
-        shown.contains(OLDER_SEPARATOR_LABEL) && shown.contains("older task"),
+        shown.contains(DEFAULT_OLDER_SEPARATOR) && shown.contains("older task"),
         "default: older group + separator shown:\n{shown}",
     );
 
@@ -753,7 +756,7 @@ fn h_toggles_the_older_group_and_separator_visibility() {
     let _ = app.handle_event(Event::ToggleHideOlder);
     let hidden = render(&app, W, H);
     assert!(
-        !hidden.contains(OLDER_SEPARATOR_LABEL) && !hidden.contains("older task"),
+        !hidden.contains(DEFAULT_OLDER_SEPARATOR) && !hidden.contains("older task"),
         "after h: the older group and its separator are hidden:\n{hidden}",
     );
     assert!(
@@ -765,7 +768,7 @@ fn h_toggles_the_older_group_and_separator_visibility() {
     let _ = app.handle_event(Event::ToggleHideOlder);
     let shown_again = render(&app, W, H);
     assert!(
-        shown_again.contains(OLDER_SEPARATOR_LABEL) && shown_again.contains("older task"),
+        shown_again.contains(DEFAULT_OLDER_SEPARATOR) && shown_again.contains("older task"),
         "after a second h: shown again:\n{shown_again}",
     );
 }
@@ -900,7 +903,7 @@ fn older_tasks_separator_spans_the_full_pane_inner_width() {
     let text = render(&app, W, H);
     let sep_row = text
         .lines()
-        .find(|l| l.contains(OLDER_SEPARATOR_LABEL))
+        .find(|l| l.contains(DEFAULT_OLDER_SEPARATOR))
         .expect("the Older tasks separator row renders");
     let task_row = text
         .lines()
@@ -917,7 +920,7 @@ fn older_tasks_separator_spans_the_full_pane_inner_width() {
         "the Older tasks separator spans the same inner width as a task row (full pane width)",
     );
     assert!(
-        sep_inner.contains('─') && sep_inner.contains(OLDER_SEPARATOR_LABEL),
+        sep_inner.contains('─') && sep_inner.contains(DEFAULT_OLDER_SEPARATOR),
         "the separator is `─`-filled around the centered label, not the bare short form:\n{sep_inner:?}",
     );
 }

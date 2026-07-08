@@ -24,6 +24,26 @@ use common::{
 use contract::{ErrorCode, Task, TaskStatus};
 use serde_json::json;
 use sqlx::PgPool;
+use uuid::Uuid;
+
+/// Insert a task fixture directly with a controlled `created_at` (UTC epoch **seconds**), so a
+/// window-boundary test can pin inclusive-lower / exclusive-upper to the exact second — which the
+/// `POST` create path cannot, since it stamps `created_at = now()`. Uses an unchecked runtime query
+/// (no `.sqlx/` cache entry needed); it is fixture setup, not the surface under test — the public
+/// `GET …/tasks` list endpoint is what the assertions exercise.
+async fn insert_task_at(pool: &PgPool, profile_id: &str, title: &str, created_at_secs: i64) {
+    let pid = Uuid::parse_str(profile_id).expect("profile id is a uuid");
+    let _inserted = sqlx::query(
+        "INSERT INTO tasks (profile_id, title, description, status, created_at) \
+         VALUES ($1, $2, '', 'open', to_timestamp($3::bigint))",
+    )
+    .bind(pid)
+    .bind(title)
+    .bind(created_at_secs)
+    .execute(pool)
+    .await
+    .expect("insert task fixture");
+}
 
 /// `GET /healthz` → 200, unauthenticated.
 #[sqlx::test]
@@ -746,4 +766,264 @@ async fn old_close_route_is_gone(pool: PgPool) {
         res.status
     );
     assert_ne!(res.status, StatusCode::OK, "close must not succeed");
+}
+
+// ---- 0023 / ADR-0015: task-list created_at date-window (created_from / created_until) ----
+
+/// The window filter returns only rows with `created_from ≤ created_at < created_until`: inclusive
+/// at the lower bound, exclusive at the upper bound, asserted at the exact boundary second. Six
+/// fixtures straddle the window `[from, until)`; only the three inside come back, still newest-first.
+#[sqlx::test]
+async fn list_tasks_window_is_inclusive_lower_exclusive_upper_at_the_boundary_second(pool: PgPool) {
+    let app = app(pool.clone());
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let from: i64 = 1_720_137_600; // 2024-07-05T00:00:00Z
+    let until: i64 = 1_720_483_200; // 2024-07-09T00:00:00Z
+
+    // Straddle both boundaries to the exact second.
+    insert_task_at(&pool, &account.profile_id, "below_from", from - 1).await;
+    insert_task_at(&pool, &account.profile_id, "at_from", from).await; // inclusive → in
+    insert_task_at(&pool, &account.profile_id, "middle", from + 1_000).await; // in
+    insert_task_at(&pool, &account.profile_id, "at_until_minus_1", until - 1).await; // in
+    insert_task_at(&pool, &account.profile_id, "at_until", until).await; // exclusive → out
+    insert_task_at(&pool, &account.profile_id, "above_until", until + 1).await;
+
+    let res = send(
+        &app,
+        get_auth(
+            &format!("{path}?created_from={from}&created_until={until}"),
+            &account.token,
+        ),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK);
+    let tasks: Vec<Task> = res.parse();
+    let titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["at_until_minus_1", "middle", "at_from"],
+        "only [from, until) rows come back — inclusive lower, exclusive upper — newest-first",
+    );
+}
+
+/// `created_from` alone is an open-ended lower bound: rows at or after it (inclusive) come back, the
+/// one strictly before is excluded.
+#[sqlx::test]
+async fn list_tasks_created_from_alone_is_an_inclusive_lower_bound(pool: PgPool) {
+    let app = app(pool.clone());
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let from: i64 = 1_720_137_600;
+    insert_task_at(&pool, &account.profile_id, "before", from - 1).await;
+    insert_task_at(&pool, &account.profile_id, "boundary", from).await;
+    insert_task_at(&pool, &account.profile_id, "after", from + 100).await;
+
+    let res = send(
+        &app,
+        get_auth(&format!("{path}?created_from={from}"), &account.token),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK);
+    let tasks: Vec<Task> = res.parse();
+    let titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["after", "boundary"],
+        "created_from includes its boundary second and excludes anything strictly before it",
+    );
+}
+
+/// `created_until` alone is an open-ended exclusive upper bound: the boundary-second row is excluded.
+#[sqlx::test]
+async fn list_tasks_created_until_alone_is_an_exclusive_upper_bound(pool: PgPool) {
+    let app = app(pool.clone());
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let until: i64 = 1_720_483_200;
+    insert_task_at(&pool, &account.profile_id, "before", until - 100).await;
+    insert_task_at(&pool, &account.profile_id, "boundary", until).await;
+    insert_task_at(&pool, &account.profile_id, "after", until + 100).await;
+
+    let res = send(
+        &app,
+        get_auth(&format!("{path}?created_until={until}"), &account.token),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK);
+    let tasks: Vec<Task> = res.parse();
+    let titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["before"],
+        "created_until excludes its own boundary second (upper is exclusive)",
+    );
+}
+
+/// `created_from > created_until` is an inverted (necessarily-empty) window: a client bug rejected
+/// as `400 validation_failed` (ADR-0015 §3), not a silent empty result.
+#[sqlx::test]
+async fn list_tasks_inverted_window_is_400_validation_failed(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let res = send(
+        &app,
+        get_auth(
+            &format!("{path}?created_from=1000&created_until=500"),
+            &account.token,
+        ),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::BAD_REQUEST);
+    res.expect_error(ErrorCode::ValidationFailed);
+}
+
+/// `created_from == created_until` is a *valid* empty window (upper is exclusive) → `200 []`, not a
+/// `400` (ADR-0015 §3). A task sitting exactly on the shared boundary is excluded by the upper bound.
+#[sqlx::test]
+async fn list_tasks_equal_bounds_window_is_200_empty(pool: PgPool) {
+    let app = app(pool.clone());
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let boundary: i64 = 1_720_137_600;
+    insert_task_at(&pool, &account.profile_id, "on_boundary", boundary).await;
+
+    let res = send(
+        &app,
+        get_auth(
+            &format!("{path}?created_from={boundary}&created_until={boundary}"),
+            &account.token,
+        ),
+    )
+    .await;
+    assert_eq!(
+        res.status,
+        StatusCode::OK,
+        "equal bounds is valid, not a 400"
+    );
+    let tasks: Vec<Task> = res.parse();
+    assert!(
+        tasks.is_empty(),
+        "an equal-bounds window is empty (upper bound is exclusive): {tasks:?}",
+    );
+}
+
+/// Absent-both bounds returns the whole list within the limit — byte-identical to pre-0023
+/// behaviour (ADR-0015 §2). Tasks with a spread of `created_at` all come back newest-first.
+#[sqlx::test]
+async fn list_tasks_absent_window_returns_whole_list_within_limit(pool: PgPool) {
+    let app = app(pool.clone());
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    insert_task_at(&pool, &account.profile_id, "ancient", 1_000_000_000).await;
+    insert_task_at(&pool, &account.profile_id, "old", 1_500_000_000).await;
+    insert_task_at(&pool, &account.profile_id, "recent", 1_720_000_000).await;
+
+    let res = send(&app, get_auth(&path, &account.token)).await;
+    assert_eq!(res.status, StatusCode::OK);
+    let tasks: Vec<Task> = res.parse();
+    let titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["recent", "old", "ancient"],
+        "no window params: the whole list, newest-first (created_at DESC), unaffected by 0023",
+    );
+}
+
+/// The window filter is profile-scoped (#4): two profiles hold tasks inside the SAME window; a
+/// windowed list on profile A returns only A's in-window tasks, never B's.
+#[sqlx::test]
+async fn list_tasks_window_is_profile_scoped(pool: PgPool) {
+    let app = app(pool.clone());
+    let a = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let b = register(&app, "bea", "bea@example.com", "hunter2-long").await;
+
+    let from: i64 = 1_720_137_600;
+    let until: i64 = 1_720_483_200;
+    let inside = from + 1_000;
+    insert_task_at(&pool, &a.profile_id, "a_in_window", inside).await;
+    insert_task_at(&pool, &b.profile_id, "b_in_window", inside).await;
+
+    let path_a = format!("/api/profiles/{}/tasks", a.profile_id);
+    let res = send(
+        &app,
+        get_auth(
+            &format!("{path_a}?created_from={from}&created_until={until}"),
+            &a.token,
+        ),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK);
+    let tasks: Vec<Task> = res.parse();
+    let titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["a_in_window"],
+        "the windowed list stays within profile A — B's in-window task never crosses (#4)",
+    );
+}
+
+/// The window filter preserves `created_at DESC` ordering: several in-window tasks come back
+/// newest-first, and it composes with `limit` (the newest N within the window).
+#[sqlx::test]
+async fn list_tasks_window_preserves_desc_order_and_composes_with_limit(pool: PgPool) {
+    let app = app(pool.clone());
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let from: i64 = 1_720_137_600;
+    let until: i64 = 1_720_483_200;
+    insert_task_at(&pool, &account.profile_id, "oldest", from + 10).await;
+    insert_task_at(&pool, &account.profile_id, "middle", from + 20).await;
+    insert_task_at(&pool, &account.profile_id, "newest", from + 30).await;
+    // Outside the window — never eligible regardless of limit.
+    insert_task_at(&pool, &account.profile_id, "outside", until + 1).await;
+
+    let res = send(
+        &app,
+        get_auth(
+            &format!("{path}?created_from={from}&created_until={until}"),
+            &account.token,
+        ),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK);
+    let titles: Vec<String> = res
+        .parse::<Vec<Task>>()
+        .iter()
+        .map(|t| t.title.clone())
+        .collect();
+    assert_eq!(
+        titles,
+        vec!["newest", "middle", "oldest"],
+        "in-window rows preserve created_at DESC",
+    );
+
+    // With limit=2 the window returns the two newest within it.
+    let res = send(
+        &app,
+        get_auth(
+            &format!("{path}?created_from={from}&created_until={until}&limit=2"),
+            &account.token,
+        ),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK);
+    let titles: Vec<String> = res
+        .parse::<Vec<Task>>()
+        .iter()
+        .map(|t| t.title.clone())
+        .collect();
+    assert_eq!(
+        titles,
+        vec!["newest", "middle"],
+        "the window composes with limit — the two newest within it",
+    );
 }

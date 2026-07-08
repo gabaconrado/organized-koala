@@ -497,6 +497,46 @@ fn help_modal_tasks_second_line_keeps_h_hide_older_without_wrapping() {
 }
 
 #[test]
+fn help_modal_tasks_third_line_keeps_f_filter_by_date_without_wrapping() {
+    // 0023 (learned 0015, recurred 0019/0020): the two new date-window hotkeys were placed on a
+    // THIRD Tasks reference line (`F window size · f filter by date`) rather than lengthening the
+    // already-tight first/second Tasks lines. A newly-added reference line is only as safe as a test
+    // that pins it does not overflow the fixed-width help box (HELP_DIALOG_WIDTH=72, inner ~70) and
+    // reflow the trailing `f filter by date` to a flush-left, un-indented continuation row — the
+    // pure-geometry bug the build/clippy never catch.
+    //
+    // This pins the third Tasks line intact: `f filter by date` renders on the SAME row as
+    // `F window size`, and NO row is a stranded flush-left `f filter by date` continuation.
+    let (client, mut app) = logged_in(vec![]);
+    press(&mut app, &client, KeyCode::Char('?'));
+    assert!(app.help_open(), "? opened the help overlay");
+    let text = render(&app, W, H);
+    let rows: Vec<&str> = text.lines().collect();
+
+    // The third Tasks line is identified by its `F window size` content, not a column — the box
+    // border/padding indents it.
+    let tasks_third_row = rows
+        .iter()
+        .find(|r| r.contains("F window size"))
+        .unwrap_or_else(|| panic!("the third Tasks reference row in the help body:\n{text}"));
+
+    // (1) `f filter by date` stays on the same rendered row as `F window size` — it did NOT wrap.
+    assert!(
+        tasks_third_row.contains("f filter by date"),
+        "the third Tasks line must keep `f filter by date` on the same row as `F window size` \
+         (it must not wrap):\n{tasks_third_row:?}\nfull help:\n{text}",
+    );
+
+    // (2) No row is a stranded, flush-left `f filter by date` continuation (the malformed-wrap shape).
+    assert!(
+        !rows
+            .iter()
+            .any(|r| r.trim_start().starts_with("f filter by date")),
+        "no row may begin with a stranded `f filter by date` (the wrapped-continuation regression):\n{text}",
+    );
+}
+
+#[test]
 fn help_modal_closes_with_esc() {
     // Esc closes the help modal (the two-tiered Esc: an overlay is open, so Esc → Cancel, which the
     // app core folds into closing the help overlay) — without quitting.

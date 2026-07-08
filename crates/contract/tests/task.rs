@@ -385,12 +385,17 @@ fn max_task_list_limit_is_the_ceiling_constant() {
 
 #[test]
 fn task_list_query_all_none_serializes_to_empty_query_string() {
-    // Both params absent: the default carries nothing, so it serializes to an EMPTY query string —
+    // All params absent: the default carries nothing, so it serializes to an EMPTY query string —
     // an old no-param caller's request is byte-identical to before this feature (additive shape).
+    // ADR-0015 preserves this exactly: the two new date-window bounds are also
+    // `skip_serializing_if = "Option::is_none"`, so `default()` is still the empty query string
+    // (absent-both === pre-0023 whole-list behaviour).
     let query = TaskListQuery::default();
     assert_eq!(serde_urlencoded::to_string(&query).unwrap(), "");
     assert!(query.limit.is_none());
     assert!(query.offset.is_none());
+    assert!(query.created_from.is_none());
+    assert!(query.created_until.is_none());
 }
 
 #[test]
@@ -399,6 +404,8 @@ fn task_list_query_limit_only_omits_offset() {
     let query = TaskListQuery {
         limit: Some(200),
         offset: None,
+        created_from: None,
+        created_until: None,
     };
     assert_eq!(serde_urlencoded::to_string(&query).unwrap(), "limit=200");
 }
@@ -409,6 +416,8 @@ fn task_list_query_offset_only_omits_limit() {
     let query = TaskListQuery {
         limit: None,
         offset: Some(40),
+        created_from: None,
+        created_until: None,
     };
     assert_eq!(serde_urlencoded::to_string(&query).unwrap(), "offset=40");
 }
@@ -418,6 +427,8 @@ fn task_list_query_both_present_serialize_together() {
     let query = TaskListQuery {
         limit: Some(200),
         offset: Some(400),
+        created_from: None,
+        created_until: None,
     };
     assert_eq!(
         serde_urlencoded::to_string(&query).unwrap(),
@@ -431,6 +442,8 @@ fn task_list_query_round_trips_through_query_string() {
     let query = TaskListQuery {
         limit: Some(123),
         offset: Some(7),
+        created_from: None,
+        created_until: None,
     };
     let encoded = serde_urlencoded::to_string(&query).unwrap();
     let back: TaskListQuery = serde_urlencoded::from_str(&encoded).unwrap();
@@ -443,8 +456,93 @@ fn task_list_query_deserializes_from_partial_and_empty_query_strings() {
     let empty: TaskListQuery = serde_urlencoded::from_str("").unwrap();
     assert_eq!(empty, TaskListQuery::default());
 
-    // A `limit`-only string leaves `offset` as `None`.
+    // A `limit`-only string leaves `offset` (and both window bounds) as `None`.
     let limit_only: TaskListQuery = serde_urlencoded::from_str("limit=200").unwrap();
     assert_eq!(limit_only.limit, Some(200));
     assert!(limit_only.offset.is_none());
+    assert!(limit_only.created_from.is_none());
+    assert!(limit_only.created_until.is_none());
+}
+
+// --- TaskListQuery: ADR-0015 date-window bounds (created_from inclusive / created_until exclusive). ---
+
+#[test]
+fn task_list_query_window_bounds_absent_are_omitted() {
+    // With only limit/offset set, the two window bounds are omitted entirely (skip_serializing_if) —
+    // a pre-0023 caller's query string is unaffected by the additive fields.
+    let query = TaskListQuery {
+        limit: Some(200),
+        offset: Some(0),
+        created_from: None,
+        created_until: None,
+    };
+    let encoded = serde_urlencoded::to_string(&query).unwrap();
+    assert_eq!(encoded, "limit=200&offset=0");
+    assert!(!encoded.contains("created_from"));
+    assert!(!encoded.contains("created_until"));
+}
+
+#[test]
+fn task_list_query_window_bounds_present_serialize_as_epoch_second_params() {
+    // The TUI's default window: `created_from = (today − 3) · 86400` (inclusive), `created_until =
+    // (today + 1) · 86400` (exclusive). Both appear on the wire as raw UTC epoch-second integers
+    // (ADR-0015 §1) — the server applies them as a plain timestamp range, no civil-day math.
+    let query = TaskListQuery {
+        limit: Some(200),
+        offset: Some(0),
+        created_from: Some(1_720_137_600),
+        created_until: Some(1_720_483_200),
+    };
+    let encoded = serde_urlencoded::to_string(&query).unwrap();
+    assert_eq!(
+        encoded,
+        "limit=200&offset=0&created_from=1720137600&created_until=1720483200"
+    );
+}
+
+#[test]
+fn task_list_query_window_only_omits_pagination() {
+    // The window bounds are independent of limit/offset: a window-only query omits both pagination
+    // params (each is its own optional field, ADR-0015 §2).
+    let query = TaskListQuery {
+        limit: None,
+        offset: None,
+        created_from: Some(0),
+        created_until: Some(86_400),
+    };
+    let encoded = serde_urlencoded::to_string(&query).unwrap();
+    assert_eq!(encoded, "created_from=0&created_until=86400");
+    assert!(!encoded.contains("limit"));
+    assert!(!encoded.contains("offset"));
+}
+
+#[test]
+fn task_list_query_negative_lower_bound_round_trips() {
+    // A pre-epoch anchor (e.g. a filter date before 1970, or an early anchor minus the window) yields
+    // a negative `created_from`; the `i64` bound round-trips losslessly over the query-string codec.
+    let query = TaskListQuery {
+        limit: Some(200),
+        offset: Some(0),
+        created_from: Some(-86_400),
+        created_until: Some(86_400),
+    };
+    let encoded = serde_urlencoded::to_string(&query).unwrap();
+    let back: TaskListQuery = serde_urlencoded::from_str(&encoded).unwrap();
+    assert_eq!(back, query);
+    assert_eq!(back.created_from, Some(-86_400));
+}
+
+#[test]
+fn task_list_query_full_window_round_trips_through_query_string() {
+    // Serialize → parse is lossless with all four params present (the reqwest `.query()` path the
+    // windowed TUI list load uses).
+    let query = TaskListQuery {
+        limit: Some(200),
+        offset: Some(0),
+        created_from: Some(1_720_137_600),
+        created_until: Some(1_720_483_200),
+    };
+    let encoded = serde_urlencoded::to_string(&query).unwrap();
+    let back: TaskListQuery = serde_urlencoded::from_str(&encoded).unwrap();
+    assert_eq!(back, query);
 }

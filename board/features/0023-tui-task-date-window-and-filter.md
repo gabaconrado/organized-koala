@@ -207,6 +207,35 @@ to `TaskListQuery`; resolves the idea-0009 date-basis fork as keep-UTC).
   --check` clean; `cargo clippy --lib --bins -p tui` clean; lib+bins build. `--all-targets` is red only
   on `crates/tui/tests/common/mod.rs` (expected 0019/0020 harness re-strand — tester slice 4). Files:
   `crates/tui/src/app/{task_list.rs,mod.rs}`, `terminal/mod.rs`, `ui/mod.rs`.
+- [x] 2026-07-08 [tester] Slice 4 (tests) done. **Un-stranded the harness**
+  (`crates/tui/tests/common/mod.rs`, 0019/0020 gotcha): added the four new `TaskListState` fields to
+  both struct initializers (`hide_window_days: DEFAULT_HIDE_WINDOW_DAYS`, `filter_date: None`,
+  `editing_window: None`, `filtering_date: None`); extended `Call::ListTasks` + the fake `list_tasks`
+  to capture `created_from`/`created_until` so a test can assert the wire window; added
+  wall-clock-aware builders `iso_at_day` / `open_task_on_day` (place a fixture on any civil day
+  relative to today). No `Event` match existed in the harness and no `Client`/`ClientRequest`/`Outcome`
+  change (slice 3 reused `ListTasks`), so those were the only re-strands. **Contract tests were also
+  stranded** — the existing `TaskListQuery { limit, offset }` literals in
+  `crates/contract/tests/task.rs` miss the two new fields; updated them and added window round-trip
+  tests (absent → omitted; present → epoch-second params; window-only omits pagination; negative lower
+  bound; full round-trip). **Server** (`crates/server/tests/tasks.rs`): 8 live-DB tests via a
+  direct-SQL `insert_task_at` fixture (controlled `created_at` — the `POST` path can't):
+  inclusive-lower/exclusive-upper at the exact boundary second, `from`-only / `until`-only bounds,
+  `from > until` → 400 `validation_failed`, `from == until` → 200 `[]`, absent-both whole list,
+  profile-scoped (#4), `created_at DESC` preserved + composes with `limit`. **TUI**
+  (`crates/tui/tests/date_window.rs`, 10 tests + a help no-wrap test in `dialogs.rs`): default
+  `[today−3, today]` window on bootstrap; `F` re-fetch + dynamic `Last 5 days` label + `0`/empty-buffer
+  inline reject with no re-fetch; `f` seeded to today, Tab cycles day→month→year, Up/Down
+  wrap-in-place no-carry (`month 1→12`, `day 1→31`, `31→1`, no year carry), year clamped ≥ 1970;
+  past-date submit re-anchors window+header and `h` still hides older within the window; the third
+  Tasks help line (`F window size · f filter by date`) pinned no-wrap. **Also updated 3 pre-existing
+  `tasks.rs` tests** whose render assertions used the retired static "Older tasks" label (slice 3
+  made the rendered separator the dynamic `Last {X} days`) → local
+  `DEFAULT_OLDER_SEPARATOR = "Last 3 days"`. Gates all green: `./ok.sh fmt --check`, `./ok.sh lint`,
+  `./ok.sh test` (contract task 33, server tasks 35, tui date_window 10 / dialogs 26 / tasks 35; full
+  workspace green). No source bug found. Files: `crates/contract/tests/task.rs`,
+  `crates/server/tests/tasks.rs`,
+  `crates/tui/tests/{common/mod.rs,date_window.rs,dialogs.rs,tasks.rs}`.
 
 ## Summary
 

@@ -78,12 +78,16 @@ pub enum Call {
         profile_id: String,
     },
     /// Captured `GET …/tasks` with the pagination-ready query the caller sent (the TUI hard-codes
-    /// `limit = TASK_LIST_LIMIT` / `offset = 0`; ADR-0014 §2), so a test can assert the wire query.
+    /// `limit = TASK_LIST_LIMIT` / `offset = 0`; ADR-0014 §2), plus the ADR-0015 date-window bounds
+    /// (`created_from` inclusive lower / `created_until` exclusive upper, UTC epoch seconds), so a
+    /// test can assert the whole wire query — including the default `[anchor − X, anchor]` window.
     ListTasks {
         token: String,
         profile_id: String,
         limit: Option<u32>,
         offset: Option<u32>,
+        created_from: Option<i64>,
+        created_until: Option<i64>,
     },
     CreateTask {
         token: String,
@@ -415,6 +419,8 @@ impl Client for FakeClient {
             profile_id: profile_id.to_owned(),
             limit: query.limit,
             offset: query.offset,
+            created_from: query.created_from,
+            created_until: query.created_until,
         });
         pop(&self.inner.tasks, "list_tasks")
     }
@@ -842,6 +848,23 @@ pub fn today_open_task(id: &str, title: &str, hms: &str) -> Task {
     open_task(id, title, &today_at(hms))
 }
 
+/// A UTC ISO-8601 timestamp on the civil day `day_number` (days since the Unix epoch, [`day_number`
+/// via `tui::app::current_day_number`]), at the given `HH:MM:SS`. The 0023 date-window and the
+/// filter-by-day flows anchor on a civil day-number (which may be today or a chosen past day), so a
+/// window/filter test builds fixtures relative to *now* — e.g. `today − 2` for an older-but-in-window
+/// task, or a fixed past anchor day for the `f` filter — via this deterministic, chrono-free helper.
+pub fn iso_at_day(day_number: i64, hms: &str) -> String {
+    let (year, month, day) = tui::ui::civil_from_days(day_number);
+    format!("{year:04}-{month:02}-{day:02}T{hms}Z")
+}
+
+/// An open [`Task`] created on the civil day `day_number` (see [`iso_at_day`]). Used by the 0023
+/// window/filter suite to land a fixture on a precise day relative to today (e.g. `today − 4` to sit
+/// outside the default 3-day window, or on the selected filter anchor day).
+pub fn open_task_on_day(id: &str, title: &str, day_number: i64, hms: &str) -> Task {
+    open_task(id, title, &iso_at_day(day_number, hms))
+}
+
 /// A done [`Task`] created **today** (see [`today_at`]); `closed_at` is fixed on the same day.
 pub fn today_done_task(id: &str, title: &str, hms: &str) -> Task {
     let created = today_at(hms);
@@ -1165,6 +1188,10 @@ fn empty_tasks_pane() -> TaskListState {
         message: None,
         pending: None,
         hide_older: false,
+        hide_window_days: tui::app::task_list::DEFAULT_HIDE_WINDOW_DAYS,
+        filter_date: None,
+        editing_window: None,
+        filtering_date: None,
     }
 }
 
@@ -1188,6 +1215,10 @@ fn one_task_pane() -> TaskListState {
         message: None,
         pending: None,
         hide_older: false,
+        hide_window_days: tui::app::task_list::DEFAULT_HIDE_WINDOW_DAYS,
+        filter_date: None,
+        editing_window: None,
+        filtering_date: None,
     }
 }
 
