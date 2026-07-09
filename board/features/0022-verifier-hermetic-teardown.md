@@ -2,14 +2,14 @@
 id: 0022
 title: Make the verifier stack boot hermetic — always tear down its own volume (down -v on any exit)
 type: chore         # feature | chore
-status: inbox          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches ok.sh + verifier discipline only; no crate source, no contract
-branch: null
+branch: null        # main-only chore — NO worktree is cut (home #1 / shared infra: ok.sh + .claude/)
 worktree: null
 created: 2026-07-02
-updated: 2026-07-02
+updated: 2026-07-09
 ---
 
 ## Feature request
@@ -77,3 +77,10 @@ branch's data); this **removes** a human-in-the-loop block rather than adding on
   `reviewer` approval attesting the chore invariant; live verifier pass skipped). Owner on claim:
   `platform-dev`. Scope guard: if the change is found to need a contract/behaviour/domain delta, it
   re-scopes to `feature` via `architect`.
+- 2026-07-09 [orchestrator] (session drive-20260709-173945) Claimed → `working`. **Main-only
+  chore, NO worktree cut** — every file this item edits (`ok.sh`, `.claude/agents/verifier.md`) is
+  home #1 shared/cross-cutting infra that must never ride a feature branch (0002 out-of-sync bug
+  class); it changes no crate source, so there is nothing to isolate. Advanced in place on `main`,
+  same pattern as 0009. Owner `platform-dev` implements the `ok.sh` teardown mechanism; `eng-manager`
+  (owns `.claude/**`) applies the `verifier.md` instruction edit referencing it. Tooling present and
+  sanctioned: docker daemon UP, shellcheck + cargo on PATH — no capability gap.
