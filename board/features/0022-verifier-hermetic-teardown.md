@@ -2,7 +2,7 @@
 id: 0022
 title: Make the verifier stack boot hermetic — always tear down its own volume (down -v on any exit)
 type: chore         # feature | chore
-status: working          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches ok.sh + verifier discipline only; no crate source, no contract
@@ -84,3 +84,26 @@ branch's data); this **removes** a human-in-the-loop block rather than adding on
   same pattern as 0009. Owner `platform-dev` implements the `ok.sh` teardown mechanism; `eng-manager`
   (owns `.claude/**`) applies the `verifier.md` instruction edit referencing it. Tooling present and
   sanctioned: docker daemon UP, shellcheck + cargo on PATH — no capability gap.
+- 2026-07-09 [platform-dev] Landed `ok.sh` mechanism (commit f764dbe): new `./ok.sh verify-boot
+  <command> [args...]` verb — one process brings the deploy stack up (`--wait`), runs the caller's
+  exercise `<command>` against the live stack, then GUARANTEES `down --volumes` teardown on any exit
+  (EXIT + INT/TERM/HUP traps), targeting the same project/volume it created (`deploy` /
+  `deploy_postgres-data`) and preserving the exercise's exit status. Plain dev `./ok.sh down`
+  unchanged (keeps the volume). Gates green (fmt/lint/shellcheck/test); code-hash unchanged
+  (ok.sh-only).
+- 2026-07-09 [eng-manager] Landed `verifier.md` wiring (commit 5195745): verifier now boots+exercises
+  via `./ok.sh verify-boot <command>` (whole exercise passed as the command) instead of manual
+  `up`+`down`; teardown is guaranteed-by-construction, no lingering `deploy_postgres-data` volume.
+  Read-only/report-only/chore-mis-dispatch/capability-gap notes preserved.
+- 2026-07-09 [reviewer] **REVIEW-STATUS: approved** — cold review, gates all green
+  (`test`/`lint`/`fmt --check`/`shellcheck ok.sh`). Trap logic verified: teardown fires on success,
+  failure, AND signal; exercise exit status preserved (`local status="$?"` first); targets the same
+  `deploy`/`deploy_postgres-data` created by the boot; no operator-authorization dependency. Out-of-
+  scope items confirmed NOT done (no per-worktree `COMPOSE_PROJECT_NAME`, no CI, no crash-residual).
+  **CHORE-INVARIANT confirmed:** no behaviour change (shipped `cmd_up`/`cmd_down`/serve path
+  unchanged; `verify-boot` is verifier-only tooling), no `contract`/wire change (#2) (`crates/`
+  untouched), no domain-structure change (#3). Pinned to CODE-HASH `700e3b535c587fd309e4de0a5f973867a577fc02`,
+  REVIEWED-SHA `51957454909e762f423cd5ad6662716357c2b746`.
+- 2026-07-09 [orchestrator] Chore track: **step-5 live verifier pass SKIPPED** (chore clause 4 N/A —
+  no behaviour/wire to exercise; the cold reviewer's invariant attestation is the safety net).
+  Proceeding to eng-manager tail (Summary + coverage + handoff), then awaiting-merge.
