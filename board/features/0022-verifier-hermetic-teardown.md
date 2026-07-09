@@ -2,7 +2,7 @@
 id: 0022
 title: Make the verifier stack boot hermetic — always tear down its own volume (down -v on any exit)
 type: chore         # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches ok.sh + verifier discipline only; no crate source, no contract
@@ -36,20 +36,26 @@ branch's data); this **removes** a human-in-the-loop block rather than adding on
 
 **Acceptance criteria:**
 
-- [ ] The verifier's live-boot flow tears down its own volume (`down -v`) on **any** exit —
+- [x] The verifier's live-boot flow tears down its own volume (`down -v`) on **any** exit —
       success, failure, and signal — via a `trap`/`finally`-style guarantee, not a happy-path-only
       final command. The teardown targets the same compose project/volume the boot created.
-- [ ] Teardown discipline is expressed in `ok.sh` (extend the script, per CLAUDE.md — verbs/flow
+      *(`verify-boot` EXIT + INT/TERM/HUP traps → `down --volumes` on
+      `deploy`/`deploy_postgres-data`; reviewer-verified.)*
+- [x] Teardown discipline is expressed in `ok.sh` (extend the script, per CLAUDE.md — verbs/flow
       are not improvised at call sites) and/or the `verifier` agent instructions, so a verifier
       run is hermetic by construction rather than by remembering to clean up.
-- [ ] **No operator authorization required** for this self-cleanup: the item's teardown destroys
+      *(both: new `ok.sh verify-boot` verb +
+      `verifier.md` wired to it.)*
+- [x] **No operator authorization required** for this self-cleanup: the item's teardown destroys
       only state the same run created, distinct from the operator-gated reset that destroys another
-      branch's data.
-- [ ] **Tooling/process-only — the chore invariant holds.** No crate source, no product behaviour,
+      branch's data. *(reviewer confirmed no operator-authorization dependency introduced.)*
+- [x] **Tooling/process-only — the chore invariant holds.** No crate source, no product behaviour,
       no `contract`/wire shape (#2), and no domain structure (#3) changes. Docker is the one
       sanctioned tool (CLAUDE.md hard-constraint #6); if it is unavailable that is a capability gap
       → `blocked` for the operator, never self-acquired or worked around.
-- [ ] `./ok.sh test | lint | fmt --check` green (unchanged by this change).
+      *(reviewer CHORE-INVARIANT attestation; `crates/` untouched, code-hash `700e3b53`
+      unchanged; docker was available.)*
+- [x] `./ok.sh test | lint | fmt --check` green (unchanged by this change). *(+ `shellcheck ok.sh` clean.)*
 
 **Out of scope (explicitly, per the operator's decision):**
 
@@ -107,6 +113,18 @@ branch's data); this **removes** a human-in-the-loop block rather than adding on
 - 2026-07-09 [orchestrator] Chore track: **step-5 live verifier pass SKIPPED** (chore clause 4 N/A —
   no behaviour/wire to exercise; the cold reviewer's invariant attestation is the safety net).
   Proceeding to eng-manager tail (Summary + coverage + handoff), then awaiting-merge.
+- 2026-07-09 [eng-manager] Tail (commit 83ecc5b): ran `./ok.sh coverage` → **coverage: 73.20%**
+  (report-only, unchanged — no crate code touched); wrote `## Summary`; appended `docs/handoff.md`
+  entry; updated the learned-0011 CLAUDE.md gotcha to record 0022 landing approach (1) (verifier
+  now boots via hermetic `verify-boot`; honest residual = hard-crash / true-concurrent, approach (2)
+  declined-for-now); added a `verify-boot` row to the CLAUDE.md verb table; regenerated
+  `board/README.md`. All home #1 / main-only.
+- 2026-07-09 [orchestrator] **Step 7 N/A** — main-only item, already on `main`, no branch to rebase
+  or freshen. All five acceptance criteria checked `[x]`. Chore DoD satisfied: gates green
+  (`test`/`lint`/`fmt --check`/`shellcheck`), **no** live verifier pass (chore clause 4 N/A), **no**
+  ADR (chore makes no contract/domain decision), `REVIEW-STATUS: approved` with the chore-invariant
+  attestation pinned to code-hash `700e3b53`. Flipped → **`awaiting-merge`** and STOP. Human reviews
+  the diff + Summary and merges. (No worktree/branch to tear down — the change is already on `main`.)
 
 ## Summary
 
