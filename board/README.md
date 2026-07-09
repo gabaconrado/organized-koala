@@ -60,11 +60,10 @@ backlog".
 | [0020](./features/0020-tui-tasks-pane-rendering-overhaul.md) | Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap | feature | merged | medium | 0019 (merged ✓) | — (merged) |
 | [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | merged | medium | 0012 (merged ✓) | — (merged) |
 | [0022](./features/0022-verifier-hermetic-teardown.md) | Make the verifier stack boot hermetic — always tear down its own volume (`down -v` on any exit) | chore | inbox | low | — | — (unclaimed) |
-| [0023](./features/0023-tui-task-date-window-and-filter.md) | TUI task date-window (hide older than X days) + filter-by-day | feature | review (branch) | medium | 0020 (merged ✓) | `feature/0023-tui-task-date-window-and-filter` |
+| [0023](./features/0023-tui-task-date-window-and-filter.md) | TUI task date-window (hide older than X days) + filter-by-day | feature | merged | medium | 0020 (merged ✓) | — (merged) |
 
-> **0023 — TUI task date-window + filter-by-day — `review`/in-flight on the branch** (a
-> full-stack `feature`; approved + verified, heading toward `awaiting-merge`). The `main` snapshot
-> is frozen at the `ready` claim; the authoritative live status is on the branch. Governed by
+> **0023 — TUI task date-window + filter-by-day — MERGED** (operator-authorised ff-merge; `main`
+> @ `5594d14`). A full-stack `feature`. Governed by
 > [ADR-0015](../docs/adr/0015-task-list-date-window-query.md) (the wire event; also closes the
 > idea-0009 date-basis fork as **keep-UTC**). Adds a **server-backed UTC-civil-day window** over
 > `created_at` plus two client-only, non-persistent knobs. `contract` gains two optional
@@ -84,7 +83,11 @@ backlog".
 > 73.20% line (report-only). Two CLAUDE.md gotchas (harness re-strand, help-overlay overflow)
 > recurred exactly as predicted — no new gotcha, no standards/agent change, no new crate, no idea
 > filed (the reviewer's one out-of-scope note — `f` accepts calendar-impossible dates, normalized
-> deterministically — is by-design per ADR-0015).
+> deterministically — is by-design per ADR-0015). Finalize: audit clean (all 10 branch commits
+> authored by the human with well-formed agent co-author trailers, Conventional-Commit subjects);
+> already current on `main` (no re-rebase needed); DoD re-checked green (`test | lint | fmt --check`)
+> with both verdicts pinned to the live code-hash `700e3b535c587fd309e4de0a5f973867a577fc02`.
+> Fast-forwarded `9f476d5..5594d14` (linear, no merge commit); worktree + branch removed.
 >
 > **0022 — Verifier hermetic teardown — INBOX (`chore`, unclaimed).** Minted directly (no plan)
 > from operator-accepted idea [`ideas/0001`](./ideas/0001-per-worktree-compose-isolation.md),
