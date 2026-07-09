@@ -2,7 +2,7 @@
 id: 0022
 title: Make the verifier stack boot hermetic — always tear down its own volume (down -v on any exit)
 type: chore         # feature | chore
-status: awaiting-merge          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []      # touches ok.sh + verifier discipline only; no crate source, no contract
@@ -125,6 +125,15 @@ branch's data); this **removes** a human-in-the-loop block rather than adding on
   ADR (chore makes no contract/domain decision), `REVIEW-STATUS: approved` with the chore-invariant
   attestation pinned to code-hash `700e3b53`. Flipped → **`awaiting-merge`** and STOP. Human reviews
   the diff + Summary and merges. (No worktree/branch to tear down — the change is already on `main`.)
+- 2026-07-09 [claude] **`/finalize` (operator-authorised) → `merged`.** Main-only chore: no branch
+  to ff-merge and no worktree to tear down — the work already lives on `main`. Audit clean (all six
+  0022 commits authored+committed by the human with well-formed `Co-authored-by:
+  <agent>@organized-koala.local` trailers, Conventional-Commit subjects; no `noreply@anthropic.com`).
+  Step 3 freshen N/A (already current). DoD re-checked at the **live** code-hash
+  `700e3b535c587fd309e4de0a5f973867a577fc02` (== attested): `fmt --check`/`lint`/`shellcheck ok.sh`
+  clean, `./ok.sh test` all green (38 suites ok), reviewer `approved` + chore-invariant attestation
+  valid at this hash, verifier pass N/A (chore). Flipped `awaiting-merge`→`merged`; dashboard
+  regenerated. No `git push` (operator's to run).
 
 ## Summary
 

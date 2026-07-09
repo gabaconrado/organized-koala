@@ -59,7 +59,7 @@ backlog".
 | [0019](./features/0019-task-subtasks.md) | Sub-tasks — flat title/status children of a task, with TUI list nesting + collapse | feature | merged | medium | 0016 (merged ✓) | — (merged) |
 | [0020](./features/0020-tui-tasks-pane-rendering-overhaul.md) | Tasks-pane rendering overhaul — completed-last, today/older split, hide toggle, bounded 200-cap | feature | merged | medium | 0019 (merged ✓) | — (merged) |
 | [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | merged | medium | 0012 (merged ✓) | — (merged) |
-| [0022](./features/0022-verifier-hermetic-teardown.md) | Make the verifier stack boot hermetic — always tear down its own volume (`down -v` on any exit) | chore | awaiting-merge | low | — | — (main-only chore; no worktree) |
+| [0022](./features/0022-verifier-hermetic-teardown.md) | Make the verifier stack boot hermetic — always tear down its own volume (`down -v` on any exit) | chore | merged | low | — | — (main-only chore; no worktree) |
 | [0023](./features/0023-tui-task-date-window-and-filter.md) | TUI task date-window (hide older than X days) + filter-by-day | feature | merged | medium | 0020 (merged ✓) | — (merged) |
 
 > **0023 — TUI task date-window + filter-by-day — MERGED** (operator-authorised ff-merge; `main`
@@ -89,8 +89,9 @@ backlog".
 > with both verdicts pinned to the live code-hash `700e3b535c587fd309e4de0a5f973867a577fc02`.
 > Fast-forwarded `9f476d5..5594d14` (linear, no merge commit); worktree + branch removed.
 >
-> **0022 — Verifier hermetic teardown — AWAITING-MERGE (`chore`, main-only; awaiting the human's
-> merge).** Minted directly (no plan)
+> **0022 — Verifier hermetic teardown — MERGED** (operator-authorised `/finalize`; `chore`,
+> main-only — no branch to ff-merge, no worktree to tear down; the work already lives on `main`,
+> commits `f764dbe` + `5195745`). Minted directly (no plan)
 > from operator-accepted idea [`ideas/0001`](./ideas/0001-per-worktree-compose-isolation.md),
 > **approach (1) only**. Two commits on `main`: `ok.sh` gains a hermetic **`verify-boot <command>`**
 > verb (commit `f764dbe`) — up (`--wait`) → run the exercise `<command>` → **guaranteed
@@ -109,7 +110,12 @@ backlog".
 > `reviewer` **approved** attesting the invariant (live verifier pass skipped), pinned to code-hash
 > `700e3b535c587fd309e4de0a5f973867a577fc02`. Coverage **73.20%** headline line (report-only),
 > unchanged vs 0023 (no crate code touched). CLAUDE.md's learned-0011 gotcha updated to record
-> approach (1) landed + the honest residual.
+> approach (1) landed + the honest residual. **Finalize:** audit clean (all six 0022 commits
+> authored + committed by the human with well-formed agent co-author trailers, Conventional-Commit
+> subjects); step-3 freshen N/A (main-only, already current); DoD re-checked green at the **live**
+> code-hash `700e3b53…` (== attested) — `fmt --check` / `lint` / `shellcheck ok.sh` clean, `./ok.sh
+> test` all green, reviewer `approved` + chore-invariant attestation valid, verifier N/A (chore).
+> Flipped `awaiting-merge`→`merged` in place; no `git push` (operator's to run).
 >
 > **0021 — Profiles sorted oldest-first by insertion time — MERGED** (operator-authorised
 > ff-merge; `main` @ `8e4a761`). A small,
