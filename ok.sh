@@ -50,7 +50,13 @@ ok.sh — workspace operations
   ./ok.sh prepare          regenerate the .sqlx/ offline query cache (needs a live DB)
   ./ok.sh up               bring the docker stack up (postgres -> migrate one-shot -> server
                            -> otel); migrations run automatically as a compose one-shot
-  ./ok.sh down             tear the docker stack down
+  ./ok.sh down             tear the docker stack down (dev: keeps the postgres volume)
+  ./ok.sh verify-boot CMD [ARGS...]
+                           HERMETIC verifier boot: bring the deploy stack up (--wait), run CMD
+                           against it, then ALWAYS tear it down with `down --volumes` on any
+                           exit (success, failure, or signal). Destroys only the volume this
+                           run created (deploy_postgres-data), so no migration history survives
+                           for a later boot to inherit — no operator authorization required
   ./ok.sh run-server       run `organized-koalad run` (the long-running HTTP server)
   ./ok.sh run-tui          run the TUI (organized-koala)
   ./ok.sh secret-scan      scan staged diff + board for secrets
@@ -183,12 +189,70 @@ cmd_down() {
   require_docker
   require_compose
   # Pass the env file if present so compose can resolve the required-var (`:?`) references
-  # during teardown; fall back to a bare invocation otherwise.
+  # during teardown; fall back to a bare invocation otherwise. NOTE: the dev `down` deliberately
+  # does NOT pass --volumes — a dev keeps their local data across `up`/`down`. The hermetic
+  # volume-destroying teardown lives in `verify-boot` (below), for the verifier only.
   if [[ -f "${ENV_FILE}" ]]; then
     docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" down
   else
     docker compose -f "${COMPOSE_FILE}" down
   fi
+}
+
+# Volume-destroying teardown of the deploy stack, run only from cmd_verify_boot's trap. Tears
+# the SAME compose project the boot created (project `deploy`, volume `deploy_postgres-data`)
+# down with --volumes, so no Postgres data / migration history survives the run. Preserves the
+# exit status that triggered the trap so the verifier still sees its exercise command's result.
+verify_teardown() {
+  local status="$?"
+  echo "ok.sh: verify-boot tearing down the stack (down --volumes)..." >&2
+  if [[ -f "${ENV_FILE}" ]]; then
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" down --volumes >/dev/null 2>&1 || true
+  else
+    docker compose -f "${COMPOSE_FILE}" down --volumes >/dev/null 2>&1 || true
+  fi
+  exit "${status}"
+}
+
+# HERMETIC verifier boot. Bring the deploy stack up and wait for it to be ready, run the
+# caller-supplied exercise command against it, and GUARANTEE teardown with `down --volumes` on
+# ANY exit — success, failure, or signal. The verifier runs its whole live exercise as CMD here,
+# so a single invocation is hermetic by construction: a `trap` set in one shell would not
+# survive the verifier's separate exercise steps (each is its own process), so the up + exercise
+# + guaranteed teardown must live inside one process. Because the teardown destroys ONLY the
+# volume this same run created (deploy_postgres-data), it needs no operator authorization — that
+# sign-off was only ever about destroying ANOTHER branch's data (the learned-0011 gotcha).
+#
+#   Usage: ./ok.sh verify-boot <command> [args...]
+#     e.g. ./ok.sh verify-boot ./scripts/exercise-api.sh
+#          ./ok.sh verify-boot bash -c 'curl -fsS localhost:8080/healthz && ...'
+cmd_verify_boot() {
+  if [[ "$#" -eq 0 ]]; then
+    echo "ok.sh: verify-boot needs an exercise command to run against the live stack." >&2
+    echo "usage: ./ok.sh verify-boot <command> [args...]" >&2
+    exit 2
+  fi
+
+  require_docker
+  require_compose
+  ensure_env_file
+
+  # Guarantee teardown of THIS run's stack + volume on any exit. EXIT covers a normal return and
+  # a `set -e` failure of the exercise command; the INT/TERM/HUP traps convert a signal into an
+  # `exit`, which fires the EXIT trap exactly once. verify_teardown targets the same project the
+  # `up` below creates.
+  trap verify_teardown EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
+
+  # Mirror cmd_up (postgres -> migrate one-shot -> server -> otel; ordering is in compose), plus
+  # --wait so the exercise command below runs against a fully-ready stack (server /healthz).
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --build --wait
+
+  # Run the verifier's exercise against the live stack. Under `set -e` a non-zero result
+  # propagates to the EXIT trap, which still tears the stack + volume down.
+  "$@"
 }
 
 # Generate deploy/.env with DEV-ONLY placeholder credentials if it is absent. The file is
@@ -271,6 +335,7 @@ main() {
     prepare)     cmd_prepare "$@" ;;
     up)          cmd_up "$@" ;;
     down)        cmd_down "$@" ;;
+    verify-boot) cmd_verify_boot "$@" ;;
     run-server)  cmd_run_server "$@" ;;
     run-tui)     cmd_run_tui "$@" ;;
     secret-scan) cmd_secret_scan "$@" ;;
