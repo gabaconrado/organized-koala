@@ -107,3 +107,39 @@ branch's data); this **removes** a human-in-the-loop block rather than adding on
 - 2026-07-09 [orchestrator] Chore track: **step-5 live verifier pass SKIPPED** (chore clause 4 N/A —
   no behaviour/wire to exercise; the cold reviewer's invariant attestation is the safety net).
   Proceeding to eng-manager tail (Summary + coverage + handoff), then awaiting-merge.
+
+## Summary
+
+A **main-only `chore`** landing **approach (1)** of idea
+[`0001`][idea-0001] — hermetic verifier stack boot — so a verifier never strands a Postgres
+volume / migration history for a later boot to inherit.
+
+- **`ok.sh` — new `verify-boot <command>` verb** (commit `f764dbe`): one process brings the
+  `deploy` stack up (`--wait`), runs the caller's exercise `<command>` against the live stack,
+  then **guarantees `down --volumes` teardown on any exit** — success, failure, or signal — via
+  EXIT + INT/TERM/HUP traps, targeting the same project/volume it created
+  (`deploy` / `deploy_postgres-data`) and **preserving the exercise's exit status**. Plain dev
+  `./ok.sh down` is unchanged (keeps the volume).
+- **`verifier` agent wiring** (commit `5195745`): the verifier now boots + exercises via
+  `./ok.sh verify-boot <command>` instead of a manual `up` + happy-path `down`, so teardown is
+  guaranteed by construction rather than by remembering to clean up.
+- **Effect:** in the intentionally **serialized** dev/verify workflow this **eliminates** the
+  learned-0011 cross-worktree migration-history conflict — with no state surviving a run there is
+  never a leftover migration history to inherit — and the self-cleanup needs **no** operator
+  authorization (it destroys only state the same run created, distinct from the operator-gated
+  reset that would destroy another branch's data).
+- **Honest residual (out of scope, per the operator's decision):** the **hard-crash residual**
+  (reboot / OOM-kill before the trap fires) and true **concurrent** worktrees are **not** covered
+  by a trap — only the declined approach (2) (per-worktree `COMPOSE_PROJECT_NAME` isolation) would
+  make the failure structurally impossible; that rare case remains handled by the existing
+  operator-authorized `docker compose down -v` reset.
+- **Chore invariant held** — cold `reviewer` **approved**, attesting **no** behaviour change
+  (shipped `cmd_up`/`cmd_down`/serve path untouched; `verify-boot` is verifier-only tooling),
+  **no** `contract`/wire change (#2), **no** domain-structure change (#3). `crates/` untouched;
+  pinned to CODE-HASH `700e3b535c587fd309e4de0a5f973867a577fc02`
+  (REVIEWED-SHA `51957454909e762f423cd5ad6662716357c2b746`). Chore track → the **live verifier
+  pass is skipped** (clause 4 N/A). Gates green (`test` / `lint` / `fmt --check` / `shellcheck`).
+
+coverage: 73.20% (report-only, not a gate — **unchanged** by this chore; no crate code touched,
+so identical to 0023's headline figure. `TOTAL … 73.20% … 543 97 82.14% … 75.12%` from
+`./ok.sh coverage`).

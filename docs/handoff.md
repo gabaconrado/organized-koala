@@ -5,6 +5,42 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-07-09 (0022 — verifier stack boot made hermetic)
+
+A **main-only `chore`** (no worktree — `ok.sh` + `.claude/agents/verifier.md` are home #1
+shared infra that must never ride a feature branch) landing **approach (1)** of idea
+[`0001`][idea-0001-h]: a hermetic verifier stack boot so a verifier never strands a Postgres
+volume / migration history for a later boot to inherit.
+
+- **Mechanism — `./ok.sh verify-boot <command>`** (commit `f764dbe`, `platform-dev`): one process
+  brings the `deploy` stack up (`--wait`), runs the caller's exercise `<command>` against the live
+  stack, then **guarantees `down --volumes` teardown on any exit** (success, failure, signal) via
+  EXIT + INT/TERM/HUP traps, targeting the same project/volume it created
+  (`deploy` / `deploy_postgres-data`) and **preserving the exercise exit status**
+  (`local status="$?"` captured first). Plain dev `./ok.sh down` is unchanged (keeps the volume).
+- **Verifier wiring** (commit `5195745`, `eng-manager` — owns `.claude/**`): the verifier now
+  boots + exercises via `verify-boot <command>` instead of manual `up` + happy-path `down`;
+  teardown is guaranteed by construction.
+- **Effect:** in the intentionally **serialized** workflow this **eliminates** the learned-0011
+  cross-worktree migration-history conflict (no surviving state ⇒ nothing to inherit); the
+  self-cleanup needs **no** operator authorization (it destroys only state the same run created).
+  **CLAUDE.md's learned-0011 gotcha was updated** to record that approach (1) has now landed, with
+  the honest residual called out (see below).
+- **Honest residual, out of scope per the operator's decision:** the **hard-crash residual**
+  (reboot / OOM before the trap fires) and true **concurrent** worktrees are **not** covered by a
+  trap — only the **declined** approach (2) (per-worktree `COMPOSE_PROJECT_NAME`) would make it
+  structurally impossible. Approach (2) is declined **for now** (the operator's serialized-workflow
+  decision), not pending; the rare crash/concurrent case still uses the operator-authorized
+  `docker compose down -v` reset.
+- **Chore track:** cold `reviewer` **approved** attesting the chore invariant (no behaviour /
+  no `contract`-wire #2 / no domain #3 change — `crates/` untouched), pinned to code-hash
+  `700e3b535c587fd309e4de0a5f973867a577fc02`; the **live verifier pass was skipped** (clause 4 N/A).
+  Gates green (`test` / `lint` / `fmt --check` / `shellcheck`). Coverage **73.20%** headline line
+  (report-only) — **unchanged** vs 0023 as expected (no crate code touched). No new crate, no
+  standards change, no idea filed.
+
+[idea-0001-h]: ../board/ideas/0001-per-worktree-compose-isolation.md
+
 ## Handoff — 2026-07-08 (0023 — TUI task date-window + filter-by-day)
 
 A full-stack `feature` giving the Tasks pane a **server-backed UTC-civil-day window** over

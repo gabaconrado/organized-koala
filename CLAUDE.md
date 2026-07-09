@@ -59,6 +59,7 @@ not invoke `cargo`/`docker`/`sqlx` ad-hoc when a verb exists; extend `ok.sh` ins
 | `./ok.sh migrate` | **dev-only** convenience; delegates to `organized-koalad migrate` (the binary owns migrations at runtime — see [ADR-0004][adr-0004]) |
 | `./ok.sh rollback` | **dev-only** convenience; delegates to `organized-koalad rollback` (revert the most recent migration; never automated) |
 | `./ok.sh up` / `./ok.sh down` | bring the docker stack (server + Postgres + OTel) up/down; `up` runs migrations automatically (a one-shot `organized-koalad migrate` compose service that the server gates on) |
+| `./ok.sh verify-boot <command>` | **verifier-only, hermetic**: up (`--wait`) → run the exercise `<command>` against the live stack → **guaranteed `down --volumes` teardown on any exit** (success/failure/signal), preserving the exercise's exit status; never strands the volume (see the learned-0011 gotcha) |
 | `./ok.sh run-server` | run `organized-koalad run` (the long-running HTTP server; the binary's default no-arg behaviour) |
 | `./ok.sh run-tui` | run the `organized-koala` TUI |
 | `./ok.sh code-hash [REF]` | print the stable code-paths digest (`crates/` + Cargo manifests) of `REF` (default HEAD); review/verify verdicts pin to it, not the commit sha (see "Verdict pinning") |
@@ -163,9 +164,28 @@ the resolved migrations"* — the one-shot `migrate` errors and the `run` servic
 comes up. **This is an environment conflict, not a code defect**, and per **#6** it is **not** worked
 around: the clean reset (`docker compose down -v`) destroys another branch's local data, so the
 verifier blocks and the **operator authorizes** resetting `deploy_postgres-data` before the re-run.
-**Recommended durable fix (a `platform-dev` concern):** isolate each worktree's stack — a per-worktree
-`COMPOSE_PROJECT_NAME` (e.g. derived from the worktree slug) so concurrent branches never share
-migration history or a volume — which removes the failure mode entirely.
+
+**Update (0022 landed approach (1) — hermetic verifier boot).** The verifier **no longer** boots via
+manual `./ok.sh up` + a happy-path `./ok.sh down`; it boots + exercises via the hermetic verb
+**`./ok.sh verify-boot <command>`**, which brings the `deploy` stack up (`--wait`), runs the exercise
+`<command>`, then **always** tears down with `down --volumes` on **any** exit — success, failure, or
+signal (EXIT + INT/TERM/HUP traps), preserving the exercise's exit status. So a verifier no longer
+**strands** a volume / migration history for a later boot to inherit. In the intentionally
+**serialized** dev/verify workflow this **eliminates** the failure mode above: with no state
+surviving a run, there is never a leftover migration history to inherit, and the self-cleanup needs
+**no** operator authorization (it destroys only state the same run created). Be honest about the
+**residual the trap does not cover**: a **hard crash** (reboot / OOM-kill before the trap fires) and
+true **concurrent** worktrees are still not protected by a trap — only approach (2) below would make
+that structurally impossible. For those rare cases the operator-authorized `docker compose down -v`
+reset remains the escape hatch.
+
+**Durable fix approach (2) — declined for now (per 0022).** Isolating each worktree's stack with a
+per-worktree `COMPOSE_PROJECT_NAME` (e.g. derived from the worktree slug), so concurrent branches
+never share migration history or a volume, would remove the failure mode **entirely** (including the
+hard-crash / concurrent residual). The operator **declined** it for now — development is intentionally
+serialized, so the cross-worktree conflict cannot arise in practice and the isolation wiring is
+unwarranted complexity. It is a `platform-dev` concern kept on record should the workflow ever go
+parallel; it is not pending work.
 
 **Gotcha — merging one of two parallel `awaiting-merge` features voids the trailing one's verdicts
 (learned 0011).** When two independent features both sit at `awaiting-merge` and the operator merges
