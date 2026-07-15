@@ -19,7 +19,7 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragra
 use crate::app::{
     App, AuthField, AuthMode, AuthState, DateComponent, MainState, NoteDetail, NotePane, NotesMode,
     NotesState, ProfilesMode, ProfilesState, Screen, Tab, TaskDetail, TaskListState, TaskPane,
-    Timer,
+    TextInput, Timer,
 };
 use contract::{Note, TaskStatus, TimerSession};
 
@@ -868,6 +868,10 @@ struct DetailPane<'a> {
     /// value with newline + wrap support, rather than a fixed single-line 3-row box. Opt-in per
     /// pane (the note Content pane; ADR-0011) so the task detail layout is unchanged.
     fill: bool,
+    /// The live edit buffer when this pane is the focused, in-edit field: the draw layer renders
+    /// its scrolled visible slice and places the terminal cursor at the caret (feature 0025).
+    /// `None` for a read-only, non-focused, or non-editing pane (rendered from `value`).
+    caret: Option<&'a TextInput>,
 }
 
 /// Floor for a fill pane's height so a short value still shows a usable box matching the others'
@@ -907,12 +911,33 @@ fn draw_detail_panes(frame: &mut Frame, area: Rect, title: &str, panes: &[Detail
         if pane.focused && pane.editable {
             field = field.border_style(Style::default().fg(Color::Magenta));
         }
-        let mut paragraph = Paragraph::new(pane.value.clone()).block(field);
-        if pane.fill {
-            // Multiline: honour embedded '\n' and wrap long lines so Content displays fully.
-            paragraph = paragraph.wrap(Wrap { trim: false });
+        let content = field.inner(*slot);
+        match pane.caret {
+            // The focused multiline edit: render the hard-wrapped, scrolled visible rows and place
+            // the terminal cursor at the caret (feature 0025 — subsumes idea 0006's scroll gap).
+            Some(input) if pane.fill => {
+                let view = input.viewport(content.width, content.height);
+                frame.render_widget(Paragraph::new(view.lines.join("\n")).block(field), *slot);
+                frame.set_cursor_position((
+                    content.x.saturating_add(view.caret_col),
+                    content.y.saturating_add(view.caret_row),
+                ));
+            }
+            // The focused single-line edit: render the horizontally-scrolled slice + caret.
+            Some(input) => {
+                let (visible, col) = input.field_view(content.width);
+                frame.render_widget(Paragraph::new(visible).block(field), *slot);
+                frame.set_cursor_position((content.x.saturating_add(col), content.y));
+            }
+            None => {
+                let mut paragraph = Paragraph::new(pane.value.clone()).block(field);
+                if pane.fill {
+                    // Multiline: honour embedded '\n' and wrap long lines so Content displays fully.
+                    paragraph = paragraph.wrap(Wrap { trim: false });
+                }
+                frame.render_widget(paragraph, *slot);
+            }
         }
-        frame.render_widget(paragraph, *slot);
     }
 }
 
@@ -948,6 +973,8 @@ fn draw_task_detail(frame: &mut Frame, area: Rect, detail: &TaskDetail) {
                 focused,
                 editable: pane.is_editable(),
                 fill: false,
+                // Task-detail caret rendering lands with the task-detail field migration (slice 2).
+                caret: None,
             }
         })
         .collect();
@@ -1149,6 +1176,12 @@ fn draw_note_detail(frame: &mut Frame, area: Rect, detail: &NoteDetail) {
                 NotePane::Content => note_editing_or(detail, editing, note.content.clone()),
                 NotePane::Created => format_created_at(note),
             };
+            // The caret renders only on the focused, in-edit pane (feature 0025).
+            let caret = if focused && detail.is_editing() {
+                detail.edit.as_ref()
+            } else {
+                None
+            };
             DetailPane {
                 label: note_pane_label(*pane),
                 value,
@@ -1157,6 +1190,7 @@ fn draw_note_detail(frame: &mut Frame, area: Rect, detail: &NoteDetail) {
                 // The multiline Content pane fills the remaining height and wraps (ADR-0011);
                 // Title/Created stay fixed 3-row boxes.
                 fill: matches!(pane, NotePane::Content),
+                caret,
             }
         })
         .collect();
@@ -1166,7 +1200,10 @@ fn draw_note_detail(frame: &mut Frame, area: Rect, detail: &NoteDetail) {
 /// The live note edit buffer when this pane is being edited, else the snapshot `value`.
 fn note_editing_or(detail: &NoteDetail, editing: bool, value: String) -> String {
     if editing {
-        detail.edit.clone().unwrap_or(value)
+        detail
+            .edit
+            .as_ref()
+            .map_or(value, |input| input.as_str().to_owned())
     } else {
         value
     }

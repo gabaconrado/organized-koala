@@ -227,9 +227,22 @@ pub fn map_key(
         // they move the list selection.
         KeyCode::Up if filtering_date => Some(Event::IncrementField),
         KeyCode::Down if filtering_date => Some(Event::DecrementField),
+        // While editing the multiline note-detail Content pane, Up/Down move the caret between
+        // lines (feature 0025 / ADR-0011); everywhere else they stay list/field navigation.
+        KeyCode::Up if editing_note_content(screen) => Some(Event::MoveUp),
+        KeyCode::Down if editing_note_content(screen) => Some(Event::MoveDown),
         KeyCode::Down => Some(Event::Next),
         KeyCode::Up => Some(Event::Prev),
         KeyCode::Backspace => Some(Event::Backspace),
+        // Caret movement / forward-delete within a text-entry field (feature 0025). Only produced
+        // in a text-entry context so they never collide with a list/detail command; Left/Right/
+        // Home/End/Delete are otherwise unbound. Handlers that do not yet route them treat them as
+        // inert.
+        KeyCode::Delete if text_entry => Some(Event::Delete),
+        KeyCode::Left if text_entry => Some(Event::MoveLeft),
+        KeyCode::Right if text_entry => Some(Event::MoveRight),
+        KeyCode::Home if text_entry => Some(Event::MoveHome),
+        KeyCode::End if text_entry => Some(Event::MoveEnd),
         KeyCode::F(2) if matches!(screen, Screen::Auth(_)) => Some(Event::ToggleAuthMode),
         KeyCode::Char(c) if text_entry => Some(Event::Char(c)),
         // In an open detail view (no field edit in progress): `e` begins a field edit on the focused

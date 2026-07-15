@@ -11,6 +11,7 @@ use contract::{CreateNoteRequest, Note, UpdateNoteRequest};
 
 use super::Session;
 use super::protocol::{ClientRequest, RequestId};
+use super::text_input::{self, TextInput};
 use crate::app::Event;
 
 /// A two-field note form (title / content) shared by the create and edit sub-flows.
@@ -115,7 +116,7 @@ pub struct NoteDetail {
     /// Index into [`NotePane::ALL`] of the focused pane.
     pub focused: usize,
     /// The in-progress edit buffer for the focused (editable) pane; `None` when not editing.
-    pub edit: Option<String>,
+    pub edit: Option<TextInput>,
 }
 
 impl NoteDetail {
@@ -181,23 +182,33 @@ impl NoteDetail {
     /// no-op on the read-only `Created` pane (`e` is inert there).
     pub fn begin_edit(&mut self) {
         match self.focused_pane() {
-            NotePane::Title => self.edit = Some(self.note.title.clone()),
-            NotePane::Content => self.edit = Some(self.note.content.clone()),
+            NotePane::Title => self.edit = Some(TextInput::new(self.note.title.clone())),
+            NotePane::Content => self.edit = Some(TextInput::new(self.note.content.clone())),
             NotePane::Created => {}
         }
     }
 
-    /// Type a character into the edit buffer (no-op when not editing).
+    /// Insert a character at the caret in the edit buffer (no-op when not editing).
     pub fn push_char(&mut self, c: char) {
         if let Some(buf) = &mut self.edit {
-            buf.push(c);
+            buf.insert_char(c);
         }
     }
 
-    /// Delete the last character of the edit buffer (no-op when not editing).
+    /// Delete the character before the caret in the edit buffer (no-op when not editing).
     pub fn backspace(&mut self) {
         if let Some(buf) = &mut self.edit {
-            let _ = buf.pop();
+            buf.backspace();
+        }
+    }
+
+    /// Apply a caret movement / forward-delete to the edit buffer, returning whether the event was
+    /// a text-motion event. No-op (returns `false`) when not editing.
+    pub fn edit_motion(&mut self, event: &Event) -> bool {
+        if let Some(buf) = &mut self.edit {
+            text_input::apply_motion(buf, event)
+        } else {
+            false
         }
     }
 
@@ -437,7 +448,10 @@ impl NotesState {
                 // Both commit the focused field: the single-line Title commits on `Submit`
                 // (Enter), the multiline Content on `Commit` (Ctrl+S) — ADR-0011 §2.
                 Event::Submit | Event::Commit => return self.submit_field(session),
-                _ => {}
+                // Caret movement / forward-delete act on the edit buffer.
+                other => {
+                    let _ = detail.edit_motion(&other);
+                }
             }
             return None;
         }
@@ -458,7 +472,7 @@ impl NotesState {
         let NotesMode::Detail(detail) = &mut self.mode else {
             return None;
         };
-        let buffer = detail.edit.as_ref()?.clone();
+        let buffer = detail.edit.as_ref()?.as_str().to_owned();
         let (title, content) = match detail.focused_pane() {
             NotePane::Title => (buffer.trim().to_owned(), detail.note.content.clone()),
             NotePane::Content => (detail.note.title.clone(), buffer),

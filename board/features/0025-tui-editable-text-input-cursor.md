@@ -271,3 +271,20 @@ does not flip the idea's status (ideas lifecycle).
   render (must land same cycle, learned 0019/0020). `grill` considered and **declined** — the
   residual risks are implementation-correctness (UTF-8/char-boundary, scroll off-by-one) handled by
   the primitive's unit tests, not genuine architecture forks. Set `status: ready`.
+- 2026-07-15 [tui-dev] Slice 1 done: new `crates/tui/src/app/text_input/{mod,tests}.rs` —
+  `TextInput` (String buffer + char-index caret; `insert_char`/`backspace`/`delete`,
+  `move_left`/`move_right`/`home`/`end`, multiline `move_up`/`move_down`; `field_view` for a
+  single-line horizontally-scrolled field and `viewport` for a hard-wrapped, vertically-scrolled
+  multiline pane returning caret `(row,col)`). All ops char-index→byte via `char_indices`, no
+  `indexing_slicing`. 25 source-owned unit tests (empty/multi-byte/both-ends/mid-buffer,
+  single-line scroll, multiline wrap + scroll off-by-one + exact-wrap-boundary trailing row) — green
+  via `cargo test -p tui --lib` + doctest. Adopted on `NoteDetail.edit`
+  (`Option<String>`→`Option<TextInput>`); added movement `Event`s
+  `MoveLeft/MoveRight/MoveHome/MoveEnd/MoveUp/MoveDown/Delete` + shared `text_input::apply_motion`;
+  bound the keys in `map_key` (Left/Right/Home/End/Delete gated on text-entry; Up/Down→caret only
+  under `editing_note_content`, unchanged elsewhere); rendered the caret via
+  `frame.set_cursor_position` for the note-detail Title (single-line) and Content (multiline scroll)
+  panes in `draw_detail_panes`. Gate: `cargo clippy -p tui --lib --bins` clean, `./ok.sh fmt` clean.
+  `--all-targets` intentionally red (tester harness stranded by the `edit` field-type change,
+  learned 0019/0020 — slice 3). No `contract`/wire/server change (still feeds the unchanged
+  `UpdateNoteRequest`).

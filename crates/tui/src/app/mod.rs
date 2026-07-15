@@ -23,6 +23,7 @@ pub mod protocol;
 pub mod task_add;
 pub mod task_detail;
 pub mod task_list;
+pub mod text_input;
 pub mod timer;
 pub mod token;
 
@@ -37,6 +38,7 @@ pub use task_list::{
     DateComponent, DateFilterState, DeleteTarget, OLDER_SEPARATOR_LABEL, TaskListState, VisibleRow,
     WindowEditState,
 };
+pub use text_input::{TextInput, Viewport};
 pub use timer::{DurationEditState, Timer};
 pub use token::SessionToken;
 
@@ -53,6 +55,24 @@ pub enum Event {
     Char(char),
     /// Delete the character before the cursor in the focused field.
     Backspace,
+    /// Forward-delete the character at the cursor in the focused field (the `Delete` key).
+    Delete,
+    /// Move the caret one character left within the focused text field (the `Left` key).
+    MoveLeft,
+    /// Move the caret one character right within the focused text field (the `Right` key).
+    MoveRight,
+    /// Move the caret to the start of the current line in the focused text field (the `Home` key).
+    MoveHome,
+    /// Move the caret to the end of the current line in the focused text field (the `End` key).
+    MoveEnd,
+    /// Move the caret up one line within the focused multiline text field (the `Up` key, gated on
+    /// editing the note-detail Content pane; ADR-0011 / feature 0025). Single-line fields keep
+    /// `Up` as list/field navigation ([`Event::Prev`]).
+    MoveUp,
+    /// Move the caret down one line within the focused multiline text field (the `Down` key, gated
+    /// on editing the note-detail Content pane). Single-line fields keep `Down` as navigation
+    /// ([`Event::Next`]).
+    MoveDown,
     /// Move focus to the next field / list item.
     Next,
     /// Move focus to the previous field / list item.
