@@ -61,7 +61,19 @@ backlog".
 | [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | merged | medium | 0012 (merged ✓) | — (merged) |
 | [0022](./features/0022-verifier-hermetic-teardown.md) | Make the verifier stack boot hermetic — always tear down its own volume (`down -v` on any exit) | chore | merged | low | — | — (main-only chore; no worktree) |
 | [0023](./features/0023-tui-task-date-window-and-filter.md) | TUI task date-window (hide older than X days) + filter-by-day | feature | merged | medium | 0020 (merged ✓) | — (merged) |
+| [0024](./features/0024-tui-esc-cancel-notes-profiles-dialogs.md) | Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight) | feature | inbox | high | — | — (unclaimed) |
+| [0025](./features/0025-tui-editable-text-input-cursor.md) | Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing) | feature | inbox | medium | — | — (unclaimed) |
 
+> **0024 / 0025 — filed to `inbox`** (operator request, 2026-07-15; awaiting `architect`
+> planning). **0024** is a confirmed TUI bug: on an **idle** Notes/Profiles create·edit·delete
+> dialog (no request in flight) `Esc` does not close it — `Event::Cancel` is only acted on
+> `if self.is_pending()` (`app/mod.rs:452`), and the six Notes/Profiles handlers drop the idle
+> `Cancel` (the Tasks handlers and note-detail handler reset their mode correctly). **0025** is a
+> broad `tui` feature — a movable, visible cursor across all text inputs (today every input is
+> append-only / end-locked, worst in long Notes); it overlaps and likely subsumes idea
+> [`0006`](./ideas/0006-note-content-scroll-cursor-affordance.md). Both are `tui`-crate-only with
+> no expected `contract`/server/domain change; the operator will kick off the work manually.
+>
 > **0023 — TUI task date-window + filter-by-day — MERGED** (operator-authorised ff-merge; `main`
 > @ `5594d14`). A full-stack `feature`. Governed by
 > [ADR-0015](../docs/adr/0015-task-list-date-window-query.md) (the wire event; also closes the
