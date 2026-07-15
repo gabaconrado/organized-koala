@@ -2,7 +2,7 @@
 id: 0026
 title: Map axum Query-extractor rejections to the {code,message} JSON error contract
 type: feature       # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []
@@ -167,3 +167,21 @@ API + reqwest path per DoD clause 4, confirming the malformed-param branch now r
   (carries the plan). Branch `feature/0026-error-contract-query-params`. Session: drive cycle
   0026. Build dispatch: server-dev (extractor + swap) → tester (JSON-body pins); no
   contract-owner, no tui slice.
+- [x] 2026-07-15 [server-dev] Slice 1 done @28a4afd. New `crates/server/src/extract.rs`:
+  `ValidatedQuery<T>(pub T)` newtype (`FromRequestParts<S>` for `S: Send + Sync`, `T:
+  DeserializeOwned`) delegating to axum's `Query` and mapping `QueryRejection` →
+  `ApiError::Validation(rejection.body_text())` (→ `400` + `ErrorCode::ValidationFailed` + JSON
+  `ErrorBody`). `pub mod extract;` in `lib.rs`; `list_tasks` swapped to `ValidatedQuery<...>`
+  (`Query` import dropped). Extractor state-agnostic (reusable primitive); over-ceiling/inverted-
+  window handler validation untouched. No `contract`/`.sqlx`/schema/`tui` change. Gates green:
+  build, lint, fmt --check.
+- [x] 2026-07-15 [tester] Slice 2 done @8f311f6. Added to `crates/server/tests/tasks.rs`:
+  `list_tasks_empty_limit_is_400_validation_failed` (`?limit=`),
+  `list_tasks_non_integer_limit_is_400_validation_failed` (`?limit=abc`),
+  `list_tasks_empty_offset_is_400_validation_failed` (`?offset=`). Each asserts `400` +
+  `expect_error(ErrorCode::ValidationFailed)` (parses JSON `ErrorBody`, pins contract shape +
+  non-empty message; axum wording not pinned). The two preserved 0020 behaviours referenced (not
+  duplicated): absent→200 (`..default_no_params..`), over-ceiling→400
+  (`..limit_above_ceiling..`). Gates green: test, lint, fmt --check.
+- [x] 2026-07-15 [orchestrator] Build complete; both slices green. Status `working`→`review`.
+  Dispatching cold reviewer.
