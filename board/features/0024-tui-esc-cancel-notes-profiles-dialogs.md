@@ -285,8 +285,8 @@ contract/scope" — the ADR trigger. **No ADR is written or amended for 0024.**
   exit 0; the six new idle-Esc-cancel tests pass and genuinely fail against the pre-fix source).
   Correctness confirmed: five `Event::Cancel => self.mode = <List>` arms drop the owned form/confirm
   payload (draft discard inherent); the two `if`→`match` delete-confirm conversions preserve the
-  Submit path; the in-flight cancel path (`app/mod.rs:452`) is untouched (empty diff on `app/mod.rs`
-  + `terminal/mod.rs`). `tui`-crate-only — empty diff on `contract`/`server`/`app/mod.rs`/
+  Submit path; the in-flight cancel path (`app/mod.rs:452`) is untouched (empty diff on
+  `app/mod.rs` and `terminal/mod.rs`). `tui`-crate-only — empty diff on `contract`/`server`/`app/mod.rs`/
   `terminal/mod.rs`/`tests/common`; no contract/wire (#2), server, domain-structure (#3), or auth
   (#5) change; TUI stays stateless (#1). No hotkey added/renamed → help-overlay width gotcha N/A
   (help lines untouched). No ADR needed. No out-of-scope nits.
@@ -303,3 +303,43 @@ contract/scope" — the ADR trigger. **No ADR is written or amended for 0024.**
   no lingering `deploy-*` containers / `deploy_postgres-data` volume. TUI-only diff did not break
   the live path; nothing new server-side to exercise (empty server/contract diff), Esc→Cancel
   behaviour owned by the TestBackend suite.
+
+## Summary
+
+coverage: 73.25%
+
+Fixes a confirmed TUI bug: on an **idle** Notes/Profiles create·edit·delete dialog (no request in
+flight) `Esc` did not close it. The five idle per-pane handlers matched only the mutating events
+(`Char`/`Backspace`/`Next`/`Prev`/`Submit`) with a `_ => {}` catch-all that silently dropped
+`Event::Cancel`, while a misleading comment claimed cancel was "handled by the caller's cancel
+path" — a path that only fires `if self.is_pending()` (`app/mod.rs:452`). The note-detail handler
+and every Tasks sub-flow handler already carried the correct `Event::Cancel => reset-to-list` arm;
+this cycle aligns the five stragglers with that already-decided pattern.
+
+- **Source fix (`tui`-crate-only).** Five `Event::Cancel => self.mode = <List>` arms added:
+  in `notes.rs`, `handle_create_event` and `handle_edit_event` (one arm each) plus
+  `handle_delete_event` (its `if matches!(event, Event::Submit)` body converted to a `match` with
+  `Submit`/`Cancel` arms); in `profiles.rs`, `handle_create_event` and `handle_rename_event` (one
+  arm each) plus `handle_delete_event` (same `if`→`match` conversion). Resetting `self.mode` to
+  `List` drops the
+  owned `NoteForm`/`ProfileForm`/`ConfirmingDelete` payload, so the draft is discarded inherently
+  (no separate clear); `message` is left untouched, matching the detail/Tasks cancel arms. The two
+  misleading doc-comments were corrected to state the handler resets to the list on `Cancel`.
+- **No routing/wire/domain change.** The in-flight `Event::Cancel if self.is_pending()` arm
+  (`app/mod.rs`) and the key mapping (`terminal/mod.rs`) are untouched; no `contract`/wire (#2), no
+  server, no domain-structure (#3) change; TUI stays stateless (#1). No hotkey added or renamed, so
+  the help-overlay width gotcha (learned-0015/0019) does not apply, and no `Client`/`ClientRequest`/
+  `Outcome`/state-field surface changed, so the tester harness (learned-0019) was not stranded.
+  No ADR — the fix adopts an existing pattern, making no contract/scope decision.
+- **Regression coverage.** Six `TestBackend` tests, one per affected dialog — three in
+  `crates/tui/tests/notes.rs` and three in `crates/tui/tests/profiles.rs`. Each drives the app into
+  the dialog's idle-open state, feeds `Event::Cancel`, and asserts (a) `handle_event(Cancel)`
+  returns `None` with no `Create*`/`Update*`/`Delete*` request emitted, (b) the mode returns to
+  `NotesMode::List`/`ProfilesMode::List`, and (c) the draft/confirm is discarded. The in-flight
+  cancel tests remain untouched and green. The new tests genuinely fail against the pre-fix source.
+
+DoD (`feature` track): clauses 1–3 green (`./ok.sh test | lint | fmt --check`); clause 4 the
+`verifier` confirmed the `TestBackend` suite exists and is green and live-boot-smoked the unchanged
+server/reqwest path (nothing new server-side to exercise on a TUI-only diff); clause 5 N/A (no
+contract change, no new gotcha); clause 6 reviewer **approved** + clause-4 verifier **verified**,
+both pinned to code-hash `fd2bd1508506786d0127a1005317a4852201351d` (last code commit `79467a9`).
