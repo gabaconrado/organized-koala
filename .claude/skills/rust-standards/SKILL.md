@@ -20,6 +20,17 @@ audience: dev
   application-level error propagation at the top.
 - The HTTP error contract (status + `{ code?, message }`) is mapped at the server boundary
   from typed errors; the `code` is the stable, machine-matchable identifier.
+- **Wrap axum's built-in extractors so their rejection joins the error contract (learned 0026).**
+  axum's stock `Query` / `Path` / `Json` extractors reject with a **plain-text** body on malformed
+  input — bypassing the `{ code?, message }` JSON contract and leaving nothing for the TUI to match
+  on `code`. Do not consume a stock extractor directly on a handler that can receive bad input; wrap
+  it in a server-only newtype implementing `FromRequestParts`/`FromRequest` (generic over the state
+  `S: Send + Sync`, and `T: DeserializeOwned`) that delegates to the built-in extractor and maps its
+  rejection into the boundary error (`ApiError::Validation(rejection.body_text())` → `400` +
+  `ErrorCode::ValidationFailed` + JSON `ErrorBody`). The rejection's `body_text()` is client-safe (it
+  echoes the caller's own bad input, not server internals). This mirrors the custom `AuthUser`
+  extractor and is the reusable primitive every query/path/body-parsing endpoint should share
+  (`crates/server/src/extract.rs::ValidatedQuery`).
 
 ### Tests
 

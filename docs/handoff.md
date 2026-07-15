@@ -5,6 +5,56 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-07-15 (0026 — malformed query params return the JSON error contract)
+
+A small, cleanly-scoped **server-only `feature`**, promoted from operator-accepted idea
+[`0010`](../board/ideas/0010-empty-string-query-param-error-contract.md) (surfaced by the verifier
+during 0020). A malformed query-parameter value on the task-list endpoint (`?limit=`, `?limit=abc`,
+`?offset=`) returned axum's built-in **plain-text** `Query`-extractor rejection, bypassing the
+standard `{code,message}` JSON error contract the rest of the API honours. Now it returns
+`400` + `{"code":"validation_failed","message":…}` like everything else.
+
+- **Design — a thin, reusable wrapper extractor.** New `crates/server/src/extract.rs`:
+  `ValidatedQuery<T>(pub T)`, a newtype implementing `FromRequestParts<S>` for `S: Send + Sync`,
+  `T: DeserializeOwned`. It delegates to axum's `Query::<T>::from_request_parts` and maps
+  `Err(rejection)` → `ApiError::Validation(rejection.body_text())` (→ `400` +
+  `ErrorCode::ValidationFailed` + JSON `ErrorBody`) — the exact boundary seam the whole API already
+  flows errors through, mirroring the existing custom `AuthUser` extractor
+  (`crates/server/src/auth/session.rs`). Generic over `T` and state `S`, so it is the reusable
+  primitive any future query-param endpoint inherits. The tracer bullet + only call-site swap is
+  `list_tasks` (`Query<TaskListQuery>` → `ValidatedQuery<TaskListQuery>`). `body_text()` is
+  client-safe — it echoes the caller's own bad input, leaking no server internals.
+- **No wire/domain change.** **No** `contract`/DTO (#2 — the `ErrorBody` shape and
+  `ErrorCode::ValidationFailed` code are already the contract), **no** domain-structure (#3), **no**
+  `.sqlx`/migration, **no** `tui` change (the shipped reqwest client sends real integers, so no real
+  client ever reached this path — it is only hit by a hand-crafted URL). **No ADR**: this *enforces*
+  the already-accepted [ADR-0005](./adr/0005-foundational-wire-contract.md) error contract on the one
+  path (axum's default `Query` rejection) that bypassed it — executing an existing decision, not
+  making a new one. The two 0020 behaviours run through the *handler* (absent → `200`; over-ceiling
+  `?limit=501` → `400 validation_failed`) and are preserved by construction + kept test-pinned.
+- **Tests (`tester`).** Three new server integration cases in `crates/server/tests/tasks.rs` pin the
+  JSON error body for `?limit=` / `?limit=abc` / `?offset=` — each asserts `400` +
+  `expect_error(ErrorCode::ValidationFailed)` (parses the JSON `ErrorBody`, pinning the contract
+  shape + a non-empty message; axum's exact wording is deliberately not pinned). The new `extract.rs`
+  module is 100%-region-covered.
+- **DoD (`feature` track).** Gates green (`test | lint | fmt --check`); reviewer **approved** +
+  verifier **verified** (hermetic `./ok.sh verify-boot`: `?limit=`/`?limit=abc`/`?offset=` each →
+  `400` + `content-type: application/json` + `{"code":"validation_failed",…}`, not plain-text; absent
+  → `200` array; `?limit=501` → `400 validation_failed`), both pinned to code-hash
+  `0d0c8f06077de4b0808ec657b2959e2cdde016cc`. Coverage **73.83%** region (report-only) — effectively
+  flat vs 0025's 73.79% (a 3-line-per-file server addition + 3 tests). Verifier's one inferred-only
+  note: the malformed-query `400` short-circuits in the extractor *before* the instrumented
+  `list_tasks` span, as expected.
+- **Learnings — one durable standards note, no new gotcha.** The cycle was smooth. Recorded the
+  reusable pattern in `rust-standards` (Errors): axum's built-in extractor rejections (`Query`,
+  `Path`, `Json`) default to a **plain-text** body that bypasses the `{code,message}` contract, so a
+  boundary extractor must be wrapped (as `AuthUser` / `ValidatedQuery` do) to map its rejection into
+  `ApiError`. This is a positive pattern, not a recurring miss, so it belongs in the standards skill,
+  **not** as a CLAUDE.md gotcha. No new crate, no agent change, no `contract`/domain surface touched.
+- **Ideas.** None filed — the reviewer and verifier reported no out-of-scope findings, and idea 0010
+  (this item's source) is now realised. Ideas 0010/0011/0012 were promoted to inbox items
+  0026/0027/0028 at this cycle's drive step 1; 0027 (chore) and 0028 (feature) remain `inbox`.
+
 ## Handoff — 2026-07-15 (0025 — editable text inputs: movable, visible cursor)
 
 A **`tui`-crate-only `feature`** at operator request. Every TUI text field was **append-only /
@@ -2611,9 +2661,8 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   **no wire delta**), two stale doc comments corrected, one regression test pinning the order. No
   `contract`/wire (#2), no domain (#3), no ADR, no migration; #1/#4 intact. Reviewer **approved** +
   verifier **verified**, code-hash `b8591d70250155b79c209d4b14b59f6b2abb00fd`; coverage 72.66% line.
-- **The Tasks date-window + filter-by-day is at `review`/in-flight on
-  `feature/0023-tui-task-date-window-and-filter`** (0023, a full-stack `feature`; approved +
-  verified, heading toward `awaiting-merge`): a **server-backed UTC-civil-day window** over
+- **The Tasks date-window + filter-by-day is MERGED on `main`** (0023, a full-stack `feature`,
+  live-verified): a **server-backed UTC-civil-day window** over
   `created_at` plus two client-only, non-persistent knobs, per [ADR-0015][adr-0015-h] (which also
   closes the idea-0009 date-basis fork as keep-UTC). `contract` adds two optional epoch-second
   bounds `created_from` (inclusive) / `created_until` (exclusive) to `TaskListQuery`, both
@@ -2627,9 +2676,8 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   **verified**, code-hash `700e3b535c587fd309e4de0a5f973867a577fc02`; coverage 73.20% line. Two
   CLAUDE.md gotchas (harness re-strand, help-overlay overflow) recurred exactly as predicted — no
   new gotcha, no standards/agent change, no new crate, no idea filed.
-- **Editable text inputs (movable, visible cursor) are at `review`/in-flight on
-  `feature/0025-tui-editable-text-input-cursor`** (0025, a `tui`-crate-only `feature`; approved +
-  verified, heading toward `awaiting-merge`): every TUI text field, previously append-only /
+- **Editable text inputs (movable, visible cursor) is MERGED on `main`** (0025, a
+  `tui`-crate-only `feature`, live-verified): every TUI text field, previously append-only /
   end-locked with no caret, now has a **movable, visible cursor** with mid-buffer insert/delete via
   one shared `TextInput` primitive (`crates/tui/src/app/text_input/`) — `String` buffer + char-index
   caret + insert/backspace/forward-delete/move ops + single-line-scroll (`field_view`) and multiline
@@ -2644,7 +2692,22 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   `5175b54974233e04218f5c2a6eac8d8bc1aece42`; coverage 73.79% region. No new gotcha (the
   harness-strand + help-wrap gotchas recurred as predicted and were annotated); **idea 0012** filed
   (pre-existing `AuthState` password-entry buffer reachable via derived `Debug`).
+- **Malformed query-param values now honour the JSON error contract, at `review`/in-flight on
+  `feature/0026-error-contract-query-params`** (0026, a small server-only `feature`; approved +
+  verified, heading toward `awaiting-merge`): a thin server-only wrapper extractor `ValidatedQuery<T>`
+  (`crates/server/src/extract.rs`) delegates to axum's `Query::<T>::from_request_parts` and maps its
+  `QueryRejection` → `ApiError::Validation(rejection.body_text())` (→ `400` +
+  `ErrorCode::ValidationFailed` + JSON `ErrorBody`), reusing the same boundary seam as the existing
+  `AuthUser` extractor. `list_tasks` is swapped to it, so `?limit=` / `?limit=abc` / `?offset=` now
+  return `{"code":"validation_failed","message":…}` JSON instead of axum's plain-text rejection; the
+  wrapper is generic over `T`/`S`, the reusable primitive future query endpoints inherit. **No**
+  `contract`/DTO (#2), domain (#3), `.sqlx`, migration, or `tui` change, **no ADR** (enforces the
+  existing [ADR-0005][adr-0005-h] error contract on the one path that bypassed it). Preserved 0020
+  behaviours (absent → `200`; over-ceiling `?limit=501` → `400`) run through the handler, unchanged,
+  test-pinned. Promoted from idea 0010. Reviewer **approved** + verifier **verified** (hermetic live
+  boot), both pinned to code-hash `0d0c8f06077de4b0808ec657b2959e2cdde016cc`; coverage 73.83% region.
 
+[adr-0005-h]: ./adr/0005-foundational-wire-contract.md
 [adr-0010-0014-snap]: ./adr/0010-tui-navigation-and-interaction-model.md
 [adr-0011-snap]: ./adr/0011-multiline-content-editing-keymap.md
 [adr-0012-snap]: ./adr/0012-subtasks-domain-exception.md
