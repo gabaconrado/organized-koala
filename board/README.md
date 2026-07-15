@@ -61,18 +61,29 @@ backlog".
 | [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | merged | medium | 0012 (merged ✓) | — (merged) |
 | [0022](./features/0022-verifier-hermetic-teardown.md) | Make the verifier stack boot hermetic — always tear down its own volume (`down -v` on any exit) | chore | merged | low | — | — (main-only chore; no worktree) |
 | [0023](./features/0023-tui-task-date-window-and-filter.md) | TUI task date-window (hide older than X days) + filter-by-day | feature | merged | medium | 0020 (merged ✓) | — (merged) |
-| [0024](./features/0024-tui-esc-cancel-notes-profiles-dialogs.md) | Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight) | feature | inbox | high | — | — (unclaimed) |
+| [0024](./features/0024-tui-esc-cancel-notes-profiles-dialogs.md) | Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight) | feature | ready | high | — | `feature/0024-tui-esc-cancel-notes-profiles-dialogs` |
 | [0025](./features/0025-tui-editable-text-input-cursor.md) | Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing) | feature | inbox | medium | — | — (unclaimed) |
 
-> **0024 / 0025 — filed to `inbox`** (operator request, 2026-07-15; awaiting `architect`
-> planning). **0024** is a confirmed TUI bug: on an **idle** Notes/Profiles create·edit·delete
-> dialog (no request in flight) `Esc` does not close it — `Event::Cancel` is only acted on
-> `if self.is_pending()` (`app/mod.rs:452`), and the six Notes/Profiles handlers drop the idle
-> `Cancel` (the Tasks handlers and note-detail handler reset their mode correctly). **0025** is a
-> broad `tui` feature — a movable, visible cursor across all text inputs (today every input is
-> append-only / end-locked, worst in long Notes); it overlaps and likely subsumes idea
-> [`0006`](./ideas/0006-note-content-scroll-cursor-affordance.md). Both are `tui`-crate-only with
-> no expected `contract`/server/domain change; the operator will kick off the work manually.
+> **0024 — Esc cancels idle Notes/Profiles dialogs — IN FLIGHT** (branch at review/verify complete,
+> heading to `awaiting-merge`; `main` snapshot frozen at the `ready` claim). A small, contained
+> `tui`-crate-only `feature`: on an **idle** Notes/Profiles create·edit·delete dialog (no request in
+> flight) `Esc` did not close it — `Event::Cancel` is only acted on `if self.is_pending()`
+> (`app/mod.rs:452`), and five Notes/Profiles handlers dropped the idle `Cancel` via a `_ => {}`
+> catch-all while the Tasks handlers and note-detail handler reset their mode correctly. The fix
+> adds five `Event::Cancel => reset-to-list` arms (mirroring the working handlers) + corrects two
+> misleading comments; `tester` added six idle-`Esc`-cancel `TestBackend` regression tests. No
+> `contract`/server/domain change, no ADR (adopts an existing pattern). Reviewer **approved** +
+> verifier **verified**, both pinned to code-hash `fd2bd1508506786d0127a1005317a4852201351d`;
+> coverage **73.25%** headline region (report-only). New durable learning recorded in the `tui-dev`
+> and `tester` agent instructions (a modal/sub-flow handler must handle idle `Event::Cancel`; every
+> modal dialog needs an idle-`Esc`-cancel test) — not a cross-cutting CLAUDE.md gotcha. No new crate,
+> no standards change, no idea filed.
+>
+> **0025 — editable text-input cursor — filed to `inbox`** (operator request, 2026-07-15; awaiting
+> `architect` planning). A broad `tui` feature — a movable, visible cursor across all text inputs
+> (today every input is append-only / end-locked, worst in long Notes); it overlaps and likely
+> subsumes idea [`0006`](./ideas/0006-note-content-scroll-cursor-affordance.md). `tui`-crate-only
+> with no expected `contract`/server/domain change; the operator will kick off the work manually.
 >
 > **0023 — TUI task date-window + filter-by-day — MERGED** (operator-authorised ff-merge; `main`
 > @ `5594d14`). A full-stack `feature`. Governed by

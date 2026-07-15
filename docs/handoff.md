@@ -5,6 +5,44 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-07-15 (0024 — Esc cancels idle Notes/Profiles dialogs)
+
+A small, contained **`tui`-crate-only `feature`** fixing a confirmed operator-reported bug: on an
+**idle** Notes/Profiles create·edit·delete dialog (no request in flight), `Esc` did not close it.
+
+- **Root cause.** Idle `Event::Cancel` is not handled centrally — the app-level arm fires only
+  `if self.is_pending()` (`app/mod.rs:452`), so an idle `Cancel` falls through to the per-pane
+  handler. Five Notes/Profiles handlers matched only the mutating events (`Char`/`Backspace`/
+  `Next`/`Prev`/`Submit`) with a `_ => {}` catch-all that silently dropped `Cancel`, while a
+  misleading comment claimed cancel was "handled by the caller's cancel path" (only true in-flight).
+  The note-detail handler and every Tasks sub-flow handler already carried the correct
+  `Event::Cancel => reset-to-list` arm; the fix aligns the five stragglers with that pattern.
+- **Fix (`tui-dev`).** Five `Event::Cancel => self.mode = <List>` arms in `notes.rs`/`profiles.rs`
+  (the two delete-confirm handlers converting `if matches!(Submit)` → a `match` with `Submit`/
+  `Cancel` arms); resetting the mode drops the owned draft/confirm payload, so the discard is
+  inherent. Two misleading doc-comments corrected. No routing (`app/mod.rs`), key-mapping
+  (`terminal/mod.rs`), `contract`/wire (#2), server, or domain-structure (#3) change; TUI stays
+  stateless (#1). No ADR — the fix adopts an already-decided pattern.
+- **Coverage (`tester`).** Six `TestBackend` idle-`Esc`-cancel regression tests, one per affected
+  dialog (three in `tests/notes.rs`, three in `tests/profiles.rs`); each asserts no request emitted,
+  mode back to list, draft discarded. They genuinely fail against the pre-fix source. The in-flight
+  cancel tests are untouched and green. No hotkey added/renamed and no `Client`/`ClientRequest`/
+  `Outcome`/state-field surface change, so neither the help-overlay-width nor the harness-strand
+  gotcha applied.
+- **DoD (`feature` track).** Gates green (`test | lint | fmt --check`); reviewer **approved** +
+  verifier **verified** (TestBackend suite green + live-boot smoke of the unchanged server/reqwest
+  path via hermetic `verify-boot`), both pinned to code-hash
+  `fd2bd1508506786d0127a1005317a4852201351d` (last code commit `79467a9`). Coverage **73.25%**
+  headline region (report-only) — up a hair from 0023's 73.20% (the six new tui tests).
+- **New durable learning (agent instructions, not CLAUDE.md).** The bug is a genuinely reusable
+  class — a per-pane modal/sub-flow handler silently dropping idle `Event::Cancel` via a `_ => {}`
+  catch-all, diverging from siblings, with a matching test blind spot (only in-flight cancel was
+  covered). Recorded proportionately in the two agents rather than the cross-cutting CLAUDE.md
+  gotchas: `tui-dev` (every modal/sub-flow handler must carry an `Event::Cancel => reset-to-list`
+  arm) and `tester` (every modal dialog needs an *idle*-`Esc`-cancel test distinct from the
+  in-flight one). No new crate, no ADR, no standards-skill change, no idea filed (contained fix,
+  no out-of-scope follow-up surfaced).
+
 ## Handoff — 2026-07-09 (0022 — verifier stack boot made hermetic)
 
 A **main-only `chore`** (no worktree — `ok.sh` + `.claude/agents/verifier.md` are home #1
