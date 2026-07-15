@@ -2,7 +2,7 @@
 id: 0024
 title: Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight)
 type: feature       # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high      # high | medium | low
 parent: null
 depends-on: []
@@ -343,3 +343,10 @@ DoD (`feature` track): clauses 1–3 green (`./ok.sh test | lint | fmt --check`)
 server/reqwest path (nothing new server-side to exercise on a TUI-only diff); clause 5 N/A (no
 contract change, no new gotcha); clause 6 reviewer **approved** + clause-4 verifier **verified**,
 both pinned to code-hash `fd2bd1508506786d0127a1005317a4852201351d` (last code commit `79467a9`).
+- 2026-07-15 [orchestrator] Step-7 freshen: rebased branch onto `main@f7f6ccf` (governance-only
+  advance — eng-manager learnings + handoff + dashboard). `./ok.sh code-hash HEAD` unchanged at
+  `fd2bd1508506786d0127a1005317a4852201351d` (== attested hash), so the code is byte-identical and
+  the reviewer-approved + verifier-verified attestations **carry forward untouched** (no
+  relabelling). Re-ran gates on the rebased tree: `./ok.sh fmt --check | lint | test` all green.
+  Board-only commit — does not retrigger review. Set `review`→`awaiting-merge`. **DoD (feature,
+  7/7) satisfied; terminal for the AI cycle — awaiting human merge.**
