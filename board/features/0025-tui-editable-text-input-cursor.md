@@ -253,6 +253,10 @@ does not flip the idea's status (ideas lifecycle).
   overlaps and likely subsumes idea 0006. Awaiting `architect` planning (this needs a real plan —
   probably a shared text-input primitive — and the architect should confirm no wire implication
   keeps it a single-crate feature). Operator will kick off the work manually.
+- 2026-07-15 [orchestrator] Claimed to branch `feature/0025-tui-editable-text-input-cursor`
+  (worktree `.claude/worktrees/0025-tui-editable-text-input-cursor`, cut from `main@0b6ef88`).
+  **This `main` copy is frozen at the claim snapshot** — the branch copy is authoritative until
+  the human's merge brings the finished item back to `main` (home #2).
 - 2026-07-15 [architect] Planned (inbox→planned→ready). Design decision: **single shared
   `TextInput` primitive** adopted by every text/numeric field, over per-struct cursors (DRY,
   one tested char-boundary/scroll implementation, subsumes idea 0006's multiline scroll).
