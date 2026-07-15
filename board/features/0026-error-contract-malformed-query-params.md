@@ -195,3 +195,17 @@ API + reqwest path per DoD clause 4, confirming the malformed-param branch now r
   preserved 0020 behaviours traced + test-pinned. No out-of-scope findings. `feature` typing
   correct — live verifier pass (clause 4) still outstanding.
 - [x] 2026-07-15 [orchestrator] Review verdict recorded on branch (home #2). Dispatching verifier.
+- [x] 2026-07-15 [verifier] Live boot (hermetic `./ok.sh verify-boot`) — **VERIFIED**, pinned to
+  code-tree hash `0d0c8f06077de4b0808ec657b2959e2cdde016cc` (last code commit `28a4afd`). Stack up
+  (postgres/migrate-exit-0/server-Healthy/otel-Healthy), exercised live on :8080, auto torn down
+  (`down --volumes`). The fix: `?limit=`, `?limit=abc`, `?offset=` each → `400` +
+  `content-type: application/json` + `{"code":"validation_failed","message":…}` (non-empty; axum
+  parse detail), NOT plain-text. Preserved 0020: absent `GET .../tasks` → `200` JSON array;
+  over-ceiling `?limit=501` → `400` JSON `{"code":"validation_failed","message":"limit must not
+  exceed 500"}` (handler in-range validation untouched). `./ok.sh test` green (incl. the 3 new
+  0026 tests). Server-only; no `contract`/`tui` change → no tester TestBackend obligation
+  (ADR-0003). Inferred-only: malformed-query 400s short-circuit in the extractor before the
+  instrumented `list_tasks` span (expected).
+- [x] 2026-07-15 [orchestrator] Verifier verdict recorded on branch (home #2). DoD clauses 1–6
+  satisfied at code-hash `0d0c8f06`. Dispatching eng-manager (learn + summarise), then step-7
+  freshen.
