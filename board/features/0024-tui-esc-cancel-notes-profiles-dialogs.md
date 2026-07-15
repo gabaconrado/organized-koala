@@ -2,10 +2,12 @@
 id: 0024
 title: Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight)
 type: feature       # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high      # high | medium | low
 parent: null
 depends-on: []
+branch: feature/0024-tui-esc-cancel-notes-profiles-dialogs
+worktree: .claude/worktrees/0024-tui-esc-cancel-notes-profiles-dialogs
 created: 2026-07-15
 updated: 2026-07-15
 ---
@@ -246,6 +248,7 @@ contract/scope" — the ADR trigger. **No ADR is written or amended for 0024.**
   contract/scope decision. Help-overlay width gotcha (learned-0015/0019) does **not** apply (no
   hotkey added/renamed; `Esc` already maps to `Cancel`). Grill skipped — no design fork; the fix
   is contained and the pattern is pre-existing. Set `planned` → `ready`.
-- 2026-07-15 [orchestrator] Claimed onto branch `feature/0024-tui-esc-cancel-notes-profiles-dialogs`
-  (worktree `.claude/worktrees/0024-...`). **This `main` copy is frozen at the claim snapshot**;
-  the branch copy is authoritative until the human's merge brings it back (home #2 lifecycle).
+- 2026-07-15 [orchestrator] Claimed `ready`->`working`; cut worktree
+  `.claude/worktrees/0024-tui-esc-cancel-notes-profiles-dialogs` + branch
+  `feature/0024-tui-esc-cancel-notes-profiles-dialogs` from `main@97fc2a4` (carries the plan).
+  Session `drive-0024`. Branch copy is now authoritative (home #2).
