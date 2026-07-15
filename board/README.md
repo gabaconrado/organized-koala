@@ -63,13 +63,13 @@ backlog".
 | [0023](./features/0023-tui-task-date-window-and-filter.md) | TUI task date-window (hide older than X days) + filter-by-day | feature | merged | medium | 0020 (merged ✓) | — (merged) |
 | [0024](./features/0024-tui-esc-cancel-notes-profiles-dialogs.md) | Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight) | feature | merged | high | — | — (merged) |
 | [0025](./features/0025-tui-editable-text-input-cursor.md) | Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing) | feature | merged | medium | — | — (merged) |
-| [0026](./features/0026-error-contract-malformed-query-params.md) | Map axum Query-extractor rejections to the {code,message} JSON error contract | feature | review (branch) | low | — | feature/0026-error-contract-query-params |
+| [0026](./features/0026-error-contract-malformed-query-params.md) | Map axum Query-extractor rejections to the {code,message} JSON error contract | feature | merged | low | — | — (merged) |
 | [0027](./features/0027-confirming-delete-doccomment-fix.md) | Correct the stale confirming_delete doc-comment (modal-confirm, not "any navigation") | chore | inbox | low | — | — |
 | [0028](./features/0028-redact-auth-password-debug.md) | Redact the auth password entry buffer so it is not reachable via derived Debug | feature | inbox | low | — | — |
 
-> **0026 — malformed query params return the JSON error contract — `review`/in-flight** (a small
-> server-only `feature`, approved + verified, heading toward `awaiting-merge`; the branch snapshot is
-> authoritative, `main`'s is frozen at the `ready` claim). Promoted from operator-accepted idea
+> **0026 — malformed query params return the JSON error contract — MERGED** (operator-authorised
+> `/finalize` ff-merge; `main` @ `fa53ad4`; branch torn down). A small
+> server-only `feature`. Promoted from operator-accepted idea
 > [`0010`](./ideas/0010-empty-string-query-param-error-contract.md). A malformed query-param value on
 > the task-list endpoint (`?limit=`, `?limit=abc`, `?offset=`) returned axum's built-in **plain-text**
 > `Query`-extractor rejection, bypassing the `{code,message}` JSON error contract; now it returns
@@ -85,9 +85,13 @@ backlog".
 > live boot), both pinned to code-hash `0d0c8f06077de4b0808ec657b2959e2cdde016cc`; coverage 73.83%
 > region (report-only). One durable `rust-standards` note added (wrap axum's built-in extractors so
 > their rejection joins the error contract) — a positive pattern, not a CLAUDE.md gotcha; no new
-> crate, no idea filed (source idea 0010 realised). **0027** (chore — stale `confirming_delete`
-> doc-comment) and **0028** (feature — redact the auth password-entry buffer) are freshly promoted
-> from ideas 0011/0012 and sit at `inbox`.
+> crate, no idea filed (source idea 0010 realised). **Finalize:** audit clean (all 8 branch commits
+> authored + committed by the human with well-formed agent co-author trailers, Conventional-Commit
+> subjects); already current on `main` (no re-rebase needed); DoD re-checked green (`test | lint |
+> fmt --check`) with both verdicts pinned to the live code-hash `0d0c8f06…` (== attested).
+> Fast-forwarded `19127ad..fa53ad4` (linear, no merge commit); worktree + branch removed. **0027**
+> (chore — stale `confirming_delete` doc-comment) and **0028** (feature — redact the auth
+> password-entry buffer) are freshly promoted from ideas 0011/0012 and sit at `inbox`.
 >
 > **0024 — Esc cancels idle Notes/Profiles dialogs — MERGED** (operator-authorised `/finalize`
 > ff-merge; branch torn down). A small, contained

@@ -2,7 +2,7 @@
 id: 0026
 title: Map axum Query-extractor rejections to the {code,message} JSON error contract
 type: feature       # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []
