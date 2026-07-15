@@ -14,9 +14,9 @@
       "Bash(git rebase:*)",
       "Bash(rg:*)", "Bash(grep:*)", "Bash(find:*)", "Bash(ls:*)", "Bash(cat:*)",
       "Bash(curl:*)",
-      "Edit(.claude/**)", "Write(.claude/**)",
-      "Edit(docs/**)", "Write(docs/**)",
-      "Edit(board/**)", "Write(board/**)"
+      "Edit(.claude/**)",
+      "Edit(docs/**)",
+      "Edit(board/**)"
     ],
     "deny": [
       "Bash(git push:*)"
