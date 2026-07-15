@@ -265,3 +265,19 @@ contract/scope" — the ADR trigger. **No ADR is written or amended for 0024.**
   server, and the `?` help overlay — no hotkey added/renamed, so no tester-harness strand
   (learned-0019) and no help-width concern (learned-0015/0019). `./ok.sh fmt` clean; `./ok.sh lint`
   (`--all-targets`) clean; `./ok.sh build` green. Awaiting Slice 2 (`tester` regression coverage).
+- 2026-07-15 [tester] Slice 2 (regression coverage) done. Added six idle-`Esc`-cancel `TestBackend`
+  tests, one per affected dialog — three in `crates/tui/tests/notes.rs`
+  (`esc_cancels_idle_create_dialog_discarding_draft`, `esc_cancels_idle_edit_dialog_discarding_draft`,
+  `esc_cancels_idle_delete_confirm_without_deleting`) and three in `crates/tui/tests/profiles.rs`
+  (`esc_cancels_idle_create_dialog_discarding_draft`, `esc_cancels_idle_rename_dialog_discarding_draft`,
+  `esc_cancels_idle_delete_confirm_without_deleting`). Each drives the app into the dialog's idle open
+  state (no request in flight), feeds `Event::Cancel`, and asserts: (a) `handle_event(Cancel)` returns
+  `None` and the recorded call count is unchanged (no `Create*`/`Update*`/`Delete*` request emitted);
+  (b) the mode returns to `NotesMode::List` / `ProfilesMode::List`; (c) the draft/confirm is discarded
+  — create/rename re-open to an empty/re-prefilled form, delete leaves the note/profile in place. The
+  in-flight cancel tests (`stale_delete_response_after_cancel_is_dropped`,
+  `superseded_response_after_new_request_is_dropped` in both suites) and the detail-view cancel test
+  are untouched and remain green — the `is_pending()` path is unaltered. No harness update needed:
+  the fix touched no `Client`/`ClientRequest`/`Outcome`/state-field surface, so `tests/common/mod.rs`
+  was not stranded (learned-0019 confirmed not to apply). `./ok.sh fmt --check` clean; `./ok.sh test`
+  green (all suites, `--all-targets`); `./ok.sh lint` (`--all-targets`) clean.

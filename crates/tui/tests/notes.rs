@@ -620,6 +620,169 @@ fn every_note_request_carries_the_active_profile_id() {
     }
 }
 
+// ---- idle Esc-cancel closes the dialog, discarding the draft (item 0024) ----
+//
+// The regression home for the 0024 bug: with a Notes create/edit/delete dialog open and NO request
+// in flight, `Esc` (mapped to `Event::Cancel`) must close the dialog back to the list, issue no
+// request, and discard the draft/confirm payload. Before the fix these idle handlers dropped
+// `Cancel` on their `_ => {}` catch-all, so the dialog stayed open. These assert the idle path only;
+// the in-flight `Esc`→cancel-request behaviour lives in the stale-response tests above and is
+// unchanged.
+
+#[test]
+fn esc_cancels_idle_create_dialog_discarding_draft() {
+    let (client, mut app) = enter_notes(vec![]);
+
+    // Open the create dialog and type a draft — no request is dispatched by opening or typing.
+    let _ = app.handle_event(Event::BeginAddNote);
+    type_str(&mut app, "Groceries");
+    let _ = app.handle_event(Event::Next); // -> content field
+    type_str(&mut app, "milk, eggs");
+    assert!(!app.is_pending(), "idle: no request in flight");
+    assert!(
+        matches!(notes_pane(&app).mode, NotesMode::Creating(_)),
+        "create dialog is open before the cancel",
+    );
+
+    let calls_before = client.calls().len();
+
+    // Esc → Cancel closes the dialog and dispatches nothing.
+    assert!(
+        app.handle_event(Event::Cancel).is_none(),
+        "idle cancel dispatches no request",
+    );
+    assert!(
+        matches!(notes_pane(&app).mode, NotesMode::List),
+        "cancel returns to the list",
+    );
+    assert_eq!(
+        client.calls().len(),
+        calls_before,
+        "cancel issued no client call",
+    );
+    assert!(
+        !client
+            .calls()
+            .iter()
+            .any(|c| matches!(c, Call::CreateNote { .. })),
+        "no create fired on cancel",
+    );
+
+    // Re-opening the create dialog shows an empty form — the draft was discarded.
+    let _ = app.handle_event(Event::BeginAddNote);
+    let NotesMode::Creating(form) = &notes_pane(&app).mode else {
+        panic!("create dialog re-opened");
+    };
+    assert!(
+        form.title.is_empty() && form.content.is_empty(),
+        "draft discarded on cancel: title={:?} content={:?}",
+        form.title,
+        form.content,
+    );
+}
+
+#[test]
+fn esc_cancels_idle_edit_dialog_discarding_draft() {
+    let (client, mut app) = enter_notes(vec![note(
+        "n1",
+        "Old title",
+        "old body",
+        "2026-06-18T10:00:00Z",
+    )]);
+
+    // Open the edit dialog (form prefilled from the note) and dirty the draft.
+    let _ = app.handle_event(Event::BeginEditNote);
+    type_str(&mut app, " EDITED");
+    let NotesMode::Editing { form, .. } = &notes_pane(&app).mode else {
+        panic!("edit dialog open with a prefilled form");
+    };
+    assert_eq!(form.title, "Old title EDITED", "draft holds the edit");
+    assert!(!app.is_pending(), "idle: no request in flight");
+
+    let calls_before = client.calls().len();
+
+    assert!(
+        app.handle_event(Event::Cancel).is_none(),
+        "idle cancel dispatches no request",
+    );
+    assert!(
+        matches!(notes_pane(&app).mode, NotesMode::List),
+        "cancel returns to the list",
+    );
+    assert_eq!(
+        client.calls().len(),
+        calls_before,
+        "cancel issued no client call",
+    );
+    assert!(
+        !client
+            .calls()
+            .iter()
+            .any(|c| matches!(c, Call::UpdateNote { .. })),
+        "no update fired on cancel",
+    );
+
+    // The list entry is untouched, and re-opening re-prefills from the unchanged note — proving the
+    // dirty draft was discarded rather than committed.
+    assert_eq!(
+        notes_pane(&app).notes.first().expect("note present").title,
+        "Old title",
+        "the note is unchanged by the cancelled edit",
+    );
+    let _ = app.handle_event(Event::BeginEditNote);
+    let NotesMode::Editing { form, .. } = &notes_pane(&app).mode else {
+        panic!("edit dialog re-opened");
+    };
+    assert_eq!(
+        form.title, "Old title",
+        "draft discarded — form re-prefilled from the note, not the abandoned edit",
+    );
+}
+
+#[test]
+fn esc_cancels_idle_delete_confirm_without_deleting() {
+    let (client, mut app) =
+        enter_notes(vec![note("n1", "keep me", "body", "2026-06-18T10:00:00Z")]);
+
+    // Arm the delete confirmation on the selected note (no request dispatched by arming).
+    let _ = app.handle_event(Event::BeginDeleteNote);
+    assert!(
+        matches!(&notes_pane(&app).mode, NotesMode::ConfirmingDelete { note_id, .. } if note_id == "n1"),
+        "delete confirmation is armed before the cancel",
+    );
+    assert!(!app.is_pending(), "idle: no request in flight");
+
+    let calls_before = client.calls().len();
+
+    assert!(
+        app.handle_event(Event::Cancel).is_none(),
+        "idle cancel dispatches no request",
+    );
+    assert!(
+        matches!(notes_pane(&app).mode, NotesMode::List),
+        "cancel returns to the list",
+    );
+    assert_eq!(
+        client.calls().len(),
+        calls_before,
+        "cancel issued no client call",
+    );
+    assert!(
+        !client
+            .calls()
+            .iter()
+            .any(|c| matches!(c, Call::DeleteNote { .. })),
+        "no delete fired on cancel — the confirm payload was discarded",
+    );
+
+    // The note is still present: the confirm was abandoned, not executed.
+    assert_eq!(notes_pane(&app).notes.len(), 1, "note not deleted");
+    assert_eq!(
+        notes_pane(&app).notes.first().expect("note present").title,
+        "keep me",
+    );
+}
+
 // ---- error routing: offline → blocking screen ----
 
 #[test]

@@ -575,6 +575,156 @@ fn switching_away_from_the_idle_switcher_returns_to_the_tasks_tab() {
     );
 }
 
+// ---- idle Esc-cancel closes the dialog, discarding the draft (item 0024) ----
+//
+// The regression home for the 0024 bug on the Profiles pane: with a create/rename/delete dialog open
+// and NO request in flight, `Esc` (mapped to `Event::Cancel`) must close the dialog back to the
+// list, issue no request, and discard the draft/confirm payload. Before the fix these idle handlers
+// dropped `Cancel` on their `_ => {}` catch-all, so the dialog stayed open. These assert the idle
+// path only; the in-flight `Esc`→cancel-request behaviour lives in the stale-response tests above
+// and is unchanged.
+
+#[test]
+fn esc_cancels_idle_create_dialog_discarding_draft() {
+    let (client, mut app) = enter_switcher(vec![profile("p1", "work")]);
+
+    // Open the create dialog and type a draft — no request dispatched by opening or typing.
+    let _ = app.handle_event(Event::BeginAddProfile);
+    type_str(&mut app, "personal");
+    assert!(
+        matches!(switcher(&app).mode, ProfilesMode::Creating(_)),
+        "create dialog is open before the cancel",
+    );
+    assert!(!app.is_pending(), "idle: no request in flight");
+
+    let calls_before = client.calls().len();
+
+    assert!(
+        app.handle_event(Event::Cancel).is_none(),
+        "idle cancel dispatches no request",
+    );
+    assert!(
+        matches!(switcher(&app).mode, ProfilesMode::List),
+        "cancel returns to the list",
+    );
+    assert_eq!(
+        client.calls().len(),
+        calls_before,
+        "cancel issued no client call",
+    );
+    assert!(
+        !client
+            .calls()
+            .iter()
+            .any(|c| matches!(c, Call::CreateProfile { .. })),
+        "no create fired on cancel",
+    );
+
+    // Re-opening the create dialog shows an empty form — the draft was discarded.
+    let _ = app.handle_event(Event::BeginAddProfile);
+    let ProfilesMode::Creating(form) = &switcher(&app).mode else {
+        panic!("create dialog re-opened");
+    };
+    assert!(
+        form.name.is_empty(),
+        "draft discarded on cancel: name={:?}",
+        form.name,
+    );
+}
+
+#[test]
+fn esc_cancels_idle_rename_dialog_discarding_draft() {
+    let (client, mut app) = enter_switcher(vec![profile("p1", "work"), profile("p2", "personal")]);
+
+    // Open the rename dialog (form prefilled with the current name) and dirty the draft.
+    let _ = app.handle_event(Event::BeginRenameProfile);
+    type_str(&mut app, "-X");
+    let ProfilesMode::Renaming { form, .. } = &switcher(&app).mode else {
+        panic!("rename dialog open with a prefilled form");
+    };
+    assert_eq!(form.name, "work-X", "draft holds the edit");
+    assert!(!app.is_pending(), "idle: no request in flight");
+
+    let calls_before = client.calls().len();
+
+    assert!(
+        app.handle_event(Event::Cancel).is_none(),
+        "idle cancel dispatches no request",
+    );
+    assert!(
+        matches!(switcher(&app).mode, ProfilesMode::List),
+        "cancel returns to the list",
+    );
+    assert_eq!(
+        client.calls().len(),
+        calls_before,
+        "cancel issued no client call",
+    );
+    assert!(
+        !client
+            .calls()
+            .iter()
+            .any(|c| matches!(c, Call::UpdateProfile { .. })),
+        "no rename fired on cancel",
+    );
+
+    // The profile name is unchanged, and re-opening re-prefills from the unchanged profile — proving
+    // the dirty draft was discarded rather than committed.
+    assert_eq!(
+        switcher(&app).profiles.first().expect("p1").name,
+        "work",
+        "the profile is unchanged by the cancelled rename",
+    );
+    let _ = app.handle_event(Event::BeginRenameProfile);
+    let ProfilesMode::Renaming { form, .. } = &switcher(&app).mode else {
+        panic!("rename dialog re-opened");
+    };
+    assert_eq!(
+        form.name, "work",
+        "draft discarded — form re-prefilled from the profile, not the abandoned edit",
+    );
+}
+
+#[test]
+fn esc_cancels_idle_delete_confirm_without_deleting() {
+    let (client, mut app) = enter_switcher(vec![profile("p1", "work"), profile("p2", "personal")]);
+
+    // Arm the delete confirmation on the selected profile (no request dispatched by arming).
+    let _ = app.handle_event(Event::BeginDeleteProfile);
+    assert!(
+        matches!(&switcher(&app).mode, ProfilesMode::ConfirmingDelete { profile_id, .. } if profile_id == "p1"),
+        "delete confirmation is armed before the cancel",
+    );
+    assert!(!app.is_pending(), "idle: no request in flight");
+
+    let calls_before = client.calls().len();
+
+    assert!(
+        app.handle_event(Event::Cancel).is_none(),
+        "idle cancel dispatches no request",
+    );
+    assert!(
+        matches!(switcher(&app).mode, ProfilesMode::List),
+        "cancel returns to the list",
+    );
+    assert_eq!(
+        client.calls().len(),
+        calls_before,
+        "cancel issued no client call",
+    );
+    assert!(
+        !client
+            .calls()
+            .iter()
+            .any(|c| matches!(c, Call::DeleteProfile { .. })),
+        "no delete fired on cancel — the confirm payload was discarded",
+    );
+
+    // Both profiles remain: the confirm was abandoned, not executed.
+    assert_eq!(switcher(&app).profiles.len(), 2, "profile not deleted");
+    assert!(switcher(&app).profiles.iter().any(|p| p.id == "p1"));
+}
+
 #[test]
 fn offline_during_list_refresh_blocks_with_the_offline_screen() {
     // A transport failure on the switcher's own refresh routes to the blocking offline screen
