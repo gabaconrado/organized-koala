@@ -2,12 +2,12 @@
 id: 0026
 title: Map axum Query-extractor rejections to the {code,message} JSON error contract
 type: feature       # feature | chore
-status: ready           # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []
-branch: null
-worktree: null
+branch: feature/0026-error-contract-query-params
+worktree: .claude/worktrees/0026-error-contract-query-params
 created: 2026-07-15
 updated: 2026-07-15
 ---
@@ -154,3 +154,16 @@ API + reqwest path per DoD clause 4, confirming the malformed-param branch now r
   binding it to `AppState` unnecessarily would be a smell. Server-dev should keep it state-agnostic.
 
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
+
+## Log / comments
+
+- [x] 2026-07-15 [architect] Planned. No ADR required — this enforces the existing ADR-0005
+  error contract on the one path (axum's default `Query` rejection) that bypasses it; no
+  `contract`/DTO change, reuses `ErrorCode::ValidationFailed`. Slices: server-dev (wrapper
+  extractor `ValidatedQuery<T>` + call-site swap on `list_tasks`) → tester (JSON-body pins for
+  `?limit=`/`?limit=abc`/`?offset=`, regression-guard the two preserved 0020 behaviours). Item →
+  `ready`, committed on `main` @392ff14.
+- [x] 2026-07-15 [orchestrator] Claimed `ready`→`working`. Worktree cut from `main` @392ff14
+  (carries the plan). Branch `feature/0026-error-contract-query-params`. Session: drive cycle
+  0026. Build dispatch: server-dev (extractor + swap) → tester (JSON-body pins); no
+  contract-owner, no tui slice.
