@@ -353,3 +353,59 @@ does not flip the idea's status (ideas lifecycle).
   regression; JWT wrapped in `SessionToken`, buffer wrapped in `Password` at submit) — candidate for
   a redacting holder. **Verdict:** `REVIEW-STATUS: approved` pinned to code-hash `5175b549` (commit
   `0108053`).
+
+## Summary
+
+coverage: 73.79%
+
+Ships **editable text inputs** across the TUI: every text field — previously append-only and
+end-locked with no visible caret — now renders a **movable, visible cursor** and supports mid-buffer
+insert / delete. The operator's headline pain (correcting an early typo in a long Notes Content meant
+destroying and re-typing the tail) is resolved, and the multiline note Content pane now scrolls to
+keep the caret in view.
+
+- **Design — one shared `TextInput` primitive** (`crates/tui/src/app/text_input/`), not per-struct
+  cursors (DRY, deep module: the char-boundary + scroll math is written and tested **once**). A
+  `String` buffer + a **char-index caret** + `insert_char` / `backspace` / `delete` /
+  `move_left` / `move_right` / `home` / `end` + multiline `move_up` / `move_down`, plus two render
+  helpers — `field_view` (single-line horizontally-scrolled slice) and `viewport` (hard-wrapped,
+  vertically-scrolled multiline pane returning the caret `(row, col)` + scroll offset). All ops are
+  UTF-8-safe (char index → byte offset via `char_indices`, no `indexing_slicing`). Adopted across
+  ~10 fields, replacing the copy-pasted `push_char`/`backspace` pairs and `Option<String>` edit
+  buffers: auth (5 fields), task add/edit + task-detail, sub-task add/edit, notes (form + detail),
+  profiles, and the numeric duration + window buffers (digit filtering retained at each call site).
+  A terse `value()` / `as_str()` accessor + `Default` kept the migration mechanical.
+- **Keys + render.** Left/Right/Home/End/Delete bound under a **text-entry** context; Up/Down
+  repurposed to caret line-move **only** under `editing_note_content` (single-line arrow-nav + the
+  `f` date-filter spinner unchanged). The caret is drawn via `frame.set_cursor_position` for the
+  **focused** field only; the note-detail Content pane scrolls to keep the caret in view. Two
+  `?`-help hint lines added (`Text fields  ← → move caret · …` and `Content: ↑↓ move line · …`),
+  width-checked against the inner ~70 and pinned by anti-wrap tests. Word-jump + PageUp/PageDown were
+  deferred (A3, non-gating); the note create/edit *dialog* Content stays single-line (A5); the
+  `DateFilter` numeric spinner is out of scope (A4).
+- **No wire/domain change.** `tui`-crate-only — **no** `contract`/wire (#2), server, or
+  domain-structure (#3) change: every field still `.as_str().trim()` into the unchanged
+  `Create*`/`Update*`/auth DTOs; **#1 preserved** (caret index + scroll offset are transient
+  process-lifetime UI state, never persisted/sent). **No ADR** — the primitive shapes no wire type
+  and the keymap additions are additive and non-colliding.
+- **DoD (`feature` track).** `./ok.sh test | lint | fmt --check` all green. Reviewer
+  `REVIEW-STATUS: approved` + verifier **verified** (TestBackend suite green + live-boot of the
+  unchanged server/reqwest path), both pinned to code-hash
+  `5175b54974233e04218f5c2a6eac8d8bc1aece42` (last code commit `0108053`). **ADR: none** (tui-only,
+  no contract/domain decision). **coverage: 73.79%** headline region — **report-only, not a gate**;
+  the primitive itself is 96.69%-covered.
+- **Tests.** 25 source-owned primitive unit tests (empty / multi-byte / both-ends / mid-buffer,
+  single-line scroll, multiline wrap + scroll off-by-one) + 8 `crates/tui/tests/text_input.rs`
+  `TestBackend` tests (movement, mid-buffer insert / Backspace / forward Delete, the rendered caret
+  cell incl. masked-password 1:1 mapping, multiline scroll-to-caret, UTF-8 e2e) + 2 anti-wrap
+  regression tests pinning the new help lines.
+- **Relationship to idea 0006.** **Subsumed** — the note-detail Content scroll-to-caret is exactly
+  idea [`0006`][idea-0006]'s ask. Whether to **close** it as superseded-by-0025 or keep it as a
+  narrower record is the **human's** call (an AI cycle does not flip an idea's status). Idea `0012`
+  (`board/ideas/0012-redact-auth-password-entry-buffer.md`, filed on `main` this cycle) was also
+  **filed** from the reviewer's out-of-scope finding: the pre-existing `AuthState` password-*entry*
+  buffer is reachable via derived `Debug` (unchanged by 0025, **not** a regression — the JWT is
+  `SessionToken`-wrapped and the buffer becomes `Password` at submit); a candidate for a redacting
+  holder.
+
+[idea-0006]: ../ideas/0006-note-content-scroll-cursor-affordance.md
