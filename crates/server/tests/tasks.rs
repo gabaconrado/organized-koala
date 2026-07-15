@@ -303,6 +303,59 @@ async fn list_tasks_limit_at_ceiling_is_ok(pool: PgPool) {
     assert!(tasks.is_empty(), "empty profile still lists nothing");
 }
 
+// ---- 0026: malformed query params map to the {code,message} JSON error contract ----
+//
+// A malformed query-parameter *value* (empty string, non-integer) is rejected by the
+// `ValidatedQuery` wrapper extractor as `400` + the standard `{ "code": "validation_failed",
+// "message": <string> }` JSON body — not axum's default plain-text `Query` rejection. Each test
+// asserts `400` and uses `expect_error(ErrorCode::ValidationFailed)`, which parses the JSON
+// `ErrorBody` (pinning the contract shape) and asserts a non-empty human-readable `message`
+// (the exact wording is axum's to own, so it is not pinned here — only `code` is stable).
+//
+// The two behaviours 0020/ADR-0014 established are preserved and remain pinned by the existing
+// tests, not re-asserted here: absent params → `200` whole list is covered by
+// `list_tasks_default_no_params_returns_whole_list_newest_first`, and over-ceiling `?limit=501`
+// → `400 validation_failed` (parsed-but-out-of-range, handled inside the handler rather than the
+// extractor) by `list_tasks_limit_above_ceiling_is_400_validation_failed`.
+
+/// `?limit=` (empty-string value) → `400` + JSON `{ code: validation_failed, message }` from the
+/// `ValidatedQuery` extractor, not axum's plain-text `Query` rejection.
+#[sqlx::test]
+async fn list_tasks_empty_limit_is_400_validation_failed(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let res = send(&app, get_auth(&format!("{path}?limit="), &account.token)).await;
+    assert_eq!(res.status, StatusCode::BAD_REQUEST);
+    res.expect_error(ErrorCode::ValidationFailed);
+}
+
+/// `?limit=abc` (non-integer value) → `400` + the standard JSON error contract.
+#[sqlx::test]
+async fn list_tasks_non_integer_limit_is_400_validation_failed(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let res = send(&app, get_auth(&format!("{path}?limit=abc"), &account.token)).await;
+    assert_eq!(res.status, StatusCode::BAD_REQUEST);
+    res.expect_error(ErrorCode::ValidationFailed);
+}
+
+/// `?offset=` (empty-string value) → `400` + the standard JSON error contract. Confirms the
+/// mapping applies to every param on the endpoint, not just `limit`.
+#[sqlx::test]
+async fn list_tasks_empty_offset_is_400_validation_failed(pool: PgPool) {
+    let app = app(pool);
+    let account = register(&app, "ada", "ada@example.com", "hunter2-long").await;
+    let path = format!("/api/profiles/{}/tasks", account.profile_id);
+
+    let res = send(&app, get_auth(&format!("{path}?offset="), &account.token)).await;
+    assert_eq!(res.status, StatusCode::BAD_REQUEST);
+    res.expect_error(ErrorCode::ValidationFailed);
+}
+
 /// The default (no query params) still returns the whole list newest-first — an old no-param
 /// caller is unaffected (ADR-0014 §2: absent limit → server ceiling default).
 #[sqlx::test]
