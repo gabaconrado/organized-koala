@@ -1,7 +1,7 @@
 ---
 id: 0011
 title: Fix stale confirming_delete doc-comment (modal-confirm, not "any navigation")
-status: open          # open | accepted | closed   (only the human flips open → accepted/closed)
+status: accepted      # open | accepted | closed   (only the human flips open → accepted/closed)
 priority: low         # high | medium | low — a triage hint, never a gate
 created: 2026-07-02    # absolute date
 source: 0020          # Board item / cycle that surfaced it, or "adhoc"
@@ -39,4 +39,5 @@ documents the true behaviour and can be cited.
 
 ## Disposition
 
-- [ ] <ts> [human] decision: accept (→ promote to Board) | close (reason)
+- [x] 2026-07-15 [human] decision: **accept** — to be promoted into a Board item at a future drive
+  step 1 (not triggered yet). Likely a `chore` (doc-comment fix). `promoted-to` stays `null` until then.

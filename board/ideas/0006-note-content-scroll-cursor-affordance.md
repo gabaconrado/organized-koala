@@ -1,7 +1,7 @@
 ---
 id: 0006
 title: Note Content scroll/cursor affordance for content exceeding the pane
-status: open          # open | accepted | closed   (only the human flips open → accepted/closed)
+status: closed        # open | accepted | closed   (only the human flips open → accepted/closed)
 priority: low         # high | medium | low — a triage hint, never a gate
 created: 2026-06-28    # absolute date
 source: 0018          # Board item / cycle that surfaced it, or "adhoc"
@@ -42,4 +42,6 @@ scope) is for the `architect` if this is accepted as a feature.
 
 ## Disposition
 
-- [ ] <ts> [human] decision: accept (→ promote to Board) | close (reason)
+- [x] 2026-07-15 [human] decision: **close** — superseded by feature **0025** (editable text-input
+  cursor), which shipped the shared `TextInput` primitive with multiline scroll-to-caret on the
+  note-detail Content pane — exactly this idea's ask. Kept as a record (calm log), not deleted.

@@ -1,7 +1,7 @@
 ---
 id: 0012
 title: Redact the auth password entry buffer so it is not reachable via derived Debug
-status: open          # open | accepted | closed   (only the human flips open → accepted/closed)
+status: accepted      # open | accepted | closed   (only the human flips open → accepted/closed)
 priority: low         # high | medium | low — a triage hint, never a gate
 created: 2026-07-15    # absolute date
 source: 0025          # Board item / cycle that surfaced it, or "adhoc"
@@ -36,4 +36,5 @@ The architect decides scope at triage.
 
 ## Disposition
 
-- [ ] <ts> [human] decision: accept (→ promote to Board) | close (reason)
+- [x] 2026-07-15 [human] decision: **accept** — to be promoted into a Board item at a future drive
+  step 1 (not triggered yet). `promoted-to` stays `null` until then.
