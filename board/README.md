@@ -62,7 +62,7 @@ backlog".
 | [0022](./features/0022-verifier-hermetic-teardown.md) | Make the verifier stack boot hermetic — always tear down its own volume (`down -v` on any exit) | chore | merged | low | — | — (main-only chore; no worktree) |
 | [0023](./features/0023-tui-task-date-window-and-filter.md) | TUI task date-window (hide older than X days) + filter-by-day | feature | merged | medium | 0020 (merged ✓) | — (merged) |
 | [0024](./features/0024-tui-esc-cancel-notes-profiles-dialogs.md) | Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight) | feature | merged | high | — | — (merged) |
-| [0025](./features/0025-tui-editable-text-input-cursor.md) | Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing) | feature | ready | medium | — | `feature/0025-tui-editable-text-input-cursor` |
+| [0025](./features/0025-tui-editable-text-input-cursor.md) | Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing) | feature | merged | medium | — | — (merged) |
 
 > **0024 — Esc cancels idle Notes/Profiles dialogs — MERGED** (operator-authorised `/finalize`
 > ff-merge; branch torn down). A small, contained
@@ -79,9 +79,8 @@ backlog".
 > modal dialog needs an idle-`Esc`-cancel test) — not a cross-cutting CLAUDE.md gotcha. No new crate,
 > no standards change, no idea filed.
 >
-> **0025 — editable text-input cursor — at `review`/in-flight** (branch
-> `feature/0025-tui-editable-text-input-cursor`; the `main` snapshot is frozen at the `ready` claim,
-> the live branch status is `review`, **approved** + **verified**, heading toward `awaiting-merge`).
+> **0025 — editable text-input cursor — MERGED** (operator-authorised `/finalize` ff-merge; `main`
+> @ `1cd4f91`; branch torn down).
 > A `tui`-crate-only `feature`: every TUI text field was append-only / end-locked with no visible
 > caret; now every field has a **movable, visible cursor** with mid-buffer insert/delete via one
 > shared `TextInput` primitive (`crates/tui/src/app/text_input/`) — `String` buffer + char-index
@@ -102,6 +101,12 @@ backlog".
 > *type* change, not only an *added* field). One out-of-scope follow-up filed as
 > [`ideas/0012`](./ideas/0012-redact-auth-password-entry-buffer.md) (the pre-existing `AuthState`
 > password-*entry* buffer is reachable via derived `Debug`; unchanged by 0025, not a regression).
+> **Finalize:** audit clean (all 9 branch commits authored + committed by the human with well-formed
+> agent co-author trailers where the author was an agent, Conventional-Commit subjects); already
+> current on `main` (no re-rebase needed); DoD re-checked green (`test | lint | fmt --check`) with
+> both verdicts pinned to the live code-hash `5175b54974233e04218f5c2a6eac8d8bc1aece42`.
+> Fast-forwarded `4d14a30..1cd4f91` (linear, no merge commit); worktree + branch removed. The idea-0006
+> disposition (close superseded-by-0025 or keep) remains the operator's call.
 >
 > **0023 — TUI task date-window + filter-by-day — MERGED** (operator-authorised ff-merge; `main`
 > @ `5594d14`). A full-stack `feature`. Governed by

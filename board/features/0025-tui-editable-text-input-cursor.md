@@ -2,7 +2,7 @@
 id: 0025
 title: Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing)
 type: feature       # feature | chore
-status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: merged          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []
