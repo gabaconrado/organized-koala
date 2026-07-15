@@ -486,6 +486,7 @@ impl NotesState {
             Event::Backspace => form.backspace(),
             Event::Next | Event::Prev => form.toggle_field(),
             Event::Submit => return self.submit_create(session),
+            Event::Cancel => self.mode = NotesMode::List,
             _ => {}
         }
         None
@@ -504,6 +505,7 @@ impl NotesState {
             Event::Backspace => form.backspace(),
             Event::Next | Event::Prev => form.toggle_field(),
             Event::Submit => return self.submit_edit(session),
+            Event::Cancel => self.mode = NotesMode::List,
             _ => {}
         }
         None
@@ -514,9 +516,12 @@ impl NotesState {
         event: Event,
         session: Option<&Session>,
     ) -> Option<ClientRequest> {
-        // Confirm with `Submit`; `Cancel` (Esc) is handled by the caller's cancel path.
-        if matches!(event, Event::Submit) {
-            return self.submit_delete(session);
+        // Confirm with `Submit`; `Cancel` (Esc) resets to the list, mirroring the detail/Tasks
+        // handlers.
+        match event {
+            Event::Submit => return self.submit_delete(session),
+            Event::Cancel => self.mode = NotesMode::List,
+            _ => {}
         }
         None
     }

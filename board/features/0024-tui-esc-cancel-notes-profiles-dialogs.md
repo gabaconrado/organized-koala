@@ -252,3 +252,16 @@ contract/scope" — the ADR trigger. **No ADR is written or amended for 0024.**
   `.claude/worktrees/0024-tui-esc-cancel-notes-profiles-dialogs` + branch
   `feature/0024-tui-esc-cancel-notes-profiles-dialogs` from `main@97fc2a4` (carries the plan).
   Session `drive-0024`. Branch copy is now authoritative (home #2).
+- 2026-07-15 [tui-dev] Slice 1 (source fix) done. Added `Event::Cancel => self.mode = <List>`
+  arms to the five idle handlers that dropped it: `notes.rs` `handle_create_event` +
+  `handle_edit_event` (each gained one match arm) and `handle_delete_event` (converted its
+  `if matches!(event, Event::Submit)` body to a `match` with `Submit` + `Cancel` arms);
+  `profiles.rs` `handle_create_event` + `handle_rename_event` (each one arm) and
+  `handle_delete_event` (same `if`→`match` conversion). Corrected the two misleading
+  "handled by the caller's cancel path" comments (`notes.rs`/`profiles.rs` delete handlers) to
+  state the handler itself resets to the list on `Cancel`. Out-of-scope surfaces untouched:
+  `terminal/mod.rs`, `app/mod.rs` routing (the in-flight `Cancel if self.is_pending()` arm is
+  unchanged), the `Client` trait, `ClientRequest`/`Outcome`, all state-struct fields, `contract`,
+  server, and the `?` help overlay — no hotkey added/renamed, so no tester-harness strand
+  (learned-0019) and no help-width concern (learned-0015/0019). `./ok.sh fmt` clean; `./ok.sh lint`
+  (`--all-targets`) clean; `./ok.sh build` green. Awaiting Slice 2 (`tester` regression coverage).

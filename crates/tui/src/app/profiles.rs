@@ -229,6 +229,7 @@ impl ProfilesState {
             Event::Char(c) => form.push_char(c),
             Event::Backspace => form.backspace(),
             Event::Submit => return self.submit_create(session),
+            Event::Cancel => self.mode = ProfilesMode::List,
             _ => {}
         }
         None
@@ -246,6 +247,7 @@ impl ProfilesState {
             Event::Char(c) => form.push_char(c),
             Event::Backspace => form.backspace(),
             Event::Submit => return self.submit_rename(session),
+            Event::Cancel => self.mode = ProfilesMode::List,
             _ => {}
         }
         None
@@ -256,9 +258,12 @@ impl ProfilesState {
         event: Event,
         session: Option<&Session>,
     ) -> Option<ClientRequest> {
-        // Confirm with `Submit`; `Cancel` (Esc) is handled by the caller's cancel path.
-        if matches!(event, Event::Submit) {
-            return self.submit_delete(session);
+        // Confirm with `Submit`; `Cancel` (Esc) resets to the list, mirroring the notes/Tasks
+        // handlers.
+        match event {
+            Event::Submit => return self.submit_delete(session),
+            Event::Cancel => self.mode = ProfilesMode::List,
+            _ => {}
         }
         None
     }
