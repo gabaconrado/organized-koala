@@ -185,3 +185,13 @@ API + reqwest path per DoD clause 4, confirming the malformed-param branch now r
   (`..limit_above_ceiling..`). Gates green: test, lint, fmt --check.
 - [x] 2026-07-15 [orchestrator] Build complete; both slices green. Status `working`→`review`.
   Dispatching cold reviewer.
+- [x] 2026-07-15 [reviewer] Cold review — **REVIEW-STATUS: approved**, pinned to code-tree hash
+  `0d0c8f06077de4b0808ec657b2959e2cdde016cc` (last code commit `8f311f6`). Gates green
+  (test/lint/fmt). Confirmed no `contract` change (#2), no domain-structure change (#3), profile-
+  scoping intact (#4, `assert_owned` untouched, `..stays_profile_scoped` pins present). Extractor
+  maps all `QueryRejection` cases to `400`+`validation_failed`+JSON `ErrorBody`; state-agnostic;
+  `Debug`/`missing_docs` satisfied; `body_text()` client-safe (no internal leak). Tests pin the
+  JSON `{code,message}` shape via `expect_error` (code stable, axum wording not pinned). Two
+  preserved 0020 behaviours traced + test-pinned. No out-of-scope findings. `feature` typing
+  correct — live verifier pass (clause 4) still outstanding.
+- [x] 2026-07-15 [orchestrator] Review verdict recorded on branch (home #2). Dispatching verifier.
