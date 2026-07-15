@@ -155,6 +155,49 @@ API + reqwest path per DoD clause 4, confirming the malformed-param branch now r
 
 [adr-0005]: ../../docs/adr/0005-foundational-wire-contract.md
 
+## Summary
+
+Malformed query-parameter values on the task-list endpoint now return the standard
+`{ "code": "validation_failed", "message": <string> }` JSON error body instead of axum's built-in
+**plain-text** `Query`-extractor rejection. The deliverable is a thin, server-only wrapper
+extractor `ValidatedQuery<T>` (new `crates/server/src/extract.rs`): a `pub ValidatedQuery<T>(pub T)`
+newtype implementing `FromRequestParts<S>` for `S: Send + Sync`, `T: DeserializeOwned`. It delegates
+to axum's built-in `Query::<T>::from_request_parts` and maps `Err(rejection)` →
+`ApiError::Validation(rejection.body_text())` (→ `400` + `ErrorCode::ValidationFailed` + JSON
+`ErrorBody`), reusing the exact boundary seam the whole API already flows errors through — the same
+pattern as the existing custom `AuthUser` extractor (`crates/server/src/auth/session.rs`). The
+tracer bullet + only call-site swap is `list_tasks` (`crates/server/src/handlers/tasks.rs`):
+`Query<TaskListQuery>` → `ValidatedQuery<TaskListQuery>`. Because the wrapper is generic over `T`
+and state `S`, it is the reusable primitive any future query-param endpoint inherits, satisfying the
+"applied consistently" criterion.
+
+- **No `contract`/DTO change (#2)** — the error *shape* (`contract::ErrorBody`) and *code*
+  (`ErrorCode::ValidationFailed`) are already the contract; no new type/field/variant, no `.sqlx`,
+  no migration. **No domain-structure change (#3); no `tui` change** (the shipped reqwest client
+  never emits empty-string params, so no real client reaches this path). **No ADR** — this
+  *enforces* the already-accepted [ADR-0005][adr-0005] error contract on the one path (axum's
+  default `Query` rejection) that bypassed it.
+- **Preserved 0020 behaviours (by construction, through the handler not the extractor):** absent
+  params → `200` whole list; over-ceiling `?limit=501` → `400 validation_failed`. Both remain
+  test-pinned. Profile-scoping (#4) untouched; TUI stateless (#1) unaffected.
+- **Tests (`tester`, `crates/server/tests/tasks.rs`):** three new cases pin the JSON error body
+  for `?limit=` (empty), `?limit=abc` (non-integer), `?offset=` (empty) — each asserts `400` +
+  `expect_error(ErrorCode::ValidationFailed)` (parses the JSON `ErrorBody`, pinning the contract
+  shape + non-empty message; axum's exact wording is not pinned). The new `extract.rs` module is
+  100%-region-covered.
+- **Reviewer: `approved`** — code-tree hash `0d0c8f06077de4b0808ec657b2959e2cdde016cc`
+  (commit `8f311f6`), no out-of-scope findings; extractor state-agnostic, `Debug`/`missing_docs`
+  satisfied, `body_text()` client-safe (no server-internal leak).
+- **Verifier: `verified`**, no gaps — hermetic live boot (`./ok.sh verify-boot`): `?limit=`,
+  `?limit=abc`, `?offset=` each → `400` + `content-type: application/json` +
+  `{"code":"validation_failed","message":…}` (not plain-text); absent → `200` JSON array;
+  `?limit=501` → `400 validation_failed`. Full `./ok.sh test` green. Same code-hash
+  `0d0c8f06077de4b0808ec657b2959e2cdde016cc`. Inferred-only: the malformed-query `400` short-circuits
+  in the extractor before the instrumented `list_tasks` span (expected).
+- Promoted from idea [`0010`](../ideas/0010-empty-string-query-param-error-contract.md)
+  (surfaced by the verifier during 0020, operator-accepted 2026-07-15).
+- coverage: 73.83%
+
 ## Log / comments
 
 - [x] 2026-07-15 [architect] Planned. No ADR required — this enforces the existing ADR-0005
