@@ -2,7 +2,7 @@
 id: 0025
 title: Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing)
 type: feature       # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []
@@ -368,6 +368,13 @@ does not flip the idea's status (ideas lifecycle).
   read→404, owner scoped read→200); OTel spans observed at the collector for all exercised paths.
   Server API + reqwest wire shapes behaviourally unchanged (no contract/wire/server change), as
   planned. **Verdict: `verified`** pinned to code-hash `5175b549` (commit `0108053`).
+- 2026-07-15 [orchestrator] Step-7 freshen: rebased the branch onto `main` (which had advanced with
+  the eng-manager learnings + regenerated dashboard + idea 0012, all docs/board/`.claude` only). The
+  only conflict was this feature-local Board file (main's frozen pointer vs. the branch's
+  authoritative copy) — resolved in favour of the branch. `./ok.sh code-hash HEAD` is **unchanged at
+  `5175b549`**, so the code is byte-identical and the `approved` + `verified` verdicts carry forward
+  untouched (no relabelling). Re-ran the gates on the rebased tree: `./ok.sh fmt --check | lint |
+  test` all green (exit 0). `working`/`review` → `awaiting-merge`.
 
 ## Summary
 
