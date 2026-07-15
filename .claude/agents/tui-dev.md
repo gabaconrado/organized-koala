@@ -43,3 +43,14 @@ You are the **tui-dev** for organized-koala.
   a caption, budget the bottom-band row count (and re-phrase with ` | ` separators to control wrap
   points) in the **same** change; do not expect to bolt on a hotkey without touching layout. The
   invariant is owned by ADR-0006 §8.3.
+- **A modal / sub-flow event handler must handle `Event::Cancel` (idle reset-to-list), not only
+  the mutating events (learned 0024).** Idle `Event::Cancel` (the normal `Esc`-on-an-open-dialog
+  case, no request in flight) is **not** caught centrally — the app-level `Event::Cancel` arm fires
+  only `if self.is_pending()`, so an idle `Cancel` falls through to the per-pane handler, which is
+  expected to reset its own mode to the list. A handler that matches only `Char`/`Backspace`/
+  `Next`/`Prev`/`Submit` with a `_ => {}` catch-all **silently drops** idle `Cancel`, leaving the
+  dialog stuck open — a bug the lib+bins build and clippy never catch. 0024's five Notes/Profiles
+  create·edit·delete handlers had exactly this divergence and it survived multiple cycles. When you
+  add or edit any modal/sub-flow handler, give it an explicit `Event::Cancel => self.mode = <List>`
+  arm mirroring the note-detail (`notes.rs`) and Tasks (`task_list.rs`) handlers — resetting the
+  mode drops the owned draft/confirm payload, so the discard is inherent.

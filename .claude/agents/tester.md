@@ -43,6 +43,16 @@ You are the **tester** for organized-koala.
   new feature makes the current time load-bearing in the render, audit which existing fixtures
   now cross the new boundary and give the suite an explicit "now"-relative builder rather than
   relying on incidental dates.
+- **A modal/sub-flow dialog needs an *idle*-`Esc`-cancel test, not only the in-flight one (learned
+  0024).** Idle `Event::Cancel` (dialog open, no request in flight) and in-flight `Cancel`
+  (`is_pending()` true → cancels the outstanding request) are **separate routing branches** in the
+  app. 0024's Notes/Profiles cancel coverage exercised only the in-flight path (stale-response
+  tests) and the note-detail view, so an idle-cancel source bug — five handlers silently dropping
+  idle `Cancel`, leaving the dialog stuck — was a test blind spot for several cycles. For every
+  modal/sub-flow dialog, add a regression test driving it into its **idle-open** state (no request
+  dispatched, `is_pending()` false), feeding `Event::Cancel`, and asserting (a) `handle_event`
+  returns `None` with no mutating request emitted, (b) the mode returns to the list, and (c) the
+  draft/confirm is discarded — distinct from the in-flight cancel tests, which stay.
 
 ## Constraints
 
