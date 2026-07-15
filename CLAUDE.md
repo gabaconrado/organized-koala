@@ -227,7 +227,18 @@ into the forced-collapsed "older" group and would have exercised the wrong rende
 added **wall-clock-aware builders** (`today_at` / `today_open_task`) so today-group flows land their
 fixtures there. Reusable rule: when a feature makes *now* load-bearing in the render, audit which
 existing fixtures cross the new boundary and give the suite an explicit "now"-relative builder
-(captured in the `tester` agent).
+(captured in the `tester` agent). **Recurred a third time on 0025 via a new trigger — a field's
+*type* change, not an added field.** 0025's shared-`TextInput` refactor retyped ~10 state-struct
+fields (`String` / `Option<String>` → the `TextInput` newtype); the lib+bin build and `clippy --lib
+--bins` stayed green while `common/mod.rs`'s struct literals (now needing `TextInput::default()` /
+`::new(…)`) and the ~60 `.as_str()` / `.as_deref()` read sites went red under `--all-targets` — the
+**same** stranding class as an added field/variant. **Generalized trigger: any change to a state
+struct's field *set* OR a field's *type* strands the tester harness**; a shared-primitive refactor
+that retypes many fields at once strands it in proportion to the field count, so the tester slice
+must still land in the **same cycle** (do not read the dev's `--lib --bins`-green Log entry as
+passing DoD clause 1/2). Mitigation that kept the churn purely mechanical: a terse read accessor
+(`value()` / `as_str()`) + `Default` on the primitive, so every literal and read site migrates by
+rote.
 
 **Gotcha — the `?` help overlay packs key·action pairs into a fixed-width box, so a new hotkey can
 silently overflow a reference line and wrap with no indent (learned 0015, recurred 0019).** The
@@ -241,6 +252,9 @@ help-reference line widths against the dialog inner width.** The help overlay no
 `HELP_DIALOG_WIDTH = 72` (inner ~70, headroom over the other dialogs' `DIALOG_WIDTH = 64`), and
 `crates/tui/tests/dialogs.rs` pins both the Global block and the Tasks line against re-wrap — but a
 *newly added* reference line is only as safe as a regression test that asserts it does not wrap.
+(0025 added two more hint lines — `Text fields  ← → move caret · …` and `Content: ↑↓ move line · …`,
+~56 / ~62 cols — width-checked against the inner ~70 and pinned by two new `dialogs.rs` anti-wrap
+tests; the practice held with no re-wrap.)
 
 > Open design item for the first ADR: **timer authority** — `#1` implies the server owns the
 > Pomodoro countdown and the TUI only renders it. The `architect` settles this in ADR-0002.
