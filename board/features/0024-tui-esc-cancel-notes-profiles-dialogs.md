@@ -246,3 +246,6 @@ contract/scope" — the ADR trigger. **No ADR is written or amended for 0024.**
   contract/scope decision. Help-overlay width gotcha (learned-0015/0019) does **not** apply (no
   hotkey added/renamed; `Esc` already maps to `Cancel`). Grill skipped — no design fork; the fix
   is contained and the pattern is pre-existing. Set `planned` → `ready`.
+- 2026-07-15 [orchestrator] Claimed onto branch `feature/0024-tui-esc-cancel-notes-profiles-dialogs`
+  (worktree `.claude/worktrees/0024-...`). **This `main` copy is frozen at the claim snapshot**;
+  the branch copy is authoritative until the human's merge brings it back (home #2 lifecycle).
