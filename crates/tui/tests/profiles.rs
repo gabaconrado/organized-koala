@@ -642,7 +642,7 @@ fn esc_cancels_idle_rename_dialog_discarding_draft() {
     let ProfilesMode::Renaming { form, .. } = &switcher(&app).mode else {
         panic!("rename dialog open with a prefilled form");
     };
-    assert_eq!(form.name, "work-X", "draft holds the edit");
+    assert_eq!(form.name.as_str(), "work-X", "draft holds the edit");
     assert!(!app.is_pending(), "idle: no request in flight");
 
     let calls_before = client.calls().len();
@@ -680,7 +680,8 @@ fn esc_cancels_idle_rename_dialog_discarding_draft() {
         panic!("rename dialog re-opened");
     };
     assert_eq!(
-        form.name, "work",
+        form.name.as_str(),
+        "work",
         "draft discarded — form re-prefilled from the profile, not the abandoned edit",
     );
 }

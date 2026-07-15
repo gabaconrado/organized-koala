@@ -337,7 +337,8 @@ fn e_on_a_subtask_row_edits_its_title() {
         .as_ref()
         .expect("the edit-sub-task sub-flow is open")
         .title
-        .clone();
+        .as_str()
+        .to_owned();
     assert_eq!(prefill, "old title", "edit pre-fills the sub-task's title");
 
     // Script the patch response + the chained tree refresh.

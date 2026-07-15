@@ -681,7 +681,13 @@ fn esc_cancels_an_in_progress_task_edit_reverting_the_value() {
         let _ = app.handle_event(Event::Char(c));
     }
     assert_eq!(
-        tasks_pane(&app).detail.as_ref().unwrap().edit.as_deref(),
+        tasks_pane(&app)
+            .detail
+            .as_ref()
+            .unwrap()
+            .edit
+            .as_ref()
+            .map(|t| t.as_str()),
         Some("originalXYZ"),
         "the edit buffer holds the in-progress value",
     );
@@ -1086,7 +1092,7 @@ fn newline_inserts_a_line_break_into_the_content_buffer_and_renders_it() {
         panic!("detail open");
     };
     assert_eq!(
-        detail.edit.as_deref(),
+        detail.edit.as_ref().map(|t| t.as_str()),
         Some("ALPHATOKEN\nBRAVOTOKEN"),
         "Newline inserted a '\\n' into the Content edit buffer",
     );
@@ -1197,7 +1203,7 @@ fn esc_cancels_a_content_edit_reverting_the_buffer_and_stays_in_the_detail() {
         panic!("detail open");
     };
     assert_eq!(
-        detail.edit.as_deref(),
+        detail.edit.as_ref().map(|t| t.as_str()),
         Some("original body\nZ"),
         "the Content edit buffer holds the in-progress multi-line value",
     );

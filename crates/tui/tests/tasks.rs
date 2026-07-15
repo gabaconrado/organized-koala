@@ -192,7 +192,8 @@ fn edit_issues_title_and_description_patch_and_row_reflects_it() {
         .as_ref()
         .expect("edit sub-flow open")
         .title
-        .clone();
+        .as_str()
+        .to_owned();
     assert_eq!(edit_title, "old title", "edit pre-fills the current title");
 
     // Clear "old title" (9 chars) then type the new title; switch to the description field.

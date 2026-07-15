@@ -146,7 +146,10 @@ fn window_editor_submit_refetches_with_new_window_and_dynamic_label() {
         .editing_window
         .as_ref()
         .expect("F opened the window editor");
-    assert_eq!(editor.buffer, DEFAULT_HIDE_WINDOW_DAYS.to_string());
+    assert_eq!(
+        editor.buffer.as_str(),
+        DEFAULT_HIDE_WINDOW_DAYS.to_string().as_str()
+    );
 
     // Script the re-fetch the submit will trigger (a windowing server returns the same in-window
     // set; the fake echoes it).

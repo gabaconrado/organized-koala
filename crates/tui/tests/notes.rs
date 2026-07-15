@@ -184,8 +184,12 @@ fn edit_issues_update_and_reflects_change_in_place() {
     let NotesMode::Editing { form, .. } = &state.mode else {
         panic!("edit sub-flow open with prefilled form");
     };
-    assert_eq!(form.title, "Old title", "form prefilled from the note");
-    assert_eq!(form.content, "old body");
+    assert_eq!(
+        form.title.as_str(),
+        "Old title",
+        "form prefilled from the note"
+    );
+    assert_eq!(form.content.as_str(), "old body");
 
     // Replace the title: clear it then type the new one, then submit.
     for _ in 0.."Old title".len() {
@@ -696,7 +700,11 @@ fn esc_cancels_idle_edit_dialog_discarding_draft() {
     let NotesMode::Editing { form, .. } = &notes_pane(&app).mode else {
         panic!("edit dialog open with a prefilled form");
     };
-    assert_eq!(form.title, "Old title EDITED", "draft holds the edit");
+    assert_eq!(
+        form.title.as_str(),
+        "Old title EDITED",
+        "draft holds the edit"
+    );
     assert!(!app.is_pending(), "idle: no request in flight");
 
     let calls_before = client.calls().len();
@@ -734,7 +742,8 @@ fn esc_cancels_idle_edit_dialog_discarding_draft() {
         panic!("edit dialog re-opened");
     };
     assert_eq!(
-        form.title, "Old title",
+        form.title.as_str(),
+        "Old title",
         "draft discarded — form re-prefilled from the note, not the abandoned edit",
     );
 }

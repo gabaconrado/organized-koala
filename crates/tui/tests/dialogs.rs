@@ -537,6 +537,81 @@ fn help_modal_tasks_third_line_keeps_f_filter_by_date_without_wrapping() {
 }
 
 #[test]
+fn help_modal_text_fields_line_renders_intact_without_wrapping_del_delete() {
+    // 0025 (learned 0015, recurred 0019/0020/0023): the movable-caret feature added a new
+    // `Text fields  ← → move caret · Home/End ends · Del delete` reference line to the help overlay.
+    // A newly-added reference line is only as safe as a test that pins it does not overflow the
+    // fixed-width help box (HELP_DIALOG_WIDTH=72, inner ~70) and reflow the trailing `Del delete`
+    // token to a flush-left, un-indented continuation row — the pure-geometry bug the build/clippy
+    // never catch.
+    //
+    // This pins the line intact: `Del delete` renders on the SAME row as `move caret`, and NO row
+    // is a stranded flush-left `Del delete` continuation.
+    let (client, mut app) = logged_in(vec![]);
+    press(&mut app, &client, KeyCode::Char('?'));
+    assert!(app.help_open(), "? opened the help overlay");
+    let text = render(&app, W, H);
+    let rows: Vec<&str> = text.lines().collect();
+
+    // The Text-fields line is identified by its `move caret` content, not a column — the box
+    // border/padding indents it.
+    let text_fields_row = rows
+        .iter()
+        .find(|r| r.contains("Text fields") && r.contains("move caret"))
+        .unwrap_or_else(|| panic!("the Text-fields reference row in the help body:\n{text}"));
+
+    // (1) `Del delete` stays on the same rendered row as `move caret` — it did NOT wrap.
+    assert!(
+        text_fields_row.contains("Del delete"),
+        "the Text fields line must keep `Del delete` on the same row as `move caret` \
+         (it must not wrap):\n{text_fields_row:?}\nfull help:\n{text}",
+    );
+
+    // (2) No row is a stranded, flush-left `Del delete` continuation (the malformed-wrap shape).
+    assert!(
+        !rows
+            .iter()
+            .any(|r| r.trim_start().starts_with("Del delete")),
+        "no row may begin with a stranded `Del delete` (the wrapped-continuation regression):\n{text}",
+    );
+}
+
+#[test]
+fn help_modal_detail_content_line_renders_intact_without_wrapping_ctrl_s_commit() {
+    // 0025: the movable-caret feature also added a Detail `Content:` reference line
+    // (`Content: ↑↓ move line · Enter newline · Ctrl+S commit`) documenting the multiline
+    // Content-pane caret keys. Pin it against the same fixed-width-help-box wrap regression
+    // (HELP_DIALOG_WIDTH=72, inner ~70): the trailing `Ctrl+S commit` token must not reflow to a
+    // flush-left continuation row.
+    let (client, mut app) = logged_in(vec![]);
+    press(&mut app, &client, KeyCode::Char('?'));
+    assert!(app.help_open(), "? opened the help overlay");
+    let text = render(&app, W, H);
+    let rows: Vec<&str> = text.lines().collect();
+
+    // The Content line is identified by its `Content:` + `move line` content, not a column.
+    let content_row = rows
+        .iter()
+        .find(|r| r.contains("Content:") && r.contains("move line"))
+        .unwrap_or_else(|| panic!("the Detail Content reference row in the help body:\n{text}"));
+
+    // (1) `Ctrl+S commit` stays on the same rendered row as `move line` — it did NOT wrap.
+    assert!(
+        content_row.contains("Ctrl+S commit"),
+        "the Content line must keep `Ctrl+S commit` on the same row as `move line` \
+         (it must not wrap):\n{content_row:?}\nfull help:\n{text}",
+    );
+
+    // (2) No row is a stranded, flush-left `Ctrl+S commit` continuation (the malformed-wrap shape).
+    assert!(
+        !rows
+            .iter()
+            .any(|r| r.trim_start().starts_with("Ctrl+S commit")),
+        "no row may begin with a stranded `Ctrl+S commit` (the wrapped-continuation regression):\n{text}",
+    );
+}
+
+#[test]
 fn help_modal_closes_with_esc() {
     // Esc closes the help modal (the two-tiered Esc: an overlay is open, so Esc → Cancel, which the
     // app core folds into closing the help overlay) — without quitting.

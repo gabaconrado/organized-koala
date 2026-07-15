@@ -39,7 +39,7 @@ use tui::app::{
     AddTaskState, App, AuthField, AuthMode, AuthState, ClientRequest, ClientResponse, DeleteTarget,
     Dispatch, EditTaskState, Event, MainState, NoteDetail, NoteForm, NotePane, NotesMode,
     NotesState, Outcome, ProfileForm, ProfilesMode, ProfilesState, RequestId, Screen, Tab,
-    TaskListState,
+    TaskListState, TextInput,
 };
 use tui::client::{Client, ClientError, ClientResult};
 
@@ -1013,6 +1013,24 @@ pub fn render(app: &App, width: u16, height: u16) -> String {
     render_at(app, width, height, 0)
 }
 
+/// Render the app onto a `TestBackend` and return the on-screen caret cell the draw layer placed
+/// via `frame.set_cursor_position` — the `(x, y)` column/row of the visible terminal cursor for the
+/// focused text field (feature 0025). Rendered at tick 0.
+///
+/// A screen with no focused text field sets no cursor position, so the draw hides the cursor and
+/// this returns the backend's default `(0, 0)` (a border corner, never a valid caret cell); use
+/// this helper only where a caret is expected, and assert its exact cell.
+#[must_use]
+pub fn render_cursor(app: &App, width: u16, height: u16) -> (u16, u16) {
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    let _completed = terminal
+        .draw(|frame| tui::ui::draw(frame, app, 0))
+        .expect("draw");
+    let pos = terminal.get_cursor_position().expect("cursor position");
+    (pos.x, pos.y)
+}
+
 /// Render the app onto a `TestBackend` and return the raw `ratatui` [`Buffer`], so a test can
 /// inspect per-cell styling (e.g. the purple focus-border foreground) rather than only the flat
 /// text. Rendered at tick 0.
@@ -1256,11 +1274,11 @@ pub fn auth_screen() -> Screen {
     Screen::Auth(AuthState {
         mode: AuthMode::Login,
         focus: AuthField::Identifier,
-        identifier: String::new(),
-        username: String::new(),
-        email: String::new(),
-        password: String::new(),
-        profile_name: String::new(),
+        identifier: TextInput::default(),
+        username: TextInput::default(),
+        email: TextInput::default(),
+        password: TextInput::default(),
+        profile_name: TextInput::default(),
         account: String::new(),
         error: None,
         pending: None,
@@ -1295,8 +1313,8 @@ pub fn task_list_screen_adding() -> Screen {
     let mut tasks = empty_tasks_pane();
     tasks.adding = Some(AddTaskState {
         on_title: true,
-        title: String::new(),
-        description: String::new(),
+        title: TextInput::default(),
+        description: TextInput::default(),
         error: None,
     });
     main_screen(Tab::Tasks, tasks, two_profiles_pane())
@@ -1308,8 +1326,8 @@ pub fn task_list_screen_editing() -> Screen {
     tasks.editing = Some(EditTaskState {
         task_id: "00000000-0000-0000-0000-000000000001".to_owned(),
         on_title: true,
-        title: "a task".to_owned(),
-        description: String::new(),
+        title: TextInput::new("a task"),
+        description: TextInput::default(),
         error: None,
     });
     main_screen(Tab::Tasks, tasks, two_profiles_pane())
@@ -1347,7 +1365,7 @@ pub fn profiles_screen_pending() -> Screen {
 pub fn profiles_screen_creating() -> Screen {
     let mut profiles = two_profiles_pane();
     profiles.mode = ProfilesMode::Creating(ProfileForm {
-        name: String::new(),
+        name: TextInput::default(),
         error: None,
     });
     main_screen(Tab::Profiles, empty_tasks_pane(), profiles)
@@ -1359,7 +1377,7 @@ pub fn profiles_screen_renaming() -> Screen {
     profiles.mode = ProfilesMode::Renaming {
         profile_id: "p1".to_owned(),
         form: ProfileForm {
-            name: "work".to_owned(),
+            name: TextInput::new("work"),
             error: None,
         },
     };
@@ -1396,8 +1414,8 @@ pub fn notes_screen_creating() -> Screen {
     let mut notes = one_note_pane();
     notes.mode = NotesMode::Creating(NoteForm {
         on_title: true,
-        title: String::new(),
-        content: String::new(),
+        title: TextInput::default(),
+        content: TextInput::default(),
         error: None,
     });
     main_screen_full(Tab::Notes, empty_tasks_pane(), notes, two_profiles_pane())
@@ -1410,8 +1428,8 @@ pub fn notes_screen_editing() -> Screen {
         note_id: "n1".to_owned(),
         form: NoteForm {
             on_title: true,
-            title: "a note".to_owned(),
-            content: "body".to_owned(),
+            title: TextInput::new("a note"),
+            content: TextInput::new("body"),
             error: None,
         },
     };
