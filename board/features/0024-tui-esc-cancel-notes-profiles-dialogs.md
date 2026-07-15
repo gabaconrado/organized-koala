@@ -2,7 +2,7 @@
 id: 0024
 title: Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight)
 type: feature       # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: high      # high | medium | low
 parent: null
 depends-on: []
