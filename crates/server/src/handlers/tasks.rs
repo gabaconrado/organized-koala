@@ -3,7 +3,7 @@
 //! (never 403). The task domain is flat (hard-constraint #3).
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use contract::{
@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::app::AppState;
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
+use crate::extract::ValidatedQuery;
 
 /// A task row as stored, before mapping to the wire [`Task`].
 struct TaskRow {
@@ -83,7 +84,7 @@ pub async fn list_tasks(
     State(state): State<AppState>,
     user: AuthUser,
     Path(profile_id): Path<Uuid>,
-    Query(query): Query<TaskListQuery>,
+    ValidatedQuery(query): ValidatedQuery<TaskListQuery>,
 ) -> ApiResult<Json<Vec<Task>>> {
     assert_owned(&state, user.user_id, profile_id).await?;
 
