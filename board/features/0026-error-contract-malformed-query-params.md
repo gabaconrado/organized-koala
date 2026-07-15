@@ -2,7 +2,7 @@
 id: 0026
 title: Map axum Query-extractor rejections to the {code,message} JSON error contract
 type: feature       # feature | chore
-status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: awaiting-merge  # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: low       # high | medium | low
 parent: null
 depends-on: []
@@ -252,3 +252,9 @@ and state `S`, it is the reusable primitive any future query-param endpoint inhe
 - [x] 2026-07-15 [orchestrator] Verifier verdict recorded on branch (home #2). DoD clauses 1–6
   satisfied at code-hash `0d0c8f06`. Dispatching eng-manager (learn + summarise), then step-7
   freshen.
+- [x] 2026-07-15 [orchestrator] Step-7 freshen: rebased onto `main` @19127ad (docs/dashboard/
+  standards-only advance; no Board-file conflict — main's 0026 copy stayed frozen at `ready`).
+  `./ok.sh code-hash` **unchanged at `0d0c8f06077de4b0808ec657b2959e2cdde016cc`** → the approved
+  (reviewer) + VERIFIED (verifier) verdicts carry forward untouched (no relabelling). Gates
+  re-run green on the rebased tree (test/lint/fmt --check). DoD (feature track) clauses 1–7 all
+  satisfied. Status `review`→`awaiting-merge` — terminal for the AI cycle; the human ff-merges.
