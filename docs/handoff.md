@@ -5,6 +5,55 @@ keeps the "What works right now" snapshot at the bottom current.
 
 ---
 
+## Handoff — 2026-07-15 (0025 — editable text inputs: movable, visible cursor)
+
+A **`tui`-crate-only `feature`** at operator request. Every TUI text field was **append-only /
+end-locked** — no visible caret, edits only at the buffer end — so fixing an early typo in a long
+Notes Content meant destroying and re-typing the tail. Now every field has a **movable, visible
+cursor** with mid-buffer insert/delete.
+
+- **Design — one shared `TextInput` primitive** (`crates/tui/src/app/text_input/`), not per-struct
+  cursors. A `String` buffer + a **char-index caret** + insert / backspace / forward-delete / move
+  ops (`move_left`/`move_right`/`home`/`end`, multiline `move_up`/`move_down`) + two render helpers
+  (`field_view` — a single-line horizontally-scrolled slice; `viewport` — a hard-wrapped
+  vertically-scrolled multiline pane returning the caret `(row, col)` + scroll offset). All ops are
+  UTF-8-safe (char index → byte offset via `char_indices`, no `indexing_slicing`). It replaced the
+  ~10 copy-pasted `push_char`/`backspace` pairs and `Option<String>` edit buffers across auth, task
+  add/edit + task-detail, sub-task add/edit, notes (form + detail), profiles, and the numeric
+  duration + window buffers (digit filtering retained at the call site).
+- **Keys.** Left/Right/Home/End/Delete bound under a **text-entry** context; Up/Down repurposed to
+  caret line-move **only** under `editing_note_content` (single-line arrow-nav + the `f` date-filter
+  spinner unchanged). The caret is drawn via `frame.set_cursor_position` for the **focused** field
+  only; the note-detail Content pane **scrolls to keep the caret in view**, which **subsumes idea
+  0006**. Word-jump + PageUp/PageDown were **deferred** (A3, non-gating); the note create/edit
+  *dialog* Content stays single-line (A5); the `DateFilter` numeric spinner is out of scope (A4).
+- **No wire/domain change.** `tui`-crate-only — **no** `contract`/wire (#2), server, or
+  domain-structure (#3) change: every field still `.as_str().trim()` into the unchanged
+  `Create*`/`Update*`/auth DTOs; #1 preserved (caret index + scroll offset are transient UI state,
+  never persisted/sent). **No ADR** (architect confirmed against the code; keymap additions are
+  additive and non-colliding).
+- **DoD (`feature` track).** Gates green (`test | lint | fmt --check`); reviewer **approved** +
+  verifier **verified** (TestBackend suite green + live-boot of the unchanged server/reqwest path),
+  both pinned to code-hash `5175b54974233e04218f5c2a6eac8d8bc1aece42` (last code commit `0108053`).
+  Coverage **73.79%** headline region (report-only) — up from 0024's 73.25% (the new primitive is
+  96.69%-covered and adds 25 unit + 8 TestBackend + 2 anti-wrap tests).
+- **Learnings — no new gotcha; two existing ones annotated.** The learned-0019/0020
+  tester-harness-stranding gotcha **recurred exactly as predicted, via a new trigger** — a field's
+  *type* change (`String` / `Option<String>` → the `TextInput` newtype across ~10 state structs),
+  not an *added* field, yet the same stranding class (lib+bins green, `--all-targets` red until the
+  tester slice un-strands `common/mod.rs`'s literals + ~60 read sites in the same cycle).
+  **Generalized the CLAUDE.md gotcha's trigger** to "any change to a state struct's field *set* OR a
+  field's *type*", recording the terse-accessor (`value()`/`as_str()`) + `Default` mitigation that
+  kept the churn mechanical. The learned-0015/0019 help-overlay-wrap gotcha was handled correctly a
+  **third time** (two new hint lines width-checked + pinned by anti-wrap tests); reinforced in that
+  gotcha ("the practice held"). No new crate, no standards-skill change.
+- **Ideas.** **Idea 0006** (note Content scroll/cursor affordance) is **subsumed** by 0025 — left
+  for the human to close as superseded-by-0025 or keep as a narrower record (an AI cycle does not
+  flip an idea's status). **Idea 0012 filed** this cycle from the reviewer's out-of-scope finding:
+  the pre-existing `AuthState` password *entry* buffer is reachable via derived `Debug` (unchanged
+  by 0025, **not** a regression — the JWT is `SessionToken`-wrapped and the buffer becomes
+  `Password` at submit); candidate for a redacting holder.
+
 ## Handoff — 2026-07-15 (0024 — Esc cancels idle Notes/Profiles dialogs)
 
 A small, contained **`tui`-crate-only `feature`** fixing a confirmed operator-reported bug: on an
@@ -2578,6 +2627,23 @@ Docs updated: ADR-0001 created; CLAUDE.md authored.
   **verified**, code-hash `700e3b535c587fd309e4de0a5f973867a577fc02`; coverage 73.20% line. Two
   CLAUDE.md gotchas (harness re-strand, help-overlay overflow) recurred exactly as predicted — no
   new gotcha, no standards/agent change, no new crate, no idea filed.
+- **Editable text inputs (movable, visible cursor) are at `review`/in-flight on
+  `feature/0025-tui-editable-text-input-cursor`** (0025, a `tui`-crate-only `feature`; approved +
+  verified, heading toward `awaiting-merge`): every TUI text field, previously append-only /
+  end-locked with no caret, now has a **movable, visible cursor** with mid-buffer insert/delete via
+  one shared `TextInput` primitive (`crates/tui/src/app/text_input/`) — `String` buffer + char-index
+  caret + insert/backspace/forward-delete/move ops + single-line-scroll (`field_view`) and multiline
+  scroll-to-caret (`viewport`) render helpers, adopted across ~10 fields (auth, task/sub-task
+  add·edit, task-detail, notes form + detail, profiles, numeric duration + window). Keys
+  Left/Right/Home/End/Delete under a text-entry context; Up/Down → caret line-move only under
+  `editing_note_content`; caret drawn via `frame.set_cursor_position` for the focused field. **No**
+  `contract`/wire (#2), server, or domain (#3) change (fields still `.as_str().trim()` into unchanged
+  DTOs; #1 preserved), **no ADR**. The multiline Content scroll-to-caret **subsumes idea 0006**;
+  word-jump/PageUp-Down deferred (A3). Tests: 25 primitive unit + 8 `text_input.rs` TestBackend + 2
+  anti-wrap. Reviewer **approved** + verifier **verified**, pinned to code-hash
+  `5175b54974233e04218f5c2a6eac8d8bc1aece42`; coverage 73.79% region. No new gotcha (the
+  harness-strand + help-wrap gotchas recurred as predicted and were annotated); **idea 0012** filed
+  (pre-existing `AuthState` password-entry buffer reachable via derived `Debug`).
 
 [adr-0010-0014-snap]: ./adr/0010-tui-navigation-and-interaction-model.md
 [adr-0011-snap]: ./adr/0011-multiline-content-editing-keymap.md

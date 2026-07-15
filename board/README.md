@@ -62,7 +62,7 @@ backlog".
 | [0022](./features/0022-verifier-hermetic-teardown.md) | Make the verifier stack boot hermetic — always tear down its own volume (`down -v` on any exit) | chore | merged | low | — | — (main-only chore; no worktree) |
 | [0023](./features/0023-tui-task-date-window-and-filter.md) | TUI task date-window (hide older than X days) + filter-by-day | feature | merged | medium | 0020 (merged ✓) | — (merged) |
 | [0024](./features/0024-tui-esc-cancel-notes-profiles-dialogs.md) | Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight) | feature | merged | high | — | — (merged) |
-| [0025](./features/0025-tui-editable-text-input-cursor.md) | Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing) | feature | inbox | medium | — | — (unclaimed) |
+| [0025](./features/0025-tui-editable-text-input-cursor.md) | Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing) | feature | ready | medium | — | `feature/0025-tui-editable-text-input-cursor` |
 
 > **0024 — Esc cancels idle Notes/Profiles dialogs — MERGED** (operator-authorised `/finalize`
 > ff-merge; branch torn down). A small, contained
@@ -79,11 +79,29 @@ backlog".
 > modal dialog needs an idle-`Esc`-cancel test) — not a cross-cutting CLAUDE.md gotcha. No new crate,
 > no standards change, no idea filed.
 >
-> **0025 — editable text-input cursor — filed to `inbox`** (operator request, 2026-07-15; awaiting
-> `architect` planning). A broad `tui` feature — a movable, visible cursor across all text inputs
-> (today every input is append-only / end-locked, worst in long Notes); it overlaps and likely
-> subsumes idea [`0006`](./ideas/0006-note-content-scroll-cursor-affordance.md). `tui`-crate-only
-> with no expected `contract`/server/domain change; the operator will kick off the work manually.
+> **0025 — editable text-input cursor — at `review`/in-flight** (branch
+> `feature/0025-tui-editable-text-input-cursor`; the `main` snapshot is frozen at the `ready` claim,
+> the live branch status is `review`, **approved** + **verified**, heading toward `awaiting-merge`).
+> A `tui`-crate-only `feature`: every TUI text field was append-only / end-locked with no visible
+> caret; now every field has a **movable, visible cursor** with mid-buffer insert/delete via one
+> shared `TextInput` primitive (`crates/tui/src/app/text_input/`) — `String` buffer + char-index
+> caret + insert/backspace/forward-delete/move ops + single-line-scroll (`field_view`) and multiline
+> scroll-to-caret (`viewport`) render helpers — adopted across ~10 fields (auth, task/sub-task
+> add·edit, task-detail, notes form + detail, profiles, numeric duration + window). Keys
+> Left/Right/Home/End/Delete under a text-entry context; Up/Down → caret line-move only under
+> `editing_note_content`; caret drawn via `frame.set_cursor_position` for the focused field. **No**
+> `contract`/wire (#2), server, or domain (#3) change (fields still `.as_str().trim()` into unchanged
+> DTOs; #1 preserved — caret/scroll are transient UI state), **no ADR**. The multiline Content
+> scroll-to-caret **subsumes idea [`0006`](./ideas/0006-note-content-scroll-cursor-affordance.md)**
+> (the human decides whether to close it superseded-by-0025 or keep it as a narrower record —
+> word-jump/PageUp-Down were deferred, A3, non-gating). Tests: 25 primitive unit + 8 `text_input.rs`
+> TestBackend + 2 anti-wrap. Reviewer **approved** + verifier **verified**, both pinned to code-hash
+> `5175b54974233e04218f5c2a6eac8d8bc1aece42`; coverage **73.79%** headline region (report-only). No
+> new gotcha (the learned-0019/0020 harness-strand + learned-0015/0019 help-wrap gotchas recurred as
+> predicted and were annotated in CLAUDE.md — the harness-strand trigger generalized to a field's
+> *type* change, not only an *added* field). One out-of-scope follow-up filed as
+> [`ideas/0012`](./ideas/0012-redact-auth-password-entry-buffer.md) (the pre-existing `AuthState`
+> password-*entry* buffer is reachable via derived `Debug`; unchanged by 0025, not a regression).
 >
 > **0023 — TUI task date-window + filter-by-day — MERGED** (operator-authorised ff-merge; `main`
 > @ `5594d14`). A full-stack `feature`. Governed by
