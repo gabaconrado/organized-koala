@@ -2,7 +2,7 @@
 id: 0025
 title: Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing)
 type: feature       # feature | chore
-status: working         # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
+status: review          # inbox → planned → ready → working → review → awaiting-merge → merged | blocked
 priority: medium    # high | medium | low
 parent: null
 depends-on: []
@@ -330,3 +330,26 @@ does not flip the idea's status (ideas lifecycle).
   DB-backed integration tests against the script's throwaway Postgres (no capability gap), and the
   `tui` `TestBackend` suite (`text_input` 8, `dialogs` 28, and every pre-existing file). Full
   `--all-targets` build is green again.
+- 2026-07-15 [orchestrator] `working` → `review`; dispatched cold `reviewer` (read-only).
+- 2026-07-15 [reviewer] Cold review of diff `main@0b6ef88 .. 0108053` (`tui`-crate-only feature).
+  **Gate (all green):** `./ok.sh test` green (workspace-wide incl. server DB-backed integration
+  tests + contract/tui doctests); `./ok.sh lint` (clippy `--all-targets`) clean; `./ok.sh fmt
+  --check` clean. **Substantive:** (1) UTF-8/char-boundary correctness sound — caret char-index →
+  byte-offset via `char_indices`/`byte_offset`, end-guarded, no `indexing_slicing`, no cast/overflow
+  panic; covered by 25 unit tests + multibyte e2e. (2) Hard constraints hold — #1 caret/scroll are
+  transient UI state (scroll derived on demand, nothing persisted/sent); **#2 NO contract/wire
+  change** (diff touches only `crates/tui/{src,tests}` + `board/`; no `contract`/server/protocol
+  surface; every field still `.as_str().trim/.to_owned()` into unchanged DTOs); #3 no domain
+  structure. (3) Keymap additive/non-colliding — Left/Right/Home/End/Delete only under `text_entry`;
+  Up/Down → MoveUp/MoveDown only under `editing_note_content`, single-line arrow nav + date spinner
+  unchanged. (4) `?` help-overlay: two new lines (~56 / ~62 cols) fit `HELP_DIALOG_WIDTH=72` inner
+  ~70; two `dialogs.rs` anti-wrap regression tests pin them (learned 0015/0019). (5) Tests
+  public-API-driven, real caret/scroll/render coverage, harness un-stranding field-type-only (A7).
+  (6) No unjustified `#[allow]` (only sanctioned `cfg_attr(test, …)`); Conventional Commits with
+  correct `@organized-koala.local` co-author trailers (no `noreply@anthropic.com` leak). (7) Scope:
+  DateFilter excluded (A4), note dialog Content single-line (A5), word-jump/PageUp-Down deferred
+  (A3, non-gating). **fix-now: none.** **Out-of-scope (→ idea, not dragged in):** pre-existing
+  `AuthState` password *entry* buffer reachable via derived `Debug` (unchanged by 0025, not a
+  regression; JWT wrapped in `SessionToken`, buffer wrapped in `Password` at submit) — candidate for
+  a redacting holder. **Verdict:** `REVIEW-STATUS: approved` pinned to code-hash `5175b549` (commit
+  `0108053`).
