@@ -6,7 +6,7 @@ priority: low         # high | medium | low — a triage hint, never a gate
 created: 2026-07-02    # absolute date
 source: 0020          # Board item / cycle that surfaced it, or "adhoc"
 raised-by: reviewer   # reviewer | verifier | eng-manager | architect | orchestrator | human
-promoted-to: null     # NNNN of the resulting Board item, set when accepted & promoted
+promoted-to: 0027     # NNNN of the resulting Board item, set when accepted & promoted
 ---
 
 ## What
