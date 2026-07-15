@@ -281,3 +281,14 @@ contract/scope" — the ADR trigger. **No ADR is written or amended for 0024.**
   the fix touched no `Client`/`ClientRequest`/`Outcome`/state-field surface, so `tests/common/mod.rs`
   was not stranded (learned-0019 confirmed not to apply). `./ok.sh fmt --check` clean; `./ok.sh test`
   green (all suites, `--all-targets`); `./ok.sh lint` (`--all-targets`) clean.
+- 2026-07-15 [reviewer] Cold review complete. Gates green (`./ok.sh test | lint | fmt --check` all
+  exit 0; the six new idle-Esc-cancel tests pass and genuinely fail against the pre-fix source).
+  Correctness confirmed: five `Event::Cancel => self.mode = <List>` arms drop the owned form/confirm
+  payload (draft discard inherent); the two `if`→`match` delete-confirm conversions preserve the
+  Submit path; the in-flight cancel path (`app/mod.rs:452`) is untouched (empty diff on `app/mod.rs`
+  + `terminal/mod.rs`). `tui`-crate-only — empty diff on `contract`/`server`/`app/mod.rs`/
+  `terminal/mod.rs`/`tests/common`; no contract/wire (#2), server, domain-structure (#3), or auth
+  (#5) change; TUI stays stateless (#1). No hotkey added/renamed → help-overlay width gotcha N/A
+  (help lines untouched). No ADR needed. No out-of-scope nits.
+  **REVIEW-STATUS: approved** — code-hash `fd2bd1508506786d0127a1005317a4852201351d` (last code
+  commit `79467a9`).
