@@ -306,3 +306,27 @@ does not flip the idea's status (ideas lifecycle).
   (25) + `--doc` (4) green. `--all-targets` still intentionally red (tester slice 3 un-strands
   `crates/tui/tests/common/mod.rs`). No `contract`/wire/server change — all fields still feed the
   unchanged `Create*`/`Update*`/auth DTOs via `.as_str()`.
+- 2026-07-15 [tester] Slice 3 done: un-stranded the `crates/tui/tests/` harness for the
+  `String`/`Option<String>` → `TextInput` field-type change (learned 0019/0020) and added caret
+  coverage. **Un-stranded:** `common/mod.rs` — imported `TextInput`, converted the 7 stranded
+  state-struct literals (`AuthState` 5 fields, `AddTaskState`, `EditTaskState`, `NoteForm` ×2,
+  `ProfileForm` ×2) to `TextInput::default()` / `TextInput::new(…)`; and the read sites across the
+  test files: `notes.rs` (`form.title/.content.as_str()`), `profiles.rs` (`form.name.as_str()`),
+  `tasks.rs` / `subtasks.rs` (`.title.as_str().to_owned()`), `date_window.rs`
+  (`editor.buffer.as_str()`), `detail.rs` (×3 `.edit.as_deref()` → `.edit.as_ref().map(|t|
+  t.as_str())`). No source touched (A7 held — no `Client`/`ClientRequest`/`Outcome` surface change,
+  only field-type + read-site churn). **Coverage added:** new `crates/tui/tests/text_input.rs` (8
+  tests) driven through the public two-step `App` API — Left/Right + mid-buffer insert, Home/End,
+  mid-buffer Backspace + forward Delete (incl. end-of-buffer no-op), the **rendered caret cell** via
+  a new `common::render_cursor` helper reading the `TestBackend` terminal cursor (dialog field +
+  masked-password 1:1 mapping), multiline Up/Down line-move, multiline **scroll-to-caret** on the
+  note-detail Content pane (tail visible / head scrolled off, then caret walked to top → head
+  visible / tail off + caret row rises), and UTF-8 multi-byte caret safety end-to-end (café/naïve
+  insert + forward-delete around `é`/`ï`, no panic, correct string, well-defined render). Plus two
+  anti-wrap regression tests in `dialogs.rs` pinning the two new `?`-help hint lines (`Text fields …
+  Del delete` and `Content: … Ctrl+S commit`) do not reflow against `HELP_DIALOG_WIDTH` inner ~70
+  (learned 0015/0019/0020/0023). **Gates (all green):** `./ok.sh fmt --check` clean; `./ok.sh lint`
+  (clippy `--all-targets`) clean; `./ok.sh test` all green — workspace-wide incl. the server
+  DB-backed integration tests against the script's throwaway Postgres (no capability gap), and the
+  `tui` `TestBackend` suite (`text_input` 8, `dialogs` 28, and every pre-existing file). Full
+  `--all-targets` build is green again.
