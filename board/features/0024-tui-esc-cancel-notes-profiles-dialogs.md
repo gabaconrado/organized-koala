@@ -292,3 +292,14 @@ contract/scope" — the ADR trigger. **No ADR is written or amended for 0024.**
   (help lines untouched). No ADR needed. No out-of-scope nits.
   **REVIEW-STATUS: approved** — code-hash `fd2bd1508506786d0127a1005317a4852201351d` (last code
   commit `79467a9`).
+- 2026-07-15 [verifier] **verified** — code-hash `fd2bd1508506786d0127a1005317a4852201351d`.
+  Step 1 (owns the interactive behaviour per ADR-0003): `./ok.sh test` full workspace green; the six
+  `esc_cancels_idle_*` regression tests ran and passed (notes 16, profiles 19), in-flight cancel
+  tests still green. Step 2 (live boot smoke via hermetic `./ok.sh verify-boot`, docker 29.5.3):
+  stack booted (postgres→migrate one-shot clean→server `/healthz` 200→otel healthy); ran live
+  against :8080 — register 201, profiles CRUD + profile-scoping (#4) isolation, note create 201
+  with exact `{id,title,content,created_at}` shape, error contract `401 unauthenticated` /
+  `400 validation_failed` both match `{code?,message}`. Hermetic `down --volumes` teardown fired;
+  no lingering `deploy-*` containers / `deploy_postgres-data` volume. TUI-only diff did not break
+  the live path; nothing new server-side to exercise (empty server/contract diff), Esc→Cancel
+  behaviour owned by the TestBackend suite.
