@@ -17,13 +17,15 @@ use contract::{TimerConfig, TimerSession, UpdateTimerConfigRequest};
 
 use super::Session;
 use super::protocol::{ClientRequest, RequestId};
+use super::text_input::{self, TextInput};
+use crate::app::Event;
 
 /// The duration-edit sub-flow: a single numeric input buffer for the new duration in minutes.
 /// The same transient text-entry sub-flow category as [`AddTaskState`](super::AddTaskState).
 #[derive(Debug, Clone)]
 pub struct DurationEditState {
     /// The entered duration text (digits only; parsed on submit).
-    pub buffer: String,
+    pub buffer: TextInput,
     /// Inline error (e.g. an out-of-range duration rejected by the server), if any.
     pub error: Option<String>,
 }
@@ -31,19 +33,24 @@ pub struct DurationEditState {
 impl DurationEditState {
     fn new(current: u32) -> Self {
         Self {
-            buffer: current.to_string(),
+            buffer: TextInput::new(current.to_string()),
             error: None,
         }
     }
 
     fn push_char(&mut self, c: char) {
+        // Digit filtering stays here (numeric buffer); the caret still moves for editing.
         if c.is_ascii_digit() {
-            self.buffer.push(c);
+            self.buffer.insert_char(c);
         }
     }
 
     fn backspace(&mut self) {
-        let _ = self.buffer.pop();
+        self.buffer.backspace();
+    }
+
+    fn motion(&mut self, event: &Event) -> bool {
+        text_input::apply_motion(&mut self.buffer, event)
     }
 }
 
@@ -146,6 +153,16 @@ impl Timer {
         }
     }
 
+    /// Apply a caret movement / forward-delete to the open duration-edit buffer, returning whether
+    /// the event was a text-motion event.
+    pub(crate) fn edit_motion(&mut self, event: &Event) -> bool {
+        if let Some(edit) = &mut self.editing {
+            edit.motion(event)
+        } else {
+            false
+        }
+    }
+
     /// Cancel the duration-edit sub-flow without issuing a request.
     pub(crate) fn cancel_edit(&mut self) {
         self.editing = None;
@@ -156,7 +173,7 @@ impl Timer {
     pub(crate) fn submit_edit(&mut self, session: &Session) -> Option<ClientRequest> {
         let edit = self.editing.as_mut()?;
         edit.error = None;
-        let Ok(duration_minutes) = edit.buffer.trim().parse::<u32>() else {
+        let Ok(duration_minutes) = edit.buffer.as_str().trim().parse::<u32>() else {
             edit.error = Some("duration must be a whole number of minutes".to_owned());
             return None;
         };

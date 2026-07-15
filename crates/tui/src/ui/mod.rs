@@ -16,6 +16,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
+use crate::app::text_input;
 use crate::app::{
     App, AuthField, AuthMode, AuthState, DateComponent, MainState, NoteDetail, NotePane, NotesMode,
     NotesState, ProfilesMode, ProfilesState, Screen, Tab, TaskDetail, TaskListState, TaskPane,
@@ -199,12 +200,7 @@ fn draw_active_dialog(frame: &mut Frame, main: &MainState, timer: &Timer) {
             &Dialog {
                 title: "Timer duration",
                 width: DIALOG_WIDTH,
-                fields: vec![DialogField {
-                    label: "Duration (minutes)",
-                    value: &edit.buffer,
-                    focused: true,
-                    masked: false,
-                }],
+                fields: vec![DialogField::text("Duration (minutes)", &edit.buffer, true)],
                 body: Vec::new(),
                 error: edit.error.as_deref(),
                 hint: "Enter: save | Esc: cancel",
@@ -228,12 +224,7 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
             &Dialog {
                 title: "Hide tasks older than",
                 width: DIALOG_WIDTH,
-                fields: vec![DialogField {
-                    label: "Window (days)",
-                    value: &edit.buffer,
-                    focused: true,
-                    masked: false,
-                }],
+                fields: vec![DialogField::text("Window (days)", &edit.buffer, true)],
                 body: Vec::new(),
                 error: edit.error.as_deref(),
                 hint: "Enter: save | Esc: cancel",
@@ -254,18 +245,21 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
                     DialogField {
                         label: "Day",
                         value: &day,
+                        caret: None,
                         focused: matches!(filter.focus, DateComponent::Day),
                         masked: false,
                     },
                     DialogField {
                         label: "Month",
                         value: &month,
+                        caret: None,
                         focused: matches!(filter.focus, DateComponent::Month),
                         masked: false,
                     },
                     DialogField {
                         label: "Year",
                         value: &year,
+                        caret: None,
                         focused: matches!(filter.focus, DateComponent::Year),
                         masked: false,
                     },
@@ -284,18 +278,8 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
                 title: "Add task",
                 width: DIALOG_WIDTH,
                 fields: vec![
-                    DialogField {
-                        label: "Title",
-                        value: &add.title,
-                        focused: add.on_title,
-                        masked: false,
-                    },
-                    DialogField {
-                        label: "Description",
-                        value: &add.description,
-                        focused: !add.on_title,
-                        masked: false,
-                    },
+                    DialogField::text("Title", &add.title, add.on_title),
+                    DialogField::text("Description", &add.description, !add.on_title),
                 ],
                 body: Vec::new(),
                 error: add.error.as_deref(),
@@ -309,18 +293,8 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
                 title: "Edit task",
                 width: DIALOG_WIDTH,
                 fields: vec![
-                    DialogField {
-                        label: "Title",
-                        value: &edit.title,
-                        focused: edit.on_title,
-                        masked: false,
-                    },
-                    DialogField {
-                        label: "Description",
-                        value: &edit.description,
-                        focused: !edit.on_title,
-                        masked: false,
-                    },
+                    DialogField::text("Title", &edit.title, edit.on_title),
+                    DialogField::text("Description", &edit.description, !edit.on_title),
                 ],
                 body: Vec::new(),
                 error: edit.error.as_deref(),
@@ -333,12 +307,7 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
             &Dialog {
                 title: "Add sub-task",
                 width: DIALOG_WIDTH,
-                fields: vec![DialogField {
-                    label: "Title",
-                    value: &add.title,
-                    focused: true,
-                    masked: false,
-                }],
+                fields: vec![DialogField::text("Title", &add.title, true)],
                 body: Vec::new(),
                 error: add.error.as_deref(),
                 hint: "Enter: save | Esc: cancel",
@@ -350,12 +319,7 @@ fn draw_task_dialog(frame: &mut Frame, list: &TaskListState) {
             &Dialog {
                 title: "Edit sub-task",
                 width: DIALOG_WIDTH,
-                fields: vec![DialogField {
-                    label: "Title",
-                    value: &edit.title,
-                    focused: true,
-                    masked: false,
-                }],
+                fields: vec![DialogField::text("Title", &edit.title, true)],
                 body: Vec::new(),
                 error: edit.error.as_deref(),
                 hint: "Enter: save | Esc: cancel",
@@ -386,18 +350,8 @@ fn draw_note_dialog(frame: &mut Frame, notes: &NotesState) {
                 title: "New note",
                 width: DIALOG_WIDTH,
                 fields: vec![
-                    DialogField {
-                        label: "Title",
-                        value: &form.title,
-                        focused: form.on_title,
-                        masked: false,
-                    },
-                    DialogField {
-                        label: "Content",
-                        value: &form.content,
-                        focused: !form.on_title,
-                        masked: false,
-                    },
+                    DialogField::text("Title", &form.title, form.on_title),
+                    DialogField::text("Content", &form.content, !form.on_title),
                 ],
                 body: Vec::new(),
                 error: form.error.as_deref(),
@@ -410,18 +364,8 @@ fn draw_note_dialog(frame: &mut Frame, notes: &NotesState) {
                 title: "Edit note",
                 width: DIALOG_WIDTH,
                 fields: vec![
-                    DialogField {
-                        label: "Title",
-                        value: &form.title,
-                        focused: form.on_title,
-                        masked: false,
-                    },
-                    DialogField {
-                        label: "Content",
-                        value: &form.content,
-                        focused: !form.on_title,
-                        masked: false,
-                    },
+                    DialogField::text("Title", &form.title, form.on_title),
+                    DialogField::text("Content", &form.content, !form.on_title),
                 ],
                 body: Vec::new(),
                 error: form.error.as_deref(),
@@ -456,12 +400,7 @@ fn draw_profile_dialog(frame: &mut Frame, profiles: &ProfilesState) {
             &Dialog {
                 title: "New profile",
                 width: DIALOG_WIDTH,
-                fields: vec![DialogField {
-                    label: "Name",
-                    value: &form.name,
-                    focused: true,
-                    masked: false,
-                }],
+                fields: vec![DialogField::text("Name", &form.name, true)],
                 body: Vec::new(),
                 error: form.error.as_deref(),
                 hint: "Enter: save | Esc: cancel",
@@ -472,12 +411,7 @@ fn draw_profile_dialog(frame: &mut Frame, profiles: &ProfilesState) {
             &Dialog {
                 title: "Rename profile",
                 width: DIALOG_WIDTH,
-                fields: vec![DialogField {
-                    label: "Name",
-                    value: &form.name,
-                    focused: true,
-                    masked: false,
-                }],
+                fields: vec![DialogField::text("Name", &form.name, true)],
                 body: Vec::new(),
                 error: form.error.as_deref(),
                 hint: "Enter: save | Esc: cancel",
@@ -522,8 +456,10 @@ fn draw_help(frame: &mut Frame) {
         Line::from("Notes    a add · e edit · d delete · Enter detail"),
         Line::from("Profiles Enter switch · a add · e rename · d delete"),
         Line::from(""),
+        Line::from("Text fields  ← → move caret · Home/End ends · Del delete"),
+        Line::from(""),
         Line::from("Detail   Tab panes · e edit · Enter commit · Esc back"),
-        Line::from("         Content: Enter inserts a newline, Ctrl+S commits"),
+        Line::from("         Content: ↑↓ move line · Enter newline · Ctrl+S commit"),
     ];
     draw_dialog(
         frame,
@@ -593,17 +529,17 @@ fn draw_auth(frame: &mut Frame, auth: &AuthState, tick: u64) {
     };
     let hint = caption_with_spinner(base_hint, auth.is_pending(), tick);
 
-    let fields: Vec<(&str, &str, bool, bool)> = match auth.mode {
+    let fields: Vec<(&str, &TextInput, bool, bool)> = match auth.mode {
         AuthMode::Login => vec![
             (
                 "Identifier",
-                auth.identifier.as_str(),
+                &auth.identifier,
                 auth.focus == AuthField::Identifier,
                 false,
             ),
             (
                 "Password",
-                auth.password.as_str(),
+                &auth.password,
                 auth.focus == AuthField::Password,
                 true,
             ),
@@ -611,25 +547,20 @@ fn draw_auth(frame: &mut Frame, auth: &AuthState, tick: u64) {
         AuthMode::Register => vec![
             (
                 "Username",
-                auth.username.as_str(),
+                &auth.username,
                 auth.focus == AuthField::Username,
                 false,
             ),
-            (
-                "Email",
-                auth.email.as_str(),
-                auth.focus == AuthField::Email,
-                false,
-            ),
+            ("Email", &auth.email, auth.focus == AuthField::Email, false),
             (
                 "Password",
-                auth.password.as_str(),
+                &auth.password,
                 auth.focus == AuthField::Password,
                 true,
             ),
             (
                 "Profile name",
-                auth.profile_name.as_str(),
+                &auth.profile_name,
                 auth.focus == AuthField::ProfileName,
                 false,
             ),
@@ -662,11 +593,20 @@ fn draw_auth(frame: &mut Frame, auth: &AuthState, tick: u64) {
         );
     }
 
-    for (i, (label, value, focused, masked)) in fields.iter().enumerate() {
+    for (i, (label, input, focused, masked)) in fields.iter().enumerate() {
         let Some(slot) = chunks.get(i + 1) else {
             continue;
         };
-        draw_field(frame, *slot, label, value, *focused, *masked);
+        let caret = focused.then(|| input.caret());
+        draw_field(
+            frame,
+            *slot,
+            label,
+            input.as_str(),
+            caret,
+            *focused,
+            *masked,
+        );
     }
 
     let msg_idx = fields.len() + 1;
@@ -709,10 +649,27 @@ struct DialogField<'a> {
     label: &'a str,
     /// The current field value.
     value: &'a str,
+    /// The caret's char index when this is a focused **text** field: the draw layer renders the
+    /// horizontally-scrolled slice and places the terminal cursor there (feature 0025). `None` for
+    /// an unfocused field or a non-text spinner component (the date filter; Assumption A4).
+    caret: Option<usize>,
     /// Whether this field has focus (drawn with a purple border).
     focused: bool,
     /// Whether the value is rendered masked (e.g. a password). Always `false` for dialogs today.
     masked: bool,
+}
+
+impl<'a> DialogField<'a> {
+    /// A text field backed by a [`TextInput`]: renders its value, and — when `focused` — its caret.
+    fn text(label: &'a str, input: &'a TextInput, focused: bool) -> Self {
+        Self {
+            label,
+            value: input.as_str(),
+            caret: focused.then(|| input.caret()),
+            focused,
+            masked: false,
+        }
+    }
 }
 
 /// A centred floating modal: a titled, bordered box overlaying the active view, carrying any
@@ -795,6 +752,7 @@ fn draw_dialog(frame: &mut Frame, dialog: &Dialog) {
                 *slot,
                 field.label,
                 field.value,
+                field.caret,
                 field.focused,
                 field.masked,
             );
@@ -836,14 +794,10 @@ fn draw_field(
     area: Rect,
     label: &str,
     value: &str,
+    caret: Option<usize>,
     focused: bool,
     masked: bool,
 ) {
-    let shown = if masked {
-        "*".repeat(value.chars().count())
-    } else {
-        value.to_owned()
-    };
     let mut block = Block::default()
         .borders(Borders::ALL)
         .title(label.to_owned());
@@ -852,7 +806,29 @@ fn draw_field(
         // the former bold-border cue. Applied uniformly to auth fields and dialog fields.
         block = block.border_style(Style::default().fg(Color::Magenta));
     }
-    frame.render_widget(Paragraph::new(shown).block(block), area);
+    let content = block.inner(area);
+    match caret {
+        // A focused text field: render the horizontally-scrolled slice and place the caret. A
+        // masked field masks the *visible* slice, so the caret column still maps 1:1 (feature 0025).
+        Some(caret) if focused => {
+            let (visible, col) = text_input::single_line_view(value, caret, content.width);
+            let shown = if masked {
+                "*".repeat(visible.chars().count())
+            } else {
+                visible
+            };
+            frame.render_widget(Paragraph::new(shown).block(block), area);
+            frame.set_cursor_position((content.x.saturating_add(col), content.y));
+        }
+        _ => {
+            let shown = if masked {
+                "*".repeat(value.chars().count())
+            } else {
+                value.to_owned()
+            };
+            frame.render_widget(Paragraph::new(shown).block(block), area);
+        }
+    }
 }
 
 /// A pane of a detail view: a label, its (snapshot or in-edit) value, whether it is focused
@@ -967,14 +943,16 @@ fn draw_task_detail(frame: &mut Frame, area: Rect, detail: &TaskDetail) {
                     .map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string())
                     .unwrap_or_default(),
             };
+            // The caret renders only on the focused, in-edit pane (feature 0025). Task-detail
+            // fields are single-line boxes (`fill: false`), so this is the horizontal-scroll path.
+            let caret = if editing { detail.edit.as_ref() } else { None };
             DetailPane {
                 label: task_pane_label(*pane),
                 value,
                 focused,
                 editable: pane.is_editable(),
                 fill: false,
-                // Task-detail caret rendering lands with the task-detail field migration (slice 2).
-                caret: None,
+                caret,
             }
         })
         .collect();
@@ -1027,7 +1005,10 @@ fn draw_task_subtasks_section(frame: &mut Frame, area: Rect, subtasks: &[contrac
 /// The live edit buffer when this pane is being edited, else the snapshot `value`.
 fn task_editing_or(detail: &TaskDetail, editing: bool, value: String) -> String {
     if editing {
-        detail.edit.clone().unwrap_or(value)
+        detail
+            .edit
+            .as_ref()
+            .map_or(value, |input| input.as_str().to_owned())
     } else {
         value
     }

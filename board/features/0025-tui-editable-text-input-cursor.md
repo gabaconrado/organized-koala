@@ -288,3 +288,21 @@ does not flip the idea's status (ideas lifecycle).
   `--all-targets` intentionally red (tester harness stranded by the `edit` field-type change,
   learned 0019/0020 — slice 3). No `contract`/wire/server change (still feeds the unchanged
   `UpdateNoteRequest`).
+- 2026-07-15 [tui-dev] Slice 2 done: widened `TextInput` to every remaining field —
+  `AuthState`'s five fields + `field_mut` (`auth.rs`); `AddTaskState`/`EditTaskState`/
+  `AddSubtaskState`/`EditSubtaskState` (`task_add.rs`); `TaskDetail.edit` (`task_detail.rs`);
+  `NoteForm` both fields (`notes.rs`); `ProfileForm` (`profiles.rs`); `DurationEditState.buffer`
+  (`timer.rs`) and `WindowEditState.buffer` (`task_list.rs`), both numeric — digit filtering
+  retained at each `push_char` call site, caret still moves. Every field handler routes the movement
+  events via a `motion(&Event)`/`edit_motion(&Event)` arm delegating to `text_input::apply_motion`;
+  submit paths read `.as_str().trim()`. Render: added a `caret` field to `DetailPane` and a
+  `single_line_view(value, caret, width)` helper + `caret: Option<usize>` param to `draw_field`, so
+  every focused single-line dialog/auth/detail field renders a horizontally-scrolled slice + caret
+  via `frame.set_cursor_position` (masked password caret maps 1:1 over the visible slice); the
+  date-filter spinner stays caretless (A4). Added `?`-help hint lines — `Text fields  ← → move caret
+  · Home/End ends · Del delete` (56 cols) and `Content: ↑↓ move line · Enter newline · Ctrl+S
+  commit` (62 cols) — both under the `HELP_DIALOG_WIDTH` inner ~70, no wrap (checked). Gate:
+  `cargo clippy -p tui --lib --bins` clean, `./ok.sh fmt --check` clean, `cargo test -p tui --lib`
+  (25) + `--doc` (4) green. `--all-targets` still intentionally red (tester slice 3 un-strands
+  `crates/tui/tests/common/mod.rs`). No `contract`/wire/server change — all fields still feed the
+  unchanged `Create*`/`Update*`/auth DTOs via `.as_str()`.

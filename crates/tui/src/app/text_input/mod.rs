@@ -220,20 +220,7 @@ impl TextInput {
     /// empty view.
     #[must_use]
     pub fn field_view(&self, width: u16) -> (String, u16) {
-        let width = usize::from(width);
-        if width == 0 {
-            return (String::new(), 0);
-        }
-        let chars: Vec<char> = self.value.chars().collect();
-        let caret = self.caret.min(chars.len());
-        let scroll = if caret >= width {
-            caret.saturating_sub(width).saturating_add(1)
-        } else {
-            0
-        };
-        let visible: String = chars.iter().skip(scroll).take(width).collect();
-        let col = u16::try_from(caret.saturating_sub(scroll)).unwrap_or(0);
-        (visible, col)
+        single_line_view(&self.value, self.caret, width)
     }
 
     /// The visible, hard-wrapped rows and caret position for a `width × height` multiline viewport,
@@ -292,6 +279,28 @@ impl From<String> for TextInput {
     fn from(value: String) -> Self {
         Self::new(value)
     }
+}
+
+/// The visible substring and caret column for a single-line field `width` columns wide, given the
+/// full `value` and the caret's char index, horizontally scrolled so a caret past the right edge
+/// stays visible. Shared by the dialog / auth field rendering, which hold the value and caret index
+/// separately. `width == 0` yields an empty view.
+#[must_use]
+pub fn single_line_view(value: &str, caret: usize, width: u16) -> (String, u16) {
+    let width = usize::from(width);
+    if width == 0 {
+        return (String::new(), 0);
+    }
+    let chars: Vec<char> = value.chars().collect();
+    let caret = caret.min(chars.len());
+    let scroll = if caret >= width {
+        caret.saturating_sub(width).saturating_add(1)
+    } else {
+        0
+    };
+    let visible: String = chars.iter().skip(scroll).take(width).collect();
+    let col = u16::try_from(caret.saturating_sub(scroll)).unwrap_or(0);
+    (visible, col)
 }
 
 /// Apply a caret-movement / forward-delete [`Event`](super::Event) to `input`, returning `true`

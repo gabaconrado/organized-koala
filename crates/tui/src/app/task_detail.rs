@@ -9,6 +9,9 @@
 
 use contract::{Subtask, Task};
 
+use super::Event;
+use super::text_input::{self, TextInput};
+
 /// The panes of the task detail view, in display + cycle order. `Title`/`Description` are editable;
 /// `Status`/`Created`/`Closed` are read-only. `Closed` is only present when the task is done
 /// (`closed_at` set), so the pane vector is built per snapshot.
@@ -51,7 +54,7 @@ pub struct TaskDetail {
     /// Index into `panes` of the focused pane.
     pub focused: usize,
     /// The in-progress edit buffer for the focused (editable) pane; `None` when not editing.
-    pub edit: Option<String>,
+    pub edit: Option<TextInput>,
 }
 
 impl TaskDetail {
@@ -157,23 +160,35 @@ impl TaskDetail {
     /// no-op on a read-only pane (`e` is inert there, Assumption A6).
     pub fn begin_edit(&mut self) {
         match self.focused_pane() {
-            Some(TaskPane::Title) => self.edit = Some(self.task.title.clone()),
-            Some(TaskPane::Description) => self.edit = Some(self.task.description.clone()),
+            Some(TaskPane::Title) => self.edit = Some(TextInput::new(self.task.title.clone())),
+            Some(TaskPane::Description) => {
+                self.edit = Some(TextInput::new(self.task.description.clone()));
+            }
             _ => {}
         }
     }
 
-    /// Type a character into the edit buffer (no-op when not editing).
+    /// Insert a character at the caret in the edit buffer (no-op when not editing).
     pub fn push_char(&mut self, c: char) {
         if let Some(buf) = &mut self.edit {
-            buf.push(c);
+            buf.insert_char(c);
         }
     }
 
-    /// Delete the last character of the edit buffer (no-op when not editing).
+    /// Delete the character before the caret in the edit buffer (no-op when not editing).
     pub fn backspace(&mut self) {
         if let Some(buf) = &mut self.edit {
-            let _ = buf.pop();
+            buf.backspace();
+        }
+    }
+
+    /// Apply a caret movement / forward-delete to the edit buffer, returning whether the event was
+    /// a text-motion event. No-op (returns `false`) when not editing.
+    pub fn edit_motion(&mut self, event: &Event) -> bool {
+        if let Some(buf) = &mut self.edit {
+            text_input::apply_motion(buf, event)
+        } else {
+            false
         }
     }
 

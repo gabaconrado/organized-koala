@@ -13,13 +13,14 @@ use contract::{CreateProfileRequest, Profile, UpdateProfileRequest};
 
 use super::Session;
 use super::protocol::{ClientRequest, RequestId};
+use super::text_input::{self, TextInput};
 use crate::app::Event;
 
 /// A single-field profile-name form shared by the create and rename sub-flows.
 #[derive(Debug, Clone)]
 pub struct ProfileForm {
     /// Entered profile name.
-    pub name: String,
+    pub name: TextInput,
     /// Inline error (e.g. a duplicate name rejected by the server), if any.
     pub error: Option<String>,
 }
@@ -27,26 +28,32 @@ pub struct ProfileForm {
 impl ProfileForm {
     fn empty() -> Self {
         Self {
-            name: String::new(),
+            name: TextInput::default(),
             error: None,
         }
     }
 
     fn from_profile(profile: &Profile) -> Self {
         Self {
-            name: profile.name.clone(),
+            name: TextInput::new(profile.name.clone()),
             error: None,
         }
     }
 
-    /// Type a character into the name field.
+    /// Insert a character at the caret of the name field.
     pub(crate) fn push_char(&mut self, c: char) {
-        self.name.push(c);
+        self.name.insert_char(c);
     }
 
-    /// Delete the last character of the name field.
+    /// Delete the character before the caret of the name field.
     pub(crate) fn backspace(&mut self) {
-        let _ = self.name.pop();
+        self.name.backspace();
+    }
+
+    /// Apply a caret movement / forward-delete to the name field, returning whether the event was a
+    /// text-motion event.
+    pub(crate) fn motion(&mut self, event: &Event) -> bool {
+        text_input::apply_motion(&mut self.name, event)
     }
 }
 
@@ -230,7 +237,9 @@ impl ProfilesState {
             Event::Backspace => form.backspace(),
             Event::Submit => return self.submit_create(session),
             Event::Cancel => self.mode = ProfilesMode::List,
-            _ => {}
+            other => {
+                let _ = form.motion(&other);
+            }
         }
         None
     }
@@ -248,7 +257,9 @@ impl ProfilesState {
             Event::Backspace => form.backspace(),
             Event::Submit => return self.submit_rename(session),
             Event::Cancel => self.mode = ProfilesMode::List,
-            _ => {}
+            other => {
+                let _ = form.motion(&other);
+            }
         }
         None
     }
@@ -275,7 +286,7 @@ impl ProfilesState {
         };
         form.error = None;
         let req = CreateProfileRequest {
-            name: form.name.trim().to_owned(),
+            name: form.name.as_str().trim().to_owned(),
         };
         Some(ClientRequest::CreateProfile {
             token: session.token.clone(),
@@ -290,7 +301,7 @@ impl ProfilesState {
         };
         form.error = None;
         let req = UpdateProfileRequest {
-            name: form.name.trim().to_owned(),
+            name: form.name.as_str().trim().to_owned(),
         };
         Some(ClientRequest::UpdateProfile {
             token: session.token.clone(),

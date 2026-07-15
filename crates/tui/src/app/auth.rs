@@ -4,6 +4,7 @@
 use contract::{LoginRequest, Password, RegisterRequest};
 
 use super::protocol::{ClientRequest, RequestId};
+use super::text_input::{self, TextInput};
 use crate::app::Event;
 
 /// Which auth form is showing.
@@ -38,15 +39,15 @@ pub struct AuthState {
     /// The currently focused field.
     pub focus: AuthField,
     /// Login identifier input.
-    pub identifier: String,
+    pub identifier: TextInput,
     /// Register username input.
-    pub username: String,
+    pub username: TextInput,
     /// Register email input.
-    pub email: String,
+    pub email: TextInput,
     /// Password input (rendered masked).
-    pub password: String,
+    pub password: TextInput,
     /// Register profile-name input.
-    pub profile_name: String,
+    pub profile_name: TextInput,
     /// The account identifier captured at submit time (the login identifier or registered
     /// username), carried into the in-memory [`Session`](super::Session) for the post-auth title.
     /// Client-side only, no new wire (ADR-0010 §2); empty until a successful auth submit.
@@ -63,11 +64,11 @@ impl AuthState {
         Self {
             mode: AuthMode::Login,
             focus: AuthField::Identifier,
-            identifier: String::new(),
-            username: String::new(),
-            email: String::new(),
-            password: String::new(),
-            profile_name: String::new(),
+            identifier: TextInput::default(),
+            username: TextInput::default(),
+            email: TextInput::default(),
+            password: TextInput::default(),
+            profile_name: TextInput::default(),
             account: String::new(),
             error: None,
             pending: None,
@@ -93,7 +94,7 @@ impl AuthState {
         }
     }
 
-    fn field_mut(&mut self, field: AuthField) -> &mut String {
+    fn field_mut(&mut self, field: AuthField) -> &mut TextInput {
         match field {
             AuthField::Identifier => &mut self.identifier,
             AuthField::Username => &mut self.username,
@@ -141,15 +142,16 @@ impl AuthState {
             return None;
         }
         match event {
-            Event::Char(c) => self.field_mut(self.focus).push(c),
-            Event::Backspace => {
-                let _ = self.field_mut(self.focus).pop();
-            }
+            Event::Char(c) => self.field_mut(self.focus).insert_char(c),
+            Event::Backspace => self.field_mut(self.focus).backspace(),
             Event::Next => self.move_focus(true),
             Event::Prev => self.move_focus(false),
             Event::ToggleAuthMode => self.toggle_mode(),
             Event::Submit => return Some(self.submit()),
-            _ => {}
+            // Caret movement / forward-delete act on the focused field.
+            other => {
+                let _ = text_input::apply_motion(self.field_mut(self.focus), &other);
+            }
         }
         None
     }
@@ -159,14 +161,14 @@ impl AuthState {
         self.error = None;
         match self.mode {
             AuthMode::Login => ClientRequest::Login(LoginRequest {
-                identifier: self.identifier.trim().to_owned(),
-                password: Password::new(self.password.clone()),
+                identifier: self.identifier.as_str().trim().to_owned(),
+                password: Password::new(self.password.as_str().to_owned()),
             }),
             AuthMode::Register => ClientRequest::Register(RegisterRequest {
-                username: self.username.trim().to_owned(),
-                email: self.email.trim().to_owned(),
-                password: Password::new(self.password.clone()),
-                profile_name: self.profile_name.trim().to_owned(),
+                username: self.username.as_str().trim().to_owned(),
+                email: self.email.as_str().trim().to_owned(),
+                password: Password::new(self.password.as_str().to_owned()),
+                profile_name: self.profile_name.as_str().trim().to_owned(),
             }),
         }
     }

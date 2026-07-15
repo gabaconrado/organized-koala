@@ -22,6 +22,7 @@ use super::Session;
 use super::protocol::{ClientRequest, RequestId};
 use super::task_add::{AddSubtaskState, AddTaskState, EditSubtaskState, EditTaskState};
 use super::task_detail::{TaskDetail, TaskPane};
+use super::text_input::{self, TextInput};
 use crate::app::Event;
 
 /// A row in the rendered task list: a top-level task, one of its sub-tasks, or the non-selectable
@@ -104,7 +105,7 @@ pub fn day_number(epoch_secs: i64) -> i64 {
 #[derive(Debug, Clone)]
 pub struct WindowEditState {
     /// The entered window text (digits only; parsed on submit).
-    pub buffer: String,
+    pub buffer: TextInput,
     /// Inline error (a `0`/non-numeric value rejected on submit), if any.
     pub error: Option<String>,
 }
@@ -112,19 +113,24 @@ pub struct WindowEditState {
 impl WindowEditState {
     fn new(current: u32) -> Self {
         Self {
-            buffer: current.to_string(),
+            buffer: TextInput::new(current.to_string()),
             error: None,
         }
     }
 
     fn push_char(&mut self, c: char) {
+        // Digit filtering stays at the call site (ADR-0015 numeric buffer); the caret still moves.
         if c.is_ascii_digit() {
-            self.buffer.push(c);
+            self.buffer.insert_char(c);
         }
     }
 
     fn backspace(&mut self) {
-        let _ = self.buffer.pop();
+        self.buffer.backspace();
+    }
+
+    fn motion(&mut self, event: &Event) -> bool {
+        text_input::apply_motion(&mut self.buffer, event)
     }
 }
 
@@ -616,7 +622,9 @@ impl TaskListState {
             Event::Backspace => edit.backspace(),
             Event::Cancel => self.editing_window = None,
             Event::Submit => return self.submit_window_edit(session, today_day),
-            _ => {}
+            other => {
+                let _ = edit.motion(&other);
+            }
         }
         None
     }
@@ -629,7 +637,13 @@ impl TaskListState {
         session: Option<&Session>,
         today_day: i64,
     ) -> Option<ClientRequest> {
-        let buffer = self.editing_window.as_ref()?.buffer.trim().to_owned();
+        let buffer = self
+            .editing_window
+            .as_ref()?
+            .buffer
+            .as_str()
+            .trim()
+            .to_owned();
         match buffer.parse::<u32>() {
             Ok(days) if days >= MIN_HIDE_WINDOW_DAYS => {
                 self.hide_window_days = days;
@@ -836,7 +850,9 @@ impl TaskListState {
                 Event::Backspace => detail.backspace(),
                 Event::Cancel => detail.cancel_edit(),
                 Event::Submit => return self.submit_field(session),
-                _ => {}
+                other => {
+                    let _ = detail.edit_motion(&other);
+                }
             }
             return None;
         }
@@ -856,7 +872,7 @@ impl TaskListState {
     fn submit_field(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
         let session = session?;
         let detail = self.detail.as_mut()?;
-        let buffer = detail.edit.as_ref()?.clone();
+        let buffer = detail.edit.as_ref()?.as_str().to_owned();
         let req = match detail.focused_pane()? {
             TaskPane::Title => {
                 if buffer.trim().is_empty() {
@@ -897,7 +913,9 @@ impl TaskListState {
             Event::Next | Event::Prev => add.toggle_field(),
             Event::Cancel => self.adding = None,
             Event::Submit => return self.submit_add(session),
-            _ => {}
+            other => {
+                let _ = add.motion(&other);
+            }
         }
         None
     }
@@ -907,8 +925,8 @@ impl TaskListState {
         let add = self.adding.as_mut()?;
         add.error = None;
         let req = CreateTaskRequest {
-            title: add.title.trim().to_owned(),
-            description: add.description.clone(),
+            title: add.title.as_str().trim().to_owned(),
+            description: add.description.as_str().to_owned(),
         };
         Some(ClientRequest::CreateTask {
             token: session.token.clone(),
@@ -932,7 +950,9 @@ impl TaskListState {
             Event::Backspace => add.backspace(),
             Event::Cancel => self.adding_subtask = None,
             Event::Submit => return self.submit_add_subtask(session),
-            _ => {}
+            other => {
+                let _ = add.motion(&other);
+            }
         }
         None
     }
@@ -942,13 +962,13 @@ impl TaskListState {
     fn submit_add_subtask(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
         let session = session?;
         let add = self.adding_subtask.as_mut()?;
-        if add.title.trim().is_empty() {
+        if add.title.as_str().trim().is_empty() {
             add.error = Some("title must not be empty".to_owned());
             return None;
         }
         add.error = None;
         let req = CreateSubtaskRequest {
-            title: add.title.trim().to_owned(),
+            title: add.title.as_str().trim().to_owned(),
         };
         Some(ClientRequest::CreateSubtask {
             token: session.token.clone(),
@@ -973,7 +993,9 @@ impl TaskListState {
             Event::Backspace => edit.backspace(),
             Event::Cancel => self.editing_subtask = None,
             Event::Submit => return self.submit_edit_subtask(session),
-            _ => {}
+            other => {
+                let _ = edit.motion(&other);
+            }
         }
         None
     }
@@ -983,13 +1005,13 @@ impl TaskListState {
     fn submit_edit_subtask(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
         let session = session?;
         let edit = self.editing_subtask.as_mut()?;
-        if edit.title.trim().is_empty() {
+        if edit.title.as_str().trim().is_empty() {
             edit.error = Some("title must not be empty".to_owned());
             return None;
         }
         edit.error = None;
         let req = UpdateSubtaskRequest {
-            title: Some(edit.title.trim().to_owned()),
+            title: Some(edit.title.as_str().trim().to_owned()),
             status: None,
         };
         Some(ClientRequest::UpdateSubtask {
@@ -1015,7 +1037,9 @@ impl TaskListState {
             Event::Next | Event::Prev => edit.toggle_field(),
             Event::Cancel => self.editing = None,
             Event::Submit => return self.submit_edit(session),
-            _ => {}
+            other => {
+                let _ = edit.motion(&other);
+            }
         }
         None
     }
@@ -1034,14 +1058,14 @@ impl TaskListState {
     fn submit_edit(&mut self, session: Option<&Session>) -> Option<ClientRequest> {
         let session = session?;
         let edit = self.editing.as_mut()?;
-        if edit.title.trim().is_empty() {
+        if edit.title.as_str().trim().is_empty() {
             edit.error = Some("title must not be empty".to_owned());
             return None;
         }
         edit.error = None;
         let req = UpdateTaskRequest {
-            title: Some(edit.title.trim().to_owned()),
-            description: Some(edit.description.clone()),
+            title: Some(edit.title.as_str().trim().to_owned()),
+            description: Some(edit.description.as_str().to_owned()),
             status: None,
         };
         Some(ClientRequest::UpdateTask {

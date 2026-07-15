@@ -20,9 +20,9 @@ pub struct NoteForm {
     /// Whether the title (`true`) or content field is focused.
     pub on_title: bool,
     /// Entered note title.
-    pub title: String,
+    pub title: TextInput,
     /// Entered note content.
-    pub content: String,
+    pub content: TextInput,
     /// Inline error (e.g. empty title rejected by the server), if any.
     pub error: Option<String>,
 }
@@ -31,8 +31,8 @@ impl NoteForm {
     fn empty() -> Self {
         Self {
             on_title: true,
-            title: String::new(),
-            content: String::new(),
+            title: TextInput::default(),
+            content: TextInput::default(),
             error: None,
         }
     }
@@ -40,29 +40,35 @@ impl NoteForm {
     fn from_note(note: &Note) -> Self {
         Self {
             on_title: true,
-            title: note.title.clone(),
-            content: note.content.clone(),
+            title: TextInput::new(note.title.clone()),
+            content: TextInput::new(note.content.clone()),
             error: None,
         }
     }
 
-    /// Type a character into the focused field.
-    pub(crate) fn push_char(&mut self, c: char) {
+    /// The focused field's editable buffer.
+    fn focused_mut(&mut self) -> &mut TextInput {
         if self.on_title {
-            self.title.push(c);
-        } else {
-            self.content.push(c);
-        }
-    }
-
-    /// Delete the last character of the focused field.
-    pub(crate) fn backspace(&mut self) {
-        let target = if self.on_title {
             &mut self.title
         } else {
             &mut self.content
-        };
-        let _ = target.pop();
+        }
+    }
+
+    /// Insert a character at the caret of the focused field.
+    pub(crate) fn push_char(&mut self, c: char) {
+        self.focused_mut().insert_char(c);
+    }
+
+    /// Delete the character before the caret of the focused field.
+    pub(crate) fn backspace(&mut self) {
+        self.focused_mut().backspace();
+    }
+
+    /// Apply a caret movement / forward-delete to the focused field, returning whether the event
+    /// was a text-motion event.
+    pub(crate) fn motion(&mut self, event: &Event) -> bool {
+        text_input::apply_motion(self.focused_mut(), event)
     }
 
     /// Toggle focus between the title and content fields.
@@ -501,7 +507,9 @@ impl NotesState {
             Event::Next | Event::Prev => form.toggle_field(),
             Event::Submit => return self.submit_create(session),
             Event::Cancel => self.mode = NotesMode::List,
-            _ => {}
+            other => {
+                let _ = form.motion(&other);
+            }
         }
         None
     }
@@ -520,7 +528,9 @@ impl NotesState {
             Event::Next | Event::Prev => form.toggle_field(),
             Event::Submit => return self.submit_edit(session),
             Event::Cancel => self.mode = NotesMode::List,
-            _ => {}
+            other => {
+                let _ = form.motion(&other);
+            }
         }
         None
     }
@@ -547,8 +557,8 @@ impl NotesState {
         };
         form.error = None;
         let req = CreateNoteRequest {
-            title: form.title.trim().to_owned(),
-            content: form.content.clone(),
+            title: form.title.as_str().trim().to_owned(),
+            content: form.content.as_str().to_owned(),
         };
         Some(ClientRequest::CreateNote {
             token: session.token.clone(),
@@ -564,8 +574,8 @@ impl NotesState {
         };
         form.error = None;
         let req = UpdateNoteRequest {
-            title: form.title.trim().to_owned(),
-            content: form.content.clone(),
+            title: form.title.as_str().trim().to_owned(),
+            content: form.content.as_str().to_owned(),
         };
         Some(ClientRequest::UpdateNote {
             token: session.token.clone(),

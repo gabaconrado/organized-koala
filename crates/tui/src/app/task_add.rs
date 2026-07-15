@@ -8,15 +8,18 @@
 
 use contract::{Subtask, Task};
 
+use super::Event;
+use super::text_input::{self, TextInput};
+
 /// The add-task sub-flow: which field is focused and the entered title/description.
 #[derive(Debug, Clone)]
 pub struct AddTaskState {
     /// Whether the title (`true`) or description field is focused.
     pub on_title: bool,
     /// Entered task title.
-    pub title: String,
+    pub title: TextInput,
     /// Entered task description.
-    pub description: String,
+    pub description: TextInput,
     /// Inline error (e.g. empty title rejected by the server), if any.
     pub error: Option<String>,
 }
@@ -25,29 +28,35 @@ impl AddTaskState {
     pub(crate) fn new() -> Self {
         Self {
             on_title: true,
-            title: String::new(),
-            description: String::new(),
+            title: TextInput::default(),
+            description: TextInput::default(),
             error: None,
         }
     }
 
-    /// Type a character into the focused field.
-    pub(crate) fn push_char(&mut self, c: char) {
+    /// The focused field's editable buffer.
+    fn focused_mut(&mut self) -> &mut TextInput {
         if self.on_title {
-            self.title.push(c);
-        } else {
-            self.description.push(c);
-        }
-    }
-
-    /// Delete the last character of the focused field.
-    pub(crate) fn backspace(&mut self) {
-        let target = if self.on_title {
             &mut self.title
         } else {
             &mut self.description
-        };
-        let _ = target.pop();
+        }
+    }
+
+    /// Insert a character at the caret of the focused field.
+    pub(crate) fn push_char(&mut self, c: char) {
+        self.focused_mut().insert_char(c);
+    }
+
+    /// Delete the character before the caret of the focused field.
+    pub(crate) fn backspace(&mut self) {
+        self.focused_mut().backspace();
+    }
+
+    /// Apply a caret movement / forward-delete to the focused field, returning whether the event
+    /// was a text-motion event.
+    pub(crate) fn motion(&mut self, event: &Event) -> bool {
+        text_input::apply_motion(self.focused_mut(), event)
     }
 
     /// Toggle focus between the title and description fields.
@@ -63,7 +72,7 @@ pub struct AddSubtaskState {
     /// Id of the parent task the sub-task is created under.
     pub task_id: String,
     /// Entered sub-task title.
-    pub title: String,
+    pub title: TextInput,
     /// Inline error (e.g. blank title rejected by the server), if any.
     pub error: Option<String>,
 }
@@ -72,19 +81,24 @@ impl AddSubtaskState {
     pub(crate) fn new(task_id: String) -> Self {
         Self {
             task_id,
-            title: String::new(),
+            title: TextInput::default(),
             error: None,
         }
     }
 
-    /// Type a character into the title field.
+    /// Insert a character at the caret of the title field.
     pub(crate) fn push_char(&mut self, c: char) {
-        self.title.push(c);
+        self.title.insert_char(c);
     }
 
-    /// Delete the last character of the title field.
+    /// Delete the character before the caret of the title field.
     pub(crate) fn backspace(&mut self) {
-        let _ = self.title.pop();
+        self.title.backspace();
+    }
+
+    /// Apply a caret movement / forward-delete to the title field.
+    pub(crate) fn motion(&mut self, event: &Event) -> bool {
+        text_input::apply_motion(&mut self.title, event)
     }
 }
 
@@ -97,7 +111,7 @@ pub struct EditSubtaskState {
     /// Id of the sub-task being edited.
     pub subtask_id: String,
     /// Edited sub-task title (pre-filled from the sub-task).
-    pub title: String,
+    pub title: TextInput,
     /// Inline error (e.g. blank title rejected by the server), if any.
     pub error: Option<String>,
 }
@@ -108,19 +122,24 @@ impl EditSubtaskState {
         Self {
             task_id: subtask.task_id.clone(),
             subtask_id: subtask.id.clone(),
-            title: subtask.title.clone(),
+            title: TextInput::new(subtask.title.clone()),
             error: None,
         }
     }
 
-    /// Type a character into the title field.
+    /// Insert a character at the caret of the title field.
     pub(crate) fn push_char(&mut self, c: char) {
-        self.title.push(c);
+        self.title.insert_char(c);
     }
 
-    /// Delete the last character of the title field.
+    /// Delete the character before the caret of the title field.
     pub(crate) fn backspace(&mut self) {
-        let _ = self.title.pop();
+        self.title.backspace();
+    }
+
+    /// Apply a caret movement / forward-delete to the title field.
+    pub(crate) fn motion(&mut self, event: &Event) -> bool {
+        text_input::apply_motion(&mut self.title, event)
     }
 }
 
@@ -133,9 +152,9 @@ pub struct EditTaskState {
     /// Whether the title (`true`) or description field is focused.
     pub on_title: bool,
     /// Edited task title (pre-filled from the task).
-    pub title: String,
+    pub title: TextInput,
     /// Edited task description (pre-filled from the task).
-    pub description: String,
+    pub description: TextInput,
     /// Inline error (e.g. blank title rejected by the server), if any.
     pub error: Option<String>,
 }
@@ -146,29 +165,35 @@ impl EditTaskState {
         Self {
             task_id: task.id.clone(),
             on_title: true,
-            title: task.title.clone(),
-            description: task.description.clone(),
+            title: TextInput::new(task.title.clone()),
+            description: TextInput::new(task.description.clone()),
             error: None,
         }
     }
 
-    /// Type a character into the focused field.
-    pub(crate) fn push_char(&mut self, c: char) {
+    /// The focused field's editable buffer.
+    fn focused_mut(&mut self) -> &mut TextInput {
         if self.on_title {
-            self.title.push(c);
-        } else {
-            self.description.push(c);
-        }
-    }
-
-    /// Delete the last character of the focused field.
-    pub(crate) fn backspace(&mut self) {
-        let target = if self.on_title {
             &mut self.title
         } else {
             &mut self.description
-        };
-        let _ = target.pop();
+        }
+    }
+
+    /// Insert a character at the caret of the focused field.
+    pub(crate) fn push_char(&mut self, c: char) {
+        self.focused_mut().insert_char(c);
+    }
+
+    /// Delete the character before the caret of the focused field.
+    pub(crate) fn backspace(&mut self) {
+        self.focused_mut().backspace();
+    }
+
+    /// Apply a caret movement / forward-delete to the focused field, returning whether the event
+    /// was a text-motion event.
+    pub(crate) fn motion(&mut self, event: &Event) -> bool {
+        text_input::apply_motion(self.focused_mut(), event)
     }
 
     /// Toggle focus between the title and description fields.

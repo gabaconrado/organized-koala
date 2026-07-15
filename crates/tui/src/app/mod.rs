@@ -619,7 +619,9 @@ impl App {
                 let request = self.timer.submit_edit(&session)?;
                 return Some(self.dispatch_timer(request));
             }
-            _ => {}
+            other => {
+                let _ = self.timer.edit_motion(&other);
+            }
         }
         None
     }
@@ -836,8 +838,8 @@ impl App {
                 // established in `apply_profiles`.
                 if let Screen::Auth(auth) = &mut self.screen {
                     auth.account = match auth.mode {
-                        AuthMode::Login => auth.identifier.trim().to_owned(),
-                        AuthMode::Register => auth.username.trim().to_owned(),
+                        AuthMode::Login => auth.identifier.as_str().trim().to_owned(),
+                        AuthMode::Register => auth.username.as_str().trim().to_owned(),
                     };
                 }
                 let token = SessionToken::new(session.token);
