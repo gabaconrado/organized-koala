@@ -61,11 +61,11 @@ backlog".
 | [0021](./features/0021-profiles-sorted-by-insertion-time.md) | Profiles sorted by insertion time (not alphabetically) in the Profile list | feature | merged | medium | 0012 (merged ✓) | — (merged) |
 | [0022](./features/0022-verifier-hermetic-teardown.md) | Make the verifier stack boot hermetic — always tear down its own volume (`down -v` on any exit) | chore | merged | low | — | — (main-only chore; no worktree) |
 | [0023](./features/0023-tui-task-date-window-and-filter.md) | TUI task date-window (hide older than X days) + filter-by-day | feature | merged | medium | 0020 (merged ✓) | — (merged) |
-| [0024](./features/0024-tui-esc-cancel-notes-profiles-dialogs.md) | Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight) | feature | ready | high | — | `feature/0024-tui-esc-cancel-notes-profiles-dialogs` |
+| [0024](./features/0024-tui-esc-cancel-notes-profiles-dialogs.md) | Esc does not cancel the Notes/Profiles create·edit·delete dialogs (idle, no request in flight) | feature | merged | high | — | — (merged) |
 | [0025](./features/0025-tui-editable-text-input-cursor.md) | Editable text inputs — movable, visible cursor (stop the append-only / end-locked editing) | feature | inbox | medium | — | — (unclaimed) |
 
-> **0024 — Esc cancels idle Notes/Profiles dialogs — IN FLIGHT** (branch at review/verify complete,
-> heading to `awaiting-merge`; `main` snapshot frozen at the `ready` claim). A small, contained
+> **0024 — Esc cancels idle Notes/Profiles dialogs — MERGED** (operator-authorised `/finalize`
+> ff-merge; branch torn down). A small, contained
 > `tui`-crate-only `feature`: on an **idle** Notes/Profiles create·edit·delete dialog (no request in
 > flight) `Esc` did not close it — `Event::Cancel` is only acted on `if self.is_pending()`
 > (`app/mod.rs:452`), and five Notes/Profiles handlers dropped the idle `Cancel` via a `_ => {}`
