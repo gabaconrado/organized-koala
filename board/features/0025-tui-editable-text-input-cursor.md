@@ -269,18 +269,3 @@ does not flip the idea's status (ideas lifecycle).
   render (must land same cycle, learned 0019/0020). `grill` considered and **declined** — the
   residual risks are implementation-correctness (UTF-8/char-boundary, scroll off-by-one) handled by
   the primitive's unit tests, not genuine architecture forks. Set `status: ready`.
-- 2026-07-15 [verifier] Verified end-to-end (ADR-0003 layering). code-hash `5175b549` matches the
-  attested pin (live HEAD shares the digest — only Board-only commits on top of code `0108053`).
-  docker 29.5.3 + compose present; no new binaries; hermetic `verify-boot` boot + self-teardown
-  (clean — no lingering containers, no stranded `deploy_postgres-data`). **TestBackend suite present
-  + green:** `crates/tui/tests/text_input.rs` 8/8 (Left/Right + mid-buffer insert, Home/End,
-  multiline Up/Down, Backspace + forward Delete, masked-password 1:1 caret, multibyte caret safety,
-  rendered caret cell, scroll-to-caret) and `dialogs.rs` 28/28 (incl. the Text-fields + Content
-  anti-wrap regression tests). **Live stack exercised** (12/12 pass) over the reqwest/HTTP path for
-  the now-`TextInput`-backed fields: register→201+JWT, login→200+JWT, create profile→201, create
-  task→201 (`status:open`), patch task→200 (`closed_at` set), create note with embedded newlines→201
-  (multiline round-tripped exactly), update note→200; error contract `{code,message}` (401
-  invalid_credentials / 401 unauthenticated / 422 deserialize); profile-scoping #4 (cross-profile
-  read→404, owner scoped read→200); OTel spans observed at the collector for all exercised paths.
-  Server API + reqwest wire shapes behaviourally unchanged (no contract/wire/server change), as
-  planned. **Verdict: `verified`** pinned to code-hash `5175b549` (commit `0108053`).
